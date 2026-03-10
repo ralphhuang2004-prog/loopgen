@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- App identity -->
+  <key>CFBundleDisplayName</key>
+  <string>LoopGen</string>
+  <key>CFBundleIdentifier</key>
+  <string>app.loopgen.marketplace</string>
+  <key>CFBundleName</key>
+  <string>LoopGen</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+
+  <!-- Required by Apple -->
+  <key>LSRequiresIPhoneOS</key>
+  <true/>
+  <key>UILaunchStoryboardName</key>
+  <string>LaunchScreen</string>
+  <key>UIMainStoryboardFile</key>
+  <string>Main</string>
+
+  <!-- Permissions — only what we actually use -->
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>LoopGen needs access to your photo library so you can add photos to your listings.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>LoopGen needs camera access to take photos of items you want to sell.</string>
+
+  <!-- App Transport Security — allow Supabase HTTPS only -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <false/>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>supabase.co</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key>
+        <false/>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+      </dict>
+    </dict>
+  </dict>
+
+  <!-- Orientation support -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+  </array>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+
+  <!-- Status bar -->
+  <key>UIStatusBarStyle</key>
+  <string>UIStatusBarStyleDefault</string>
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <true/>
+
+  <!-- URL scheme for deep linking -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>app.loopgen.marketplace</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

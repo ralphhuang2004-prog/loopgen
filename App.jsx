@@ -1,0 +1,1758 @@
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  LoopGen  ·  Beta v0.1.0                                    ║
+// ║  Auth · Listings · Vintage · Chat · Saved · Profile         ║
+// ╚══════════════════════════════════════════════════════════════╝
+//
+// SUPABASE SETUP (one-time):
+//   1. Add VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to .env.local
+//   2. Run loopgen-schema.sql in Supabase SQL Editor
+//   3. Enable Email Auth: Supabase > Authentication > Providers > Email
+//   4. Create storage bucket "listing-images" (public)
+//   5. Enable Realtime on messages table:
+//      Database > Replication > supabase_realtime > messages
+//
+// OPTIONAL:
+//   6. Deploy supabase/functions/loopgen-ai-desc
+//      supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+
+import { useState, useRef, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// ── ENV VARS ─────────────────────────────────────────────────────
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
+const SUPABASE_KEY  = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const HAS_SUPABASE  = !!(SUPABASE_URL && SUPABASE_KEY);
+
+// Supabase client (lazy — only if env vars are present)
+const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+// ── CONSTANTS ────────────────────────────────────────────────────
+const GREEN = "#1c7c45";
+
+// ── DEMO SELLER PROFILES ─────────────────────────────────────────
+// Five curated demo sellers, each with a distinct niche identity
+const DEMO_SELLERS = {
+  VintageHunter: {
+    username: "VintageHunter",
+    bio: "Sourcing pre-loved treasures across Melbourne's op-shops & markets. Specialising in film cameras, vinyl, and retro tech. 🎞️",
+    location: "Fitzroy, VIC",
+    joined: "Jan 2023",
+    rating: 4.9,
+    avatar_initial: "V",
+  },
+  RetroCollector: {
+    username: "RetroCollector",
+    bio: "Sydney's go-to for retro gaming gear. PS1, N64, SNES — if it's got cartridges, I've probably got it. 🎮",
+    location: "Newtown, NSW",
+    joined: "Mar 2022",
+    rating: 4.8,
+    avatar_initial: "R",
+  },
+  StreetwearArchive: {
+    username: "StreetwearArchive",
+    bio: "Curating archive streetwear, 90s sportswear & Y2K fashion from Sydney. Deadstock and vintage only. 👟",
+    location: "Surry Hills, NSW",
+    joined: "Jun 2023",
+    rating: 4.7,
+    avatar_initial: "S",
+  },
+  FilmCameraClub: {
+    username: "FilmCameraClub",
+    bio: "Analog photography enthusiast. Selling and trading 35mm + medium format cameras, lenses & darkroom gear. 📸",
+    location: "Glebe, NSW",
+    joined: "Sep 2021",
+    rating: 5.0,
+    avatar_initial: "F",
+  },
+  RetroGamesStore: {
+    username: "RetroGamesStore",
+    bio: "Brisbane's largest private retro game collection. Tested, cleaned, and ready to play. No fakes, no repros. 🕹️",
+    location: "Newstead, QLD",
+    joined: "Feb 2022",
+    rating: 4.8,
+    avatar_initial: "G",
+  },
+};
+
+// ── DEMO LISTINGS — 30 items across 5 categories ────────────────
+// Vintage & Collectibles (12 items)
+const DEMO_VINTAGE = [
+  { id:"v1",  title:"Vintage Polaroid OneStep Camera",         price:85,  category:"Vintage & Collectibles", sub:"Polaroid Cameras",    condition:"Good",     location:"Fitzroy, VIC",        seller_username:"VintageHunter",    rating:4.9, time:"1h ago",  image_urls:["https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&q=80"], is_saved:false, tags:["Vintage","Collector"],          description:"Original Polaroid OneStep in great working condition. Tested with fresh 600 film — colours are vibrant. Minor cosmetic wear on the body, nothing affecting function. Comes with original strap." },
+  { id:"v2",  title:"Retro PlayStation 1 + 2 Controllers",     price:120, category:"Vintage & Collectibles", sub:"Retro Games",          condition:"Good",     location:"Newtown, NSW",        seller_username:"RetroCollector",   rating:4.8, time:"3h ago",  image_urls:["https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=600&q=80"], is_saved:false, tags:["Retro","90s","Collector"],      description:"OG PlayStation 1 (SCPH-7002) with 2 original Sony controllers. Fully tested, plays CDs perfectly. Controllers have zero stick drift. No memory card but easy to grab one cheap." },
+  { id:"v3",  title:"90s Nike Windbreaker Jacket – Size M",    price:60,  category:"Vintage & Collectibles", sub:"Vintage Clothing",     condition:"Used",     location:"Surry Hills, NSW",    seller_username:"StreetwearArchive",rating:4.7, time:"5h ago",  image_urls:["https://images.unsplash.com/photo-1578768079052-aa76e52ff62e?w=600&q=80"], is_saved:false, tags:["90s","Y2K","Vintage"],          description:"Authentic 90s Nike windbreaker in classic navy/white/red colourway. Size M, fits true to size. Light pilling on cuffs consistent with age. Rare colourway you won't find anymore." },
+  { id:"v4",  title:"Lord of the Rings Extended DVD Box Set",  price:25,  category:"Vintage & Collectibles", sub:"DVD / Blu-ray",        condition:"Like New", location:"Fremantle, WA",      seller_username:"VintageHunter",    rating:4.9, time:"2h ago",  image_urls:["https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?w=600&q=80"], is_saved:false, tags:["Collector","Limited Edition"],  description:"Complete LOTR Extended Edition 4-film box set. All discs play perfectly, no scratches. Bonus appendix discs included. The definitive version — theatrical cuts can't compete." },
+  { id:"v5",  title:"Vinyl Record – Pink Floyd The Wall",      price:40,  category:"Vintage & Collectibles", sub:"Vinyl Records",        condition:"Good",     location:"Paddington, NSW",     seller_username:"VintageHunter",    rating:4.9, time:"4h ago",  image_urls:["https://images.unsplash.com/photo-1542208998-f6dbbb5b2e6f?w=600&q=80"], is_saved:false, tags:["Vintage","Collector"],          description:"Original double-LP pressing of The Wall. Plays beautifully with minimal surface noise. Sleeve has expected shelf wear. A must-have for any serious vinyl collection." },
+  { id:"v6",  title:"Sony Walkman TPS-L2 Cassette Player",    price:95,  category:"Vintage & Collectibles", sub:"Cassette Tapes",       condition:"For Parts", location:"Collingwood, VIC",   seller_username:"VintageHunter",    rating:4.9, time:"6h ago",  image_urls:["https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&q=80"], is_saved:false, tags:["Retro","Vintage","80s"],        description:"Original Sony Walkman TPS-L2 — the one that started it all. Sold for restoration/display. Belt needs replacing (common issue). Cosmetically excellent, original headphones included." },
+  { id:"v7",  title:"Film Camera – Canon AE-1 Program",       price:140, category:"Vintage & Collectibles", sub:"Film Cameras",         condition:"Like New",  location:"Glebe, NSW",         seller_username:"FilmCameraClub",   rating:5.0, time:"8h ago",  image_urls:["https://images.unsplash.com/photo-1581591524425-c7e0978865fc?w=600&q=80"], is_saved:false, tags:["Vintage","Collector"],          description:"Canon AE-1 Program in near-mint condition. Shutter fires crisply at all speeds. Light seals fresh. Comes with Canon FD 50mm f/1.8 lens — deadly sharp. Shot one roll to confirm everything works." },
+  { id:"v8",  title:"Y2K Diesel Cargo Pants – Size 32",       price:75,  category:"Vintage & Collectibles", sub:"Vintage Clothing",     condition:"Good",     location:"Fitzroy, VIC",        seller_username:"StreetwearArchive",rating:4.7, time:"1d ago",  image_urls:["https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&q=80"], is_saved:false, tags:["Y2K","Vintage"],               description:"Authentic Diesel cargo pants from 2001-ish. Wide leg, multi-pocket, the real Y2K energy. Size 32 waist, 30 inseam. Some fading on knees adding to the vibe. Waistband logo intact." },
+  { id:"v9",  title:"Nintendo Game Boy Color – Teal",          price:90,  category:"Vintage & Collectibles", sub:"Retro Games",          condition:"Good",     location:"Newtown, NSW",        seller_username:"RetroCollector",   rating:4.8, time:"2h ago",  image_urls:["https://images.unsplash.com/photo-1531525645387-7f14be1bdbbd?w=600&q=80"], is_saved:false, tags:["Retro","90s","Collector"],      description:"Original teal Game Boy Color in great condition. Screen is clear with no scratches. Sound works on all channels. Comes with Pokémon Yellow — saves are working. Batteries not included." },
+  { id:"v10", title:"Vintage Adidas Track Jacket – Size L",   price:70,  category:"Vintage & Collectibles", sub:"Vintage Clothing",     condition:"Good",     location:"Surry Hills, NSW",    seller_username:"StreetwearArchive",rating:4.7, time:"3h ago",  image_urls:["https://images.unsplash.com/photo-1544441893-675973e31985?w=600&q=80"], is_saved:false, tags:["Retro","Vintage","90s"],        description:"Three-stripe Adidas track jacket from the late 90s in navy/gold. Trefoil logo, not the modern badge. Size L, roomy fit. Zip is smooth, no holes in lining. Perfect layering piece." },
+  { id:"v11", title:"Retro Game Cartridge – Zelda: OoT",      price:45,  category:"Vintage & Collectibles", sub:"Retro Games",          condition:"Good",     location:"Newstead, QLD",       seller_username:"RetroGamesStore",  rating:4.8, time:"4h ago",  image_urls:["https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&q=80"], is_saved:false, tags:["Retro","90s","Collector"],      description:"Authentic Zelda: Ocarina of Time N64 cartridge (gold label). Save battery still holds — 3 file slots working. Contacts cleaned, tested on my own N64. Label is in great shape, 9/10." },
+  { id:"v12", title:"Skateboard Deck – Santa Cruz Reissue",   price:50,  category:"Vintage & Collectibles", sub:"Collectible Toys",     condition:"Like New", location:"Bondi, NSW",          seller_username:"StreetwearArchive",rating:4.7, time:"5h ago",  image_urls:["https://images.unsplash.com/photo-1547447134-cd3f5c716030?w=600&q=80"], is_saved:false, tags:["Retro","Collector"],            description:"Santa Cruz Screaming Hand reissue deck. Never mounted — it would be a crime to skate this. 8.5\" width. Graphics are perfect. Deck-only, trucks not included. For the collector." },
+];
+
+// Fashion (6 items)
+// Electronics (5 items)
+// Home (4 items)
+// Sports (3 items)
+const DEMO_LISTINGS = [
+  // ── Fashion ──────────────────────────────────────────────────
+  { id:"f1",  title:"Air Jordan 4 Retro – White Cement",       price:260, category:"Fashion",               sub:"Shoes",               condition:"Good",     location:"Surry Hills, NSW",    seller_username:"StreetwearArchive",rating:4.8, time:"2h ago",  image_urls:["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80"], is_saved:false, tags:[],                              description:"Air Jordan 4 White Cement in a solid 8/10 condition. Some yellowing on the sole which is expected for the age. No creasing on the toe box — stored properly. US10, fits true." },
+  { id:"f2",  title:"Nike Dunk Low Panda – Size 10",            price:220, category:"Fashion",               sub:"Shoes",               condition:"Like New", location:"Fortitude Valley, QLD", seller_username:"StreetwearArchive",rating:5.0, time:"4h ago",  image_urls:["https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80"], is_saved:false, tags:[],                              description:"Nike Dunk Low Panda worn twice. Absolutely no creasing, lightly tried on. Comes with original box and both lace sets. Size US10. Selling because I prefer the Black Panda colourway." },
+  { id:"f3",  title:"Levi's 501 Original Jeans – W32 L30",     price:65,  category:"Fashion",               sub:"Clothing",            condition:"Good",     location:"Richmond, VIC",       seller_username:"StreetwearArchive",rating:4.7, time:"6h ago",  image_urls:["https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&q=80"], is_saved:false, tags:[],                              description:"Classic Levi's 501s in the original fit. W32 L30. Naturally worn knees and fading — looks incredible, not damaged. Iconic red tab intact. Washed cold and hung, never tumble dried." },
+  { id:"f4",  title:"Supreme Box Logo Hoodie – Navy, Size L",   price:310, category:"Fashion",               sub:"Hoodies",             condition:"Good",     location:"Paddington, NSW",     seller_username:"StreetwearArchive",rating:4.7, time:"1d ago",  image_urls:["https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=600&q=80"], is_saved:false, tags:[],                              description:"FW19 Supreme Box Logo Hooded Sweatshirt in Navy. Size Large. Worn maybe 4x, washed once on delicate. Logo is crisp, no cracking. 100% authentic — happy to verify in person." },
+  { id:"f5",  title:"Vintage Carhartt WIP Detroit Jacket – M",  price:130, category:"Fashion",               sub:"Jackets",             condition:"Used",     location:"Brunswick, VIC",      seller_username:"StreetwearArchive",rating:4.7, time:"7h ago",  image_urls:["https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&q=80"], is_saved:false, tags:[],                              description:"90s era Carhartt WIP Detroit Jacket in dark brown. Waxed canvas has beautiful patina. All pockets zip/button correctly. Minor wear on cuffs. Size M, slightly boxy. A genuine workhorse." },
+  { id:"f6",  title:"New Balance 550 – Grey/White, Size 9.5",   price:150, category:"Fashion",               sub:"Shoes",               condition:"Like New", location:"Newtown, NSW",        seller_username:"StreetwearArchive",rating:4.7, time:"9h ago",  image_urls:["https://images.unsplash.com/photo-1539185441755-769473a23570?w=600&q=80"], is_saved:false, tags:[],                              description:"NB 550 in the grey/white colourway. Worn twice to try sizing — I'm a 9 so these are too big. No creases, soles are clean. Size US9.5. OG box included. Timeless silhouette." },
+  // ── Electronics ──────────────────────────────────────────────
+  { id:"e1",  title:"Sony Alpha A6400 Camera Body",             price:750, category:"Electronics",           sub:"Cameras",             condition:"Like New", location:"Newstead, QLD",       seller_username:"FilmCameraClub",   rating:5.0, time:"1d ago",  image_urls:["https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=600&q=80"], is_saved:false, tags:[],                              description:"Sony A6400 body, shutter count under 3000 — essentially new. Comes with original battery, charger, strap, and box. Switching to full-frame so this needs a new home. Flawless sensor." },
+  { id:"e2",  title:"AirPods Pro 2nd Gen – Like New",           price:195, category:"Electronics",           sub:"Audio",               condition:"Like New", location:"Manly, NSW",          seller_username:"RetroCollector",   rating:4.8, time:"6h ago",  image_urls:["https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=600&q=80"], is_saved:true,  tags:[],                              description:"AirPods Pro Gen 2 purchased 6 months ago. Used lightly — primarily at the gym. All ear tips included, case is unscratched. Battery health still showing 100% in Settings." },
+  { id:"e3",  title:"iPad Air 5th Gen – 256GB, Space Grey",     price:550, category:"Electronics",           sub:"Tablets",             condition:"Good",     location:"South Yarra, VIC",    seller_username:"RetroCollector",   rating:4.8, time:"2d ago",  image_urls:["https://images.unsplash.com/photo-1544244015-0df4592ab731?w=600&q=80"], is_saved:false, tags:[],                              description:"iPad Air 5 in Space Grey, 256GB WiFi. 87% battery health. No cracks or chips on screen — using a case since day one. Comes with Apple USB-C cable but no charger brick." },
+  { id:"e4",  title:"Dyson V11 Cordless Vacuum",                price:280, category:"Electronics",           sub:"Appliances",          condition:"Good",     location:"Camberwell, VIC",     seller_username:"VintageHunter",    rating:4.9, time:"3h ago",  image_urls:["https://images.unsplash.com/photo-1558317374-067fb5f30001?w=600&q=80"], is_saved:false, tags:[],                              description:"Dyson V11 Animal in good working order. 45-55 min runtime on eco mode. Comes with all attachments and docking station. One small crack on the bin (non-structural). Cleaned thoroughly." },
+  { id:"e5",  title:"Nintendo Switch OLED – White",             price:320, category:"Electronics",           sub:"Gaming Consoles",     condition:"Like New", location:"Newstead, QLD",       seller_username:"RetroGamesStore",  rating:4.8, time:"5h ago",  image_urls:["https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?w=600&q=80"], is_saved:false, tags:[],                              description:"Switch OLED in white, used for 4 months. Screen is perfect — no dead pixels or burn-in. Dock, HDMI, Joy-Cons and USB-C charger all included. No Joy-Con drift. Comes with carrying case." },
+  // ── Home ─────────────────────────────────────────────────────
+  { id:"h1",  title:"IKEA KALLAX Shelving Unit – White 4x2",   price:85,  category:"Home",                  sub:"Furniture",           condition:"Good",     location:"Fitzroy, VIC",        seller_username:"VintageHunter",    rating:4.9, time:"5h ago",  image_urls:["https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80"], is_saved:true,  tags:[],                              description:"IKEA Kallax 8-cube unit in white. Perfect for vinyl, books, or general storage. Minor scuff on the bottom-right cube (barely visible). Disassembled for easy transport, all hardware included." },
+  { id:"h2",  title:"Smeg Retro Kettle – Cream",                price:65,  category:"Home",                  sub:"Kitchen",             condition:"Like New", location:"Collingwood, VIC",    seller_username:"VintageHunter",    rating:4.9, time:"8h ago",  image_urls:["https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=600&q=80"], is_saved:false, tags:[],                              description:"Smeg KLF03 retro kettle in cream. Used about 15 times before moving to a different kitchen aesthetic. Heating element is pristine. Comes with original box and instructions." },
+  { id:"h3",  title:"Vintage Turkish Kilim Rug – 150x240cm",    price:190, category:"Home",                  sub:"Rugs & Decor",        condition:"Good",     location:"Brunswick, VIC",      seller_username:"VintageHunter",    rating:4.9, time:"1d ago",  image_urls:["https://images.unsplash.com/photo-1600210492493-0946911123ea?w=600&q=80"], is_saved:false, tags:["Vintage"],                     description:"Hand-woven Turkish kilim rug in a warm red/orange/navy palette. 150x240cm — ideal for living rooms. Some natural wear along the edges consistent with age. Professionally cleaned 6 months ago." },
+  { id:"h4",  title:"Nespresso Vertuo Next + Milk Frother",    price:110, category:"Home",                  sub:"Kitchen",             condition:"Like New", location:"Surry Hills, NSW",    seller_username:"RetroCollector",   rating:4.8, time:"2h ago",  image_urls:["https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&q=80"], is_saved:false, tags:[],                              description:"Nespresso Vertuo Next machine with the Aeroccino3 milk frother. Both work perfectly. Descaled 2 months ago. Comes with welcome capsule kit (still sealed). Reason for selling: upgrading to a proper espresso machine." },
+  // ── Sports ───────────────────────────────────────────────────
+  { id:"s1",  title:"Trek Marlin 5 Mountain Bike – Medium",    price:580, category:"Sports",                sub:"Bikes",               condition:"Used",     location:"Fremantle, WA",       seller_username:"RetroCollector",   rating:4.8, time:"3h ago",  image_urls:["https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80"], is_saved:false, tags:[],                              description:"2021 Trek Marlin 5 in medium frame. 21-speed, hydraulic disc brakes. New tyres fitted 3 months ago. Some trail scratches on the down tube but nothing structural. Rides brilliantly on any surface." },
+  { id:"s2",  title:"Rogue Echo Bike – Commercial Grade",      price:650, category:"Sports",                sub:"Gym Equipment",       condition:"Good",     location:"South Melbourne, VIC", seller_username:"VintageHunter",    rating:4.9, time:"12h ago", image_urls:["https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=600&q=80"], is_saved:false, tags:[],                              description:"Rogue Echo Bike — built like a tank. Used daily for 18 months, belt is in excellent condition. Console working correctly. Selling because I'm moving interstate and it won't fit in the van." },
+  { id:"s3",  title:"Surfboard – Firewire Seaside 5'7\"",      price:480, category:"Sports",                sub:"Surf & Watersports",  condition:"Good",     location:"Manly, NSW",          seller_username:"RetroCollector",   rating:4.8, time:"1d ago",  image_urls:["https://images.unsplash.com/photo-1502680390469-be75c86b636f?w=600&q=80"], is_saved:false, tags:[],                              description:"Firewire Seaside 5'7\" in Thunderbolt construction. Ideal for small-to-medium surf. Two small dings repaired with solar resin — fully watertight. Comes with Futures fin set (3 fins) and leash." },
+];
+
+const DEMO_CONVOS = [
+  { id:"c1", other_user:"Sarah", other_avatar:"https://i.pravatar.cc/80?img=47", listing_title:"Air Jordan 4", last_message:"Sure, 6pm works!", last_time:"2m", unread:0, online:true,
+    messages:[{id:1,from_me:false,content:"Hi! Is this still available?",created_at:"2:30 PM"},{id:2,from_me:true,content:"Yes, it is!",created_at:"2:31 PM"},{id:3,from_me:false,content:"Can I pick up tonight?",created_at:"2:32 PM"},{id:4,from_me:true,content:"Sure, 6pm works!",created_at:"2:33 PM"}]},
+  { id:"c2", other_user:"Jake M.", other_avatar:"https://i.pravatar.cc/80?img=12", listing_title:"Sony Camera", last_message:"Is the lens included?", last_time:"15m", unread:2, online:true,
+    messages:[{id:1,from_me:false,content:"Is the lens included?",created_at:"1:20 PM"}]},
+];
+
+// ═══════════════════════════════════════════════════════
+//  DATABASE HELPERS
+// ═══════════════════════════════════════════════════════
+
+async function dbGetListings(userId) {
+  if (!supabase) return [...DEMO_VINTAGE, ...DEMO_LISTINGS];
+  // Build select: include saved_items filtered to current user if logged in
+  const savedSelect = userId
+    ? `*, profiles(username, avatar_url), saved_items!left(id, user_id)`
+    : `*, profiles(username, avatar_url)`;
+  const { data, error } = await supabase
+    .from("listings")
+    .select(savedSelect)
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("getListings:", error); return [...DEMO_VINTAGE, ...DEMO_LISTINGS]; }
+  return (data || []).map(l => ({
+    ...l,
+    seller_username: l.profiles?.username || "user",
+    seller_avatar:   l.profiles?.avatar_url,
+    is_saved: userId
+      ? (l.saved_items || []).some(s => s.user_id === userId)
+      : false,
+    image_urls: l.image_urls || [],
+    tags: l.tags || [],
+    time: timeSince(l.created_at),
+  }));
+}
+
+async function dbCreateListing(listing, userId) {
+  if (!supabase) { console.warn("No Supabase — demo mode"); return null; }
+  const { data, error } = await supabase
+    .from("listings")
+    .insert({ ...listing, seller_id: userId, status: "active" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function dbToggleSave(listingId, userId, isSaved) {
+  if (!supabase) return;
+  if (isSaved) {
+    await supabase.from("saved_items").delete()
+      .match({ listing_id: listingId, user_id: userId });
+  } else {
+    await supabase.from("saved_items").insert({ listing_id: listingId, user_id: userId });
+  }
+}
+
+async function dbGetConversations(userId) {
+  if (!supabase) return DEMO_CONVOS;
+  const { data, error } = await supabase
+    .from("conversations")
+    .select(`
+      *,
+      buyer:buyer_id(id, profiles(username, avatar_url)),
+      seller:seller_id(id, profiles(username, avatar_url)),
+      listing:listing_id(title),
+      messages(content, created_at, sender_id)
+    `)
+    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+    .order("updated_at", { ascending: false });
+  if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
+  return (data || []).map(c => {
+    // Determine which participant is the "other" person
+    const isBuyer = c.buyer_id === userId;
+    const otherProfile = isBuyer ? c.seller?.profiles : c.buyer?.profiles;
+    const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    return {
+      ...c,
+      other_user: otherProfile?.username || (isBuyer ? "Seller" : "Buyer"),
+      other_avatar: otherProfile?.avatar_url || null,
+      listing_title: c.listing?.title || "Item",
+      last_message: lastMsg?.content || "",
+      last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
+      unread: 0,
+      online: false,
+    };
+  });
+}
+
+async function dbGetMessages(conversationId) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (error) { console.error("getMessages:", error); return []; }
+  return data || [];
+}
+
+async function dbSendMessage(conversationId, senderId, content) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, content })
+    .select()
+    .single();
+  if (error) throw error;
+  await supabase.from("conversations").update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+  return data;
+}
+
+async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
+  if (!supabase) return null;
+  // Check existing — use maybeSingle() so no error is thrown when no row exists
+  const { data: existing } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("listing_id", listingId)
+    .eq("buyer_id", buyerId)
+    .maybeSingle();
+  if (existing) return existing;
+  // Create new
+  const { data, error } = await supabase
+    .from("conversations")
+    .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function dbGetProfile(userId) {
+  if (!supabase) return null;
+  const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  return data;
+}
+
+async function dbUpsertProfile(userId, updates) {
+  if (!supabase) return;
+  await supabase.from("profiles").upsert({ id: userId, ...updates });
+}
+
+async function dbUploadImage(file, userId) {
+  if (!supabase) return null;
+  const ext = file.name.split(".").pop();
+  const path = `${userId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("listing-images").upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data: { publicUrl } } = supabase.storage.from("listing-images").getPublicUrl(path);
+  return publicUrl;
+}
+
+async function dbGetUserListings(userId) {
+  if (!supabase) return [];
+  const { data } = await supabase.from("listings").select("*")
+    .eq("seller_id", userId)
+    .in("status", ["active","sold"])
+    .order("created_at", { ascending: false });
+  return data || [];
+}
+
+async function dbMarkAsSold(listingId) {
+  if (!supabase) return;
+  const { error } = await supabase.from("listings")
+    .update({ status: "sold", updated_at: new Date().toISOString() })
+    .eq("id", listingId);
+  if (error) throw error;
+}
+
+async function dbDeleteListing(listingId) {
+  if (!supabase) return;
+  const { error } = await supabase.from("listings")
+    .update({ status: "deleted", updated_at: new Date().toISOString() })
+    .eq("id", listingId);
+  if (error) throw error;
+}
+
+async function dbGetSavedListings(userId) {
+  if (!supabase) return DEMO_LISTINGS.filter(l => l.is_saved);
+  const { data } = await supabase
+    .from("saved_items")
+    .select("listings(*, profiles(username, avatar_url))")
+    .eq("user_id", userId);
+  return (data || [])
+    .map(s => s.listings)
+    .filter(Boolean)
+    .map(l => ({
+      ...l,
+      seller_username: l.profiles?.username || "user",
+      seller_avatar:   l.profiles?.avatar_url,
+      tags: l.tags || [],
+      is_saved: true,
+      time: timeSince(l.created_at),
+    }));
+}
+
+// Stub — real impl calls Supabase Edge Function "loopgen-ai-desc"
+async function dbAiDescription(title, category, condition) {
+  if (!supabase) return null;
+  const { data, error } = await supabase.functions.invoke("loopgen-ai-desc", {
+    body: { title, category, condition }
+  });
+  if (error) throw error;
+  return data?.description || null;
+}
+
+function timeSince(dateStr) {
+  if (!dateStr) return "";
+  const secs = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  if (secs < 3600) return `${Math.floor(secs/60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs/3600)}h ago`;
+  return `${Math.floor(secs/86400)}d ago`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  ICONS
+// ═══════════════════════════════════════════════════════
+const IcoSearch  = ({c="#374151"}) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7.5" stroke={c} strokeWidth="2" fill="none"/><path d="M11 7.5a3.5 3.5 0 0 0-3.5 3.5" stroke={c} strokeWidth="1.6" strokeLinecap="round" opacity="0.5"/><path d="M17.5 17.5L21 21" stroke={c} strokeWidth="2.2" strokeLinecap="round"/></svg>;
+const IcoUser    = ({c="#374151"}) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3.5" stroke={c} strokeWidth="2" fill={c} fillOpacity="0.12"/><path d="M4.5 20.5c0-4.142 3.358-7.5 7.5-7.5s7.5 3.358 7.5 7.5" stroke={c} strokeWidth="2" strokeLinecap="round" fill="none"/></svg>;
+const IcoBack    = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#f3f4f6"/><path d="M14 8l-4 4 4 4" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const IcoSend    = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 2L15 22l-4-9-9-4 20-7z" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="white" fillOpacity="0.25"/></svg>;
+const IcoCamera  = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
+
+const IcoHome    = ({a}) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="nhg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#22c55e"/><stop offset="100%" stopColor="#1c7c45"/></linearGradient></defs>{a?<><path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H5a1 1 0 01-1-1V10.5z" fill="url(#nhg)" fillOpacity="0.18"/><path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H5a1 1 0 01-1-1V10.5z" stroke="url(#nhg)" strokeWidth="2" strokeLinejoin="round"/><rect x="9" y="13" width="6" height="10" rx="1.5" fill="url(#nhg)" fillOpacity="0.4" stroke="url(#nhg)" strokeWidth="1.5"/></>:<><path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H5a1 1 0 01-1-1V10.5z" stroke="#c4c9d4" strokeWidth="2" strokeLinejoin="round"/><rect x="9" y="13" width="6" height="10" rx="1.5" stroke="#c4c9d4" strokeWidth="1.5"/></>}</svg>;
+const IcoExplore = ({a}) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="neg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#22c55e"/><stop offset="100%" stopColor="#1c7c45"/></linearGradient></defs><circle cx="11" cy="11" r="8" stroke={a?"url(#neg)":"#c4c9d4"} strokeWidth="2" fill={a?"url(#neg)":""} fillOpacity={a?"0.12":"0"}/><path d="M11 7a1 1 0 00-1 1" stroke={a?"url(#neg)":"#c4c9d4"} strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/><path d="M7.5 14.5l3-5 5-3-3 5-5 3z" fill={a?"url(#neg)":"#c4c9d4"} stroke={a?"url(#neg)":"#c4c9d4"} strokeWidth="1" strokeLinejoin="round"/><path d="M17.5 17.5L21 21" stroke={a?"url(#neg)":"#c4c9d4"} strokeWidth="2.2" strokeLinecap="round"/></svg>;
+const IcoChats   = ({a}) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="ncg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#22c55e"/><stop offset="100%" stopColor="#1c7c45"/></linearGradient></defs><path d="M21 14.5a2 2 0 01-2 2H7.5l-4 4V5a2 2 0 012-2h13a2 2 0 012 2v9.5z" fill={a?"url(#ncg)":"none"} fillOpacity={a?"0.15":"0"} stroke={a?"url(#ncg)":"#c4c9d4"} strokeWidth="2" strokeLinejoin="round"/>{a&&<><line x1="8" y1="9" x2="16" y2="9" stroke="url(#ncg)" strokeWidth="1.6" strokeLinecap="round"/><line x1="8" y1="12.5" x2="13" y2="12.5" stroke="url(#ncg)" strokeWidth="1.6" strokeLinecap="round"/></>}</svg>;
+const IcoProfile = ({a}) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><defs><linearGradient id="npg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#22c55e"/><stop offset="100%" stopColor="#1c7c45"/></linearGradient></defs><circle cx="12" cy="8" r="3.5" stroke={a?"url(#npg)":"#c4c9d4"} strokeWidth="2" fill={a?"url(#npg)":""} fillOpacity={a?"0.18":"0"}/><path d="M5 20c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke={a?"url(#npg)":"#c4c9d4"} strokeWidth="2" strokeLinecap="round" fill="none"/></svg>;
+
+// ═══════════════════════════════════════════════════════
+//  CATEGORY ICONS
+// ═══════════════════════════════════════════════════════
+const CatFashionIcon     = () => <svg viewBox="0 0 56 56" fill="none" width="34" height="34"><path d="M14 18L8 26h8v14h24V26h8l-6-8" fill="#ec4899" fillOpacity="0.18" stroke="#ec4899" strokeWidth="2" strokeLinejoin="round"/><path d="M20 14c0 4.4 3.6 8 8 8s8-3.6 8-8" stroke="#ec4899" strokeWidth="2.2" strokeLinecap="round" fill="none"/><path d="M20 14L14 18M36 14l6 4" stroke="#f472b6" strokeWidth="2.2" strokeLinecap="round"/></svg>;
+const CatElectronicsIcon = () => <svg viewBox="0 0 56 56" fill="none" width="34" height="34"><rect x="12" y="18" width="32" height="14" rx="2.5" fill="#3b82f6" fillOpacity="0.15" stroke="#3b82f6" strokeWidth="2"/><rect x="15" y="21" width="26" height="8" rx="1.5" fill="#60a5fa" opacity="0.5"/><rect x="10" y="32" width="36" height="3" rx="1.5" fill="#3b82f6" opacity="0.3"/><circle cx="28" cy="35" r="1.5" fill="#3b82f6"/></svg>;
+const CatHomeIcon        = () => <svg viewBox="0 0 56 56" fill="none" width="34" height="34"><path d="M10 26L28 12l18 14" fill="#f59e0b" fillOpacity="0.25" stroke="#f59e0b" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round"/><rect x="16" y="26" width="24" height="16" rx="1" fill="#fbbf24" fillOpacity="0.3" stroke="#f59e0b" strokeWidth="2"/><rect x="24" y="32" width="8" height="10" rx="1.5" fill="#fbbf24" fillOpacity="0.5" stroke="#f59e0b" strokeWidth="1.5"/></svg>;
+const CatSportsIcon      = () => <svg viewBox="0 0 56 56" fill="none" width="34" height="34"><circle cx="28" cy="28" r="14" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="2.2"/><path d="M28 22l4 3-1.5 4.5h-5L24 25z" fill="#34d399" stroke="#10b981" strokeWidth="1" fillOpacity="0.8"/><circle cx="22" cy="22" r="3" fill="white" opacity="0.25"/></svg>;
+const CatVehiclesIcon    = () => <svg viewBox="0 0 56 56" fill="none" width="34" height="34"><path d="M12 28h32l-4-10H16z" fill="#8b5cf6" fillOpacity="0.2" stroke="#8b5cf6" strokeWidth="2" strokeLinejoin="round"/><rect x="10" y="28" width="36" height="9" rx="2" fill="#8b5cf6" fillOpacity="0.15" stroke="#8b5cf6" strokeWidth="2"/><circle cx="19" cy="38" r="4" stroke="#8b5cf6" strokeWidth="2" fill="none"/><circle cx="37" cy="38" r="4" stroke="#8b5cf6" strokeWidth="2" fill="none"/></svg>;
+const CatAllIcon         = () => <svg viewBox="0 0 56 56" fill="none" width="34" height="34"><rect x="12" y="12" width="14" height="14" rx="3" fill={GREEN} fillOpacity="0.25" stroke={GREEN} strokeWidth="2"/><rect x="30" y="12" width="14" height="14" rx="3" fill={GREEN} fillOpacity="0.15" stroke={GREEN} strokeWidth="2"/><rect x="12" y="30" width="14" height="14" rx="3" fill={GREEN} fillOpacity="0.15" stroke={GREEN} strokeWidth="2"/><rect x="30" y="30" width="14" height="14" rx="3" fill={GREEN} fillOpacity="0.25" stroke={GREEN} strokeWidth="2"/></svg>;
+
+const CatVintageIcon = () => (
+  <svg viewBox="0 0 56 56" fill="none" width="34" height="34">
+    {/* Vinyl record */}
+    <circle cx="28" cy="28" r="16" fill="#7c3aed" fillOpacity="0.18" stroke="#7c3aed" strokeWidth="2"/>
+    <circle cx="28" cy="28" r="10" fill="#a78bfa" fillOpacity="0.25" stroke="#7c3aed" strokeWidth="1.5"/>
+    <circle cx="28" cy="28" r="4" fill="#7c3aed" fillOpacity="0.7" stroke="#7c3aed" strokeWidth="1.5"/>
+    <circle cx="28" cy="28" r="1.5" fill="white"/>
+    {/* Cassette spool hint */}
+    <path d="M22 14 Q24 11 28 11 Q32 11 34 14" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+  </svg>
+);
+
+const CAT_ICONS = { All: CatAllIcon, Fashion: CatFashionIcon, Electronics: CatElectronicsIcon, Home: CatHomeIcon, Sports: CatSportsIcon, Vehicles: CatVehiclesIcon, "Vintage & Collectibles": CatVintageIcon };
+
+// ═══════════════════════════════════════════════════════
+//  LAYOUT PRIMITIVES
+// ═══════════════════════════════════════════════════════
+function Phone({ children }) {
+  return (
+    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#dde1e7",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",padding:20}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px;}
+        input,select,textarea,button{font-family:'Plus Jakarta Sans',sans-serif;}
+      `}</style>
+      <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StatusBar() {
+  return (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 24px 6px",fontSize:12,fontWeight:700,color:"#111",flexShrink:0}}>
+      <span>9:41</span>
+      <div style={{display:"flex",gap:5,alignItems:"center"}}>
+        <svg width="16" height="11" viewBox="0 0 16 11" fill="#111"><rect x="0" y="6" width="2.5" height="5" rx="1"/><rect x="3.5" y="4" width="2.5" height="7" rx="1"/><rect x="7" y="2" width="2.5" height="9" rx="1"/><rect x="10.5" y="0" width="2.5" height="11" rx="1"/></svg>
+        <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0.5" y="0.5" width="20" height="11" rx="2.5" stroke="#111" strokeWidth="1.2" fill="none"/><rect x="2" y="2" width="13" height="8" rx="1.5" fill="#111"/><path d="M22 4v4a2 2 0 000-4z" fill="#111"/></svg>
+      </div>
+    </div>
+  );
+}
+
+function BottomNav({ active, onNav }) {
+  const tabs = [
+    {id:"home",    label:"Home",    icon: a => <IcoHome a={a}/>},
+    {id:"explore", label:"Explore", icon: a => <IcoExplore a={a}/>},
+    {id:"sell",    label:"",        icon: null},
+    {id:"chats",   label:"Chats",   icon: a => <IcoChats a={a}/>},
+    {id:"profile", label:"Profile", icon: a => <IcoProfile a={a}/>},
+  ];
+  return (
+    <div style={{position:"absolute",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #f0f1f3",display:"flex",justifyContent:"space-around",alignItems:"center",padding:"10px 4px 22px",zIndex:20,boxShadow:"0 -4px 20px rgba(0,0,0,0.06)"}}>
+      {tabs.map(t => (
+        <div key={t.id} onClick={() => onNav(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",minWidth:48,position:"relative"}}>
+          {t.id==="sell"
+            ? <div style={{width:62,height:62,borderRadius:18,background:"white",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-28,boxShadow:"0 6px 22px rgba(28,124,69,0.28), 0 2px 8px rgba(0,0,0,0.10)",border:"1.5px solid rgba(28,124,69,0.12)"}}>
+                <img src="/loopgen-logo.png" alt="Sell" style={{width:48,height:32,objectFit:"contain"}}/>
+              </div>
+            : <><div style={{width:40,height:32,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,background:active===t.id?"rgba(28,124,69,0.08)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
+          }
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GreenBtn({ children, onClick, mt=16, disabled=false, style={} }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{width:"100%",marginTop:mt,padding:"16px",borderRadius:18,background:disabled?"#d1fae5":GREEN,border:"none",color:"white",fontSize:15,fontWeight:700,cursor:disabled?"not-allowed":"pointer",boxShadow:disabled?"none":`0 6px 22px ${GREEN}44`,letterSpacing:0.2,...style}}>
+      {children}
+    </button>
+  );
+}
+
+function FInp({ placeholder, value="", onChange=()=>{}, type="text", readOnly=false }) {
+  return <input type={type} placeholder={placeholder} value={value} onChange={e=>onChange(e.target.value)} readOnly={readOnly}
+    style={{width:"100%",border:"1.5px solid #e5e7eb",borderRadius:14,padding:"14px",fontSize:14,outline:"none",marginBottom:12,color:"#374151",background:readOnly?"#f9fafb":"white"}}/>;
+}
+
+function FSel({ ph, value, onChange, opts }) {
+  return <select value={value} onChange={e=>onChange(e.target.value)}
+    style={{width:"100%",border:"1.5px solid #e5e7eb",borderRadius:14,padding:"14px",fontSize:14,outline:"none",marginBottom:12,color:value?"#374151":"#9ca3af",background:"white",appearance:"none"}}>
+    {opts.map(o => <option key={o} value={o} style={{color:"#374151"}}>{o||ph}</option>)}
+  </select>;
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOAST COMPONENT
+// ═══════════════════════════════════════════════════════
+function Toast({ msg }) {
+  if (!msg) return null;
+  return (
+    <div style={{position:"absolute",bottom:100,left:20,right:20,background:"#111",color:"white",padding:"12px 18px",borderRadius:16,fontSize:13,fontWeight:600,textAlign:"center",zIndex:100,boxShadow:"0 8px 28px rgba(0,0,0,0.28)",animation:"fadeIn 0.2s ease"}}>
+      {msg}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONFIRM MODAL
+// ═══════════════════════════════════════════════════════
+function ConfirmModal({ confirm, onCancel }) {
+  if (!confirm) return null;
+  return (
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200,borderRadius:52}}>
+      <div style={{background:"white",borderRadius:"24px 24px 0 0",padding:"24px 24px 36px",width:"100%",boxShadow:"0 -8px 40px rgba(0,0,0,0.18)"}}>
+        <div style={{fontSize:15,fontWeight:600,color:"#111",marginBottom:20,textAlign:"center",lineHeight:1.5}}>{confirm.msg}</div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onCancel} style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,fontSize:14,cursor:"pointer",color:"#374151"}}>Cancel</button>
+          <button onClick={confirm.onConfirm} style={{flex:1,padding:"14px",borderRadius:14,border:"none",background:"#ef4444",color:"white",fontWeight:700,fontSize:14,cursor:"pointer"}}>Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tag colour palette
+const TAG_COLORS = {
+  "90s":             { bg:"#fdf2f8", text:"#9d174d", border:"#fbcfe8" },
+  "Y2K":             { bg:"#eff6ff", text:"#1e40af", border:"#bfdbfe" },
+  "Retro":           { bg:"#fff7ed", text:"#9a3412", border:"#fed7aa" },
+  "Vintage":         { bg:"#f5f3ff", text:"#6d28d9", border:"#ddd6fe" },
+  "Collector":       { bg:"#f0fdf4", text:"#166534", border:"#bbf7d0" },
+  "Limited Edition": { bg:"#fefce8", text:"#854d0e", border:"#fde68a" },
+  "80s":             { bg:"#fff1f2", text:"#9f1239", border:"#fecdd3" },
+};
+
+function VintageTag({ label }) {
+  const c = TAG_COLORS[label] || { bg:"#f3f4f6", text:"#374151", border:"#e5e7eb" };
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:20,fontSize:9,fontWeight:800,letterSpacing:0.4,background:c.bg,color:c.text,border:`1px solid ${c.border}`,flexShrink:0}}>
+      {label}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+//  LISTING CARD
+// ═══════════════════════════════════════════════════════
+function ListingCard({ item, onTap, onSave, compact=false }) {
+  const img = item.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
+  if (compact) {
+    return (
+      <div onClick={() => onTap(item)} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,0.09)",cursor:"pointer",flexShrink:0,width:162}}>
+        <div style={{position:"relative"}}>
+          <img src={img} alt={item.title} style={{width:"100%",height:148,objectFit:"cover"}}
+            onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
+          <div onClick={e => onSave(item.id, e)} style={{position:"absolute",top:8,right:8,width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.92)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,cursor:"pointer",backdropFilter:"blur(6px)"}}>
+            {item.is_saved ? "❤️" : "🤍"}
+          </div>
+          {item.condition==="New"&&<div style={{position:"absolute",top:8,left:8,background:GREEN,color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8}}>NEW</div>}
+          {item.category==="Vintage & Collectibles"&&<div style={{position:"absolute",bottom:8,left:8,background:"rgba(124,58,237,0.85)",color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8,backdropFilter:"blur(4px)"}}>✦ VINTAGE</div>}
+        </div>
+        <div style={{padding:"10px 11px 12px"}}>
+          <div style={{fontWeight:800,fontSize:15,color:"#111"}}>${item.price}</div>
+          <div style={{fontSize:12,fontWeight:600,color:"#374151",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+          <div style={{fontSize:10,color:"#9ca3af",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {item.location}</div>
+          {item.tags?.length > 0 && (
+            <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
+              {item.tags.slice(0,2).map(t => <VintageTag key={t} label={t}/>)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div onClick={() => onTap(item)} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.08)",cursor:"pointer",display:"flex",gap:0}}>
+      <div style={{position:"relative",flexShrink:0,width:120,height:115}}>
+        <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover"}}
+          onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
+        {item.condition==="New"&&<div style={{position:"absolute",top:7,left:7,background:GREEN,color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8}}>NEW</div>}
+        {item.category==="Vintage & Collectibles"&&<div style={{position:"absolute",bottom:7,left:7,background:"rgba(124,58,237,0.85)",color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8,backdropFilter:"blur(4px)"}}>✦ VINTAGE</div>}
+      </div>
+      <div style={{padding:"13px 14px",flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div style={{fontWeight:800,fontSize:18,color:"#111"}}>${item.price}</div>
+            <div onClick={e => onSave(item.id, e)} style={{fontSize:18,cursor:"pointer",flexShrink:0}}>{item.is_saved?"❤️":"🤍"}</div>
+          </div>
+          <div style={{fontSize:14,fontWeight:600,color:"#374151",marginTop:3}}>{item.title}</div>
+          <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{item.condition} · {item.category}</div>
+          {item.tags?.length > 0 && (
+            <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
+              {item.tags.slice(0,3).map(t => <VintageTag key={t} label={t}/>)}
+            </div>
+          )}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+          <div style={{fontSize:11,color:"#6b7280"}}>📍 {item.location}</div>
+          <div style={{fontSize:11,color:"#9ca3af"}}>{item.time}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+//  SKELETON CARD — shown while listings are loading
+// ═══════════════════════════════════════════════════════
+function SkeletonCard({ compact=false }) {
+  const shine = {
+    background: "linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)",
+    backgroundSize: "200% 100%",
+    animation: "loopgen-shimmer 1.4s ease-in-out infinite",
+  };
+  if (compact) {
+    return (
+      <div style={{background:"white",borderRadius:22,overflow:"hidden",flexShrink:0,width:162,boxShadow:"0 4px 16px rgba(0,0,0,0.06)"}}>
+        <style>{`@keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+        <div style={{...shine,height:148}}/>
+        <div style={{padding:"10px 11px 14px",display:"flex",flexDirection:"column",gap:7}}>
+          <div style={{...shine,height:14,borderRadius:6,width:"50%"}}/>
+          <div style={{...shine,height:12,borderRadius:6,width:"80%"}}/>
+          <div style={{...shine,height:10,borderRadius:6,width:"60%"}}/>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",gap:0}}>
+      <style>{`@keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+      <div style={{...shine,flexShrink:0,width:120,height:115}}/>
+      <div style={{padding:"13px 14px",flex:1,display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{...shine,height:16,borderRadius:6,width:"35%"}}/>
+        <div style={{...shine,height:13,borderRadius:6,width:"75%"}}/>
+        <div style={{...shine,height:11,borderRadius:6,width:"55%"}}/>
+        <div style={{marginTop:"auto",display:"flex",justifyContent:"space-between"}}>
+          <div style={{...shine,height:10,borderRadius:6,width:"40%"}}/>
+          <div style={{...shine,height:10,borderRadius:6,width:"20%"}}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+//  DEMO MODE BANNER
+// ═══════════════════════════════════════════════════════
+function DemoBanner() {
+  if (HAS_SUPABASE) return null;
+  return (
+    <div style={{background:`linear-gradient(90deg,#1c7c45,#22c55e)`,padding:"7px 16px",fontSize:11,fontWeight:700,color:"white",textAlign:"center",flexShrink:0,letterSpacing:0.2}}>
+      ✨ LoopGen Beta — Browse demo listings · Sign-up opens soon
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAIN APP
+// ═══════════════════════════════════════════════════════
+export default function LoopGenApp() {
+  // ── Core state ──────────────────────────────────────
+  const [screen,    setScreen]  = useState("splash");
+  const [history,   setHistory] = useState([]);
+  const [user,      setUser]    = useState(null);   // Supabase user object
+  const [profile,   setProfile] = useState(null);   // profiles row
+  const [authMode,  setAuthMode]= useState("login"); // "login" | "register"
+  const [authForm,  setAuthForm]= useState({email:"",password:"",username:""});
+  const [authError, setAuthError]= useState("");
+  const [authLoading,setAuthLoading]= useState(false);
+
+  // ── Data state ───────────────────────────────────────
+  const [listings,  setListings]= useState([...DEMO_VINTAGE, ...DEMO_LISTINGS]);
+  const [convos,    setConvos]  = useState(DEMO_CONVOS);
+  const [detail,    setDetail]  = useState(null);
+  const [convo,     setConvo]   = useState(null);
+  const [chatMsgs,  setChatMsgs]= useState([]);
+  const [userListings, setUserListings]= useState([]);
+  const [savedListings,setSavedListings]=useState([]);
+
+  // ── Sell state ───────────────────────────────────────
+  const [sellStep,  setSellStep]= useState(1);
+  const [sell,      setSell]    = useState({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]});
+  const [sellImages,setSellImages]=useState([]);
+  const [uploadingImg,setUploadingImg]=useState(false);
+
+  // ── UI state ─────────────────────────────────────────
+  const [search,    setSearch]  = useState("");
+  const [catFilter, setCatF]    = useState("All");
+  const [msgText,   setMsgText] = useState("");
+  const [aiLoading, setAiLoading]=useState(false);
+  const [loading,   setLoading] = useState(false);
+  const [listingsLoading, setListingsLoading] = useState(false);
+  const [toast,     setToast]   = useState(null);
+  const [confirm,   setConfirm] = useState(null); // { msg, onConfirm }
+  const chatEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const realtimeSub = useRef(null);
+
+  // ── Init: check existing session ─────────────────────
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        loadProfile(session.user.id);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        loadProfile(session.user.id);
+      } else {
+        setUser(null); setProfile(null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Load data on screen change ────────────────────────
+  useEffect(() => {
+    if (screen === "home" || screen === "explore") {
+      loadListings();
+    }
+    if (screen === "chats" && user) {
+      loadConversations();
+    }
+    if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
+      loadProfileData();
+    }
+  }, [screen, user]);
+
+  // ── Realtime messages ────────────────────────────────
+  useEffect(() => {
+    if (!supabase || !convo?.id || typeof convo.id === "string") return;
+    realtimeSub.current = supabase
+      .channel(`messages:${convo.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convo.id}` },
+        payload => {
+          const msg = payload.new;
+          setChatMsgs(prev => {
+            if (prev.find(m => m.id === msg.id)) return prev;
+            return [...prev, { ...msg, from_me: msg.sender_id === user?.id }];
+          });
+          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+        })
+      .subscribe();
+    return () => { realtimeSub.current?.unsubscribe(); };
+  }, [convo, user]);
+
+  // ── Data loaders ─────────────────────────────────────
+  async function loadListings() {
+    setListingsLoading(true);
+    try {
+      const data = await dbGetListings(user?.id);
+      // Always include vintage demo listings if none exist in db
+      const hasVintage = data.some(l => l.category === "Vintage & Collectibles");
+      setListings(hasVintage ? data : [...DEMO_VINTAGE, ...data]);
+    } catch (err) {
+      console.error("loadListings:", err);
+      // Keep showing demo data on error — do not blank the feed
+    } finally {
+      setListingsLoading(false);
+    }
+  }
+
+  async function loadProfile(uid) {
+    const p = await dbGetProfile(uid);
+    if (p) setProfile(p);
+    else {
+      // Auto-create profile on first login
+      const email = supabase ? (await supabase.auth.getUser()).data.user?.email : "";
+      const username = email?.split("@")[0] || "user";
+      await dbUpsertProfile(uid, { username, avatar_url: null });
+      setProfile({ id: uid, username });
+    }
+  }
+
+  async function loadConversations() {
+    if (!user) return;
+    const data = await dbGetConversations(user.id);
+    setConvos(data);
+  }
+
+  async function loadProfileData() {
+    if (!user) return;
+    const [ul, sl] = await Promise.all([
+      dbGetUserListings(user.id),
+      dbGetSavedListings(user.id),
+    ]);
+    setUserListings(ul);
+    setSavedListings(sl);
+  }
+
+  // ── Navigation ───────────────────────────────────────
+  const push = s => { setHistory(h => [...h, screen]); setScreen(s); };
+  const pop  = () => { const h=[...history]; const prev=h.pop()||"home"; setHistory(h); setScreen(prev); };
+  const nav  = s => {
+    if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
+    if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); }
+    setHistory([]); setScreen(s); setDetail(null); setConvo(null);
+  };
+
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2400); };
+
+  // ── Auth ─────────────────────────────────────────────
+  async function handleAuth() {
+    if (!supabase) { showToast("Connect Supabase to enable auth"); nav("home"); return; }
+    setAuthLoading(true); setAuthError("");
+    try {
+      if (authMode === "register") {
+        const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
+        if (error) throw error;
+        if (data.user) {
+          await dbUpsertProfile(data.user.id, { username: authForm.username || authForm.email.split("@")[0] });
+          setUser(data.user);
+          showToast("🎉 Account created! Welcome to LoopGen.");
+          nav("home");
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
+        if (error) throw error;
+        setUser(data.user);
+        showToast("👋 Welcome back!");
+        nav("home");
+      }
+    } catch (e) {
+      setAuthError(e.message || "Authentication failed");
+    }
+    setAuthLoading(false);
+  }
+
+  async function handleSignOut() {
+    try { if (supabase) await supabase.auth.signOut(); } catch { /* ignore network errors */ }
+    setUser(null); setProfile(null);
+    nav("splash");
+    showToast("Signed out");
+  }
+
+  // ── Listings ─────────────────────────────────────────
+  const toggleSave = async (id, e) => {
+    e?.stopPropagation();
+    const item = listings.find(x => x.id === id);
+    if (!item) return;
+    // Optimistic update
+    setListings(ls => ls.map(x => x.id===id ? {...x, is_saved:!x.is_saved} : x));
+    showToast(item.is_saved ? "Removed from saved" : "❤️ Saved!");
+    if (user) await dbToggleSave(id, user.id, item.is_saved);
+  };
+
+  const handleMarkSold = (listingId) => {
+    setConfirm({
+      msg: "Mark this item as sold?",
+      onConfirm: async () => {
+        try {
+          await dbMarkAsSold(listingId);
+          setUserListings(ls => ls.map(l => l.id===listingId ? {...l, status:"sold"} : l));
+          showToast("✅ Marked as sold!");
+        } catch (e) { showToast("Failed: " + e.message); }
+        setConfirm(null);
+      }
+    });
+  };
+
+  const handleDeleteListing = (listingId) => {
+    setConfirm({
+      msg: "Remove this listing? This can't be undone.",
+      onConfirm: async () => {
+        try {
+          await dbDeleteListing(listingId);
+          setUserListings(ls => ls.filter(l => l.id !== listingId));
+          setListings(ls => ls.filter(l => l.id !== listingId));
+          showToast("Listing removed.");
+        } catch (e) { showToast("Failed: " + e.message); }
+        setConfirm(null);
+      }
+    });
+  };
+
+  const openDetail = item => { setDetail(item); push("detail"); };
+
+  // ── Sell / Photo upload ───────────────────────────────
+  async function handlePhotoSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (!user) { showToast("Sign in to upload photos"); return; }
+    setUploadingImg(true);
+    try {
+      const urls = await Promise.all(files.slice(0,5).map(f => dbUploadImage(f, user.id)));
+      const valid = urls.filter(Boolean);
+      setSellImages(prev => [...prev, ...valid]);
+      setSell(f => ({...f, image_urls:[...f.image_urls, ...valid]}));
+      showToast(`📸 ${valid.length} photo(s) uploaded`);
+    } catch (e) {
+      showToast("Upload failed — " + e.message);
+    }
+    setUploadingImg(false);
+  }
+
+  async function handleList() {
+    if (!sell.title || !sell.price || !sell.category || !sell.condition) {
+      showToast("Please fill all required fields"); return;
+    }
+    setLoading(true);
+    try {
+      const listing = {
+        title: sell.title,
+        price: parseFloat(sell.price),
+        category: sell.category,
+        sub: sell.sub,
+        condition: sell.condition,
+        description: sell.desc,
+        location: sell.location || "Australia",
+        image_urls: sell.image_urls,
+        tags: sell.tags || [],
+        seller_id: user?.id,
+      };
+      if (user && supabase) {
+        await dbCreateListing(listing, user.id);
+        showToast("🎉 Listed! Your item is live.");
+        await loadListings();
+      } else {
+        // Demo mode — add locally
+        const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
+        setListings(ls => [newItem, ...ls]);
+        showToast("🎉 Listed! (Demo mode)");
+      }
+      setSellStep(1);
+      setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]});
+      setSellImages([]);
+      nav("home");
+    } catch (e) {
+      showToast("Failed to list: " + e.message);
+    }
+    setLoading(false);
+  }
+
+  // ── AI description ─────────────────────────────────────
+  const aiGen = async () => {
+    if (!sell.title) { showToast("Add a title first!"); return; }
+    if (!supabase) { showToast("AI requires Supabase Edge Function"); return; }
+    setAiLoading(true);
+    try {
+      const desc = await dbAiDescription(sell.title, sell.category, sell.condition);
+      if (desc) { setSell(f=>({...f, desc})); showToast("✨ AI description ready!"); }
+      else showToast("AI unavailable");
+    } catch { showToast("AI unavailable"); }
+    setAiLoading(false);
+  };
+
+  // ── Chat ──────────────────────────────────────────────
+  const openConvo = async (c) => {
+    setConvo(c);
+    // If real DB conversation, load messages
+    if (supabase && user && c.id && typeof c.id === "number") {
+      const msgs = await dbGetMessages(c.id);
+      setChatMsgs(msgs.map(m => ({...m, from_me: m.sender_id === user.id})));
+    } else {
+      setChatMsgs(c.messages || []);
+    }
+    push("chat");
+  };
+
+  const openSellerChat = async (item) => {
+    if (!user) { showToast("Sign in to message seller"); push("auth"); return; }
+    if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
+    showToast("💬 Opening chat…");
+    try {
+      if (supabase && item.seller_id) {
+        const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
+        if (conv) {
+          // Enrich with display fields for the chat header
+          const enriched = {
+            ...conv,
+            other_user: item.seller_username || "Seller",
+            other_avatar: item.seller_avatar || null,
+            listing_title: item.title || "Item",
+            online: false,
+          };
+          openConvo(enriched);
+          return;
+        }
+      }
+      // Demo fallback
+      openConvo(DEMO_CONVOS[0]);
+    } catch { openConvo(DEMO_CONVOS[0]); }
+  };
+
+  const sendMsg = async () => {
+    if (!msgText.trim()) return;
+    const text = msgText;
+    setMsgText("");
+    const time = new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
+    setChatMsgs(m => [...m, optimistic]);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    if (supabase && user && convo?.id && typeof convo.id === "number") {
+      try { await dbSendMessage(convo.id, user.id, text); }
+      catch (e) { showToast("Send failed"); }
+    }
+  };
+
+  // ── Derived data ──────────────────────────────────────
+  const filtered = listings.filter(l => {
+    const ms = l.title?.toLowerCase().includes(search.toLowerCase()) || l.category?.toLowerCase().includes(search.toLowerCase()) || l.tags?.some(t => t.toLowerCase().includes(search.toLowerCase()));
+    return ms && (catFilter==="All" || l.category===catFilter);
+  });
+
+  const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles"];
+  const currentUser = user ? (profile?.username || user.email?.split("@")[0] || "You") : "Guest";
+  const isGuest = !user;
+
+  // ════════════════════════════
+  //  SPLASH
+  // ════════════════════════════
+  if (screen === "splash") return (
+    <Phone>
+      <DemoBanner/>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"space-between",padding:"70px 32px 52px",position:"relative",overflow:"hidden",background:"radial-gradient(ellipse at 70% 20%, rgba(34,197,94,0.14) 0%, transparent 60%), radial-gradient(ellipse at 20% 80%, rgba(34,197,94,0.10) 0%, transparent 55%), #fff"}}>
+        <div style={{position:"absolute",top:-80,right:-80,width:220,height:220,borderRadius:"50%",background:"rgba(34,197,94,0.15)",filter:"blur(55px)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",bottom:80,left:-50,width:180,height:180,borderRadius:"50%",background:"rgba(34,197,94,0.10)",filter:"blur(45px)",pointerEvents:"none"}}/>
+        <div/>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+          <img
+            src="/loopgen-logo.png"
+            alt="LoopGen Logo"
+            style={{width:140,height:"auto",display:"block",marginLeft:"auto",marginRight:"auto",filter:"drop-shadow(0 8px 24px rgba(28,124,69,0.22))"}}
+            onError={e=>{e.target.onerror=null;e.target.src="/icon-512.png";}}
+          />
+          <div style={{fontWeight:800,fontSize:17,color:"#16a34a",textAlign:"center",marginTop:8,letterSpacing:0.1}}>The next generation marketplace</div>
+        </div>
+        <div style={{width:"100%",display:"flex",flexDirection:"column",gap:12}}>
+          <button onClick={() => { setAuthMode("register"); push("auth"); }}
+            style={{width:"100%",padding:"17px",borderRadius:50,background:GREEN,border:"none",color:"white",fontSize:16,fontWeight:700,cursor:"pointer",boxShadow:`0 8px 28px ${GREEN}55`}}>
+            Get Started
+          </button>
+          <button onClick={() => { setAuthMode("login"); push("auth"); }}
+            style={{width:"100%",padding:"15px",borderRadius:50,background:"transparent",border:"none",color:"#374151",fontSize:15,fontWeight:600,cursor:"pointer"}}>
+            Sign In
+          </button>
+          <button onClick={() => nav("home")}
+            style={{width:"100%",padding:"12px",borderRadius:50,background:"transparent",border:"none",color:"#9ca3af",fontSize:13,fontWeight:500,cursor:"pointer"}}>
+            Explore the Demo →
+          </button>
+        </div>
+        <Toast msg={toast}/>
+      </div>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  AUTH
+  // ════════════════════════════
+  if (screen === "auth") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px",display:"flex",flexDirection:"column"}}>
+        <div onClick={pop} style={{cursor:"pointer",marginBottom:24}}><IcoBack/></div>
+        <div style={{fontSize:26,fontWeight:900,color:"#111",marginBottom:4}}>{authMode==="login"?"Welcome back 👋":"Join LoopGen 🌱"}</div>
+        <div style={{marginBottom:6,fontSize:13,fontWeight:800,background:"linear-gradient(135deg,#22c55e,#16a34a)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>The next generation marketplace</div>
+        <div style={{fontSize:14,color:"#6b7280",marginBottom:28}}>{authMode==="login"?"Sign in to your account":"Create your free account"}</div>
+
+        {!HAS_SUPABASE && (
+          <div style={{background:"#f0fdf4",borderRadius:14,padding:"14px 16px",marginBottom:20,fontSize:12,color:"#166534",fontWeight:600,border:"1px solid #bbf7d0"}}>
+            🌱 This is a demo build — accounts aren't live yet. Use "Explore the Demo →" on the previous screen to browse listings.
+          </div>
+        )}
+
+        {authMode==="register" && <FInp placeholder="Username" value={authForm.username} onChange={v=>setAuthForm(f=>({...f,username:v}))}/>}
+        <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))}/>
+        <FInp placeholder="Password" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))}/>
+
+        {authError && <div style={{color:"#ef4444",fontSize:13,marginBottom:12,fontWeight:500}}>{authError}</div>}
+
+        <GreenBtn onClick={handleAuth} disabled={authLoading} mt={8}>
+          {authLoading ? "Loading…" : authMode==="login" ? "Sign In" : "Create Account"}
+        </GreenBtn>
+
+        <div style={{textAlign:"center",marginTop:20,fontSize:13,color:"#6b7280"}}>
+          {authMode==="login" ? "No account? " : "Have an account? "}
+          <span onClick={() => { setAuthMode(authMode==="login"?"register":"login"); setAuthError(""); }}
+            style={{color:GREEN,fontWeight:700,cursor:"pointer"}}>
+            {authMode==="login" ? "Register" : "Sign In"}
+          </span>
+        </div>
+      </div>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  HOME
+  // ════════════════════════════
+  if (screen === "home") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{flex:1,overflowY:"auto",paddingBottom:80}}>
+        {/* Header */}
+        <div style={{padding:"4px 20px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:22,fontWeight:900,color:"#111"}}>Hey {isGuest?"there":currentUser} 👋</div>
+            <div style={{fontSize:13,color:"#9ca3af",marginTop:2}}>Find your next great deal</div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <div onClick={()=>nav("explore")} style={{width:38,height:38,borderRadius:13,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><IcoSearch/></div>
+            <div onClick={()=>nav("profile")} style={{width:38,height:38,borderRadius:13,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><IcoUser/></div>
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div onClick={()=>nav("explore")} style={{background:"#f3f4f6",borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",margin:"0 20px 20px"}}>
+          <IcoSearch c="#9ca3af"/><span style={{color:"#9ca3af",fontSize:14}}>Search listings…</span>
+        </div>
+
+        {/* 🔥 Trending Vintage */}
+        {(() => {
+          const vintageItems = listings.filter(l => l.category === "Vintage & Collectibles").slice(0, 8);
+          if (!vintageItems.length) return null;
+          return (
+            <div style={{marginBottom:24}}>
+              <div style={{padding:"0 20px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{display:"flex",alignItems:"center",gap:7}}>
+                  <span style={{fontSize:15,fontWeight:800,color:"#111"}}>🔥 Trending Vintage</span>
+                  <span style={{background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"white",fontSize:9,fontWeight:800,padding:"3px 8px",borderRadius:20,letterSpacing:0.5}}>NEW</span>
+                </div>
+                <span onClick={()=>{setCatF("Vintage & Collectibles");nav("explore");}} style={{fontSize:12,color:"#7c3aed",fontWeight:600,cursor:"pointer"}}>See all ›</span>
+              </div>
+              {/* Gradient banner */}
+              <div style={{margin:"0 20px 14px",borderRadius:20,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
+                <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(255,255,255,0.07)"}}/>
+                <div style={{position:"absolute",bottom:-30,right:40,width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}/>
+                <div style={{fontSize:28}}>🎵</div>
+                <div>
+                  <div style={{color:"white",fontWeight:800,fontSize:13,letterSpacing:0.2}}>Vintage & Collectibles</div>
+                  <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:20,paddingRight:20,paddingBottom:6,scrollbarWidth:"none"}}>
+                {listingsLoading
+                  ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} compact/>)
+                  : vintageItems.map(item => (
+                      <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave} compact/>
+                    ))
+                }
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Categories */}
+        <div style={{padding:"0 20px",marginBottom:22}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <span style={{fontSize:15,fontWeight:800,color:"#111"}}>Categories</span>
+            <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
+          </div>
+          <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
+            {CATS.filter(c=>c!=="All").map(c => {
+              const Icon = CAT_ICONS[c] || CatAllIcon;
+              return (
+                <div key={c} onClick={()=>{setCatF(c);nav("explore");}} style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",gap:7,cursor:"pointer",width:68}}>
+                  <div style={{width:60,height:60,borderRadius:20,background:"#f8f9fa",display:"flex",alignItems:"center",justifyContent:"center",border:"1.5px solid #f0f0f0"}}><Icon/></div>
+                  <span style={{fontSize:10,fontWeight:600,color:"#374151",textAlign:"center"}}>{c}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* All listings — skeleton while loading */}
+        <div style={{padding:"20px 20px 0"}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#111",marginBottom:14}}>All listings</div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {listingsLoading
+              ? Array.from({length:5}).map((_,i) => <SkeletonCard key={i}/>)
+              : listings.map(item => (
+                  <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
+                ))
+            }
+          </div>
+        </div>
+      </div>
+      <BottomNav active="home" onNav={nav}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  EXPLORE
+  // ════════════════════════════
+  if (screen === "explore") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      {/* Search */}
+      <div style={{padding:"4px 20px 10px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:"#f3f4f6",borderRadius:14,padding:"12px 16px"}}>
+          <IcoSearch c="#9ca3af"/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search anything…" autoFocus
+            style={{flex:1,border:"none",background:"transparent",fontSize:14,outline:"none",color:"#374151"}}/>
+          {search && <span onClick={()=>setSearch("")} style={{color:"#9ca3af",cursor:"pointer",fontSize:16}}>✕</span>}
+        </div>
+      </div>
+      {/* Category pills */}
+      <div style={{display:"flex",gap:8,overflowX:"auto",padding:"0 20px 12px",flexShrink:0,scrollbarWidth:"none"}}>
+        {CATS.map(c => {
+          const isVintage = c === "Vintage & Collectibles";
+          const isActive = catFilter === c;
+          return (
+            <button key={c} onClick={()=>setCatF(c)} style={{flexShrink:0,padding:"7px 16px",borderRadius:24,border:"none",fontWeight:700,fontSize:12,cursor:"pointer",
+              background: isActive ? (isVintage ? "linear-gradient(135deg,#7c3aed,#a855f7)" : GREEN) : (isVintage ? "linear-gradient(135deg,rgba(124,58,237,0.1),rgba(168,85,247,0.1))" : "#f3f4f6"),
+              color: isActive ? "white" : (isVintage ? "#7c3aed" : "#6b7280"),
+              boxShadow: isActive && isVintage ? "0 4px 14px rgba(124,58,237,0.4)" : "none",
+              transition:"all 0.15s"}}>
+              {isVintage ? "✦ Vintage" : c}
+            </button>
+          );
+        })}
+      </div>
+      {/* Results */}
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column",gap:12,paddingBottom:80}}>
+        {listingsLoading
+          ? Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)
+          : filtered.length === 0
+            ? <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:40}}>No listings found</div>
+            : filtered.map(item => <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>)
+        }
+      </div>
+      <BottomNav active="explore" onNav={nav}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  DETAIL
+  // ════════════════════════════
+  if (screen === "detail" && detail) {
+    const img = detail.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
+    return (
+      <Phone>
+        <div style={{flex:1,overflowY:"auto",paddingBottom:80}}>
+          {/* Image hero */}
+          <div style={{position:"relative"}}>
+            <img src={img} alt={detail.title} style={{width:"100%",height:280,objectFit:"cover"}}
+              onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
+            <div style={{position:"absolute",top:14,left:14,cursor:"pointer"}} onClick={pop}><IcoBack/></div>
+            <div onClick={e=>toggleSave(detail.id,e)} style={{position:"absolute",top:14,right:14,width:36,height:36,background:"rgba(255,255,255,0.9)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,cursor:"pointer",backdropFilter:"blur(4px)"}}>
+              {detail.is_saved?"❤️":"🤍"}
+            </div>
+          </div>
+          {/* Details */}
+          <div style={{padding:"20px 20px 0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{fontWeight:900,fontSize:28,color:"#111"}}>${detail.price}</div>
+              <div style={{background:"#f0fdf4",color:GREEN,padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:700}}>{detail.condition}</div>
+            </div>
+            <div style={{fontSize:18,fontWeight:700,color:"#111",marginTop:4}}>{detail.title}</div>
+            <div style={{fontSize:13,color:"#6b7280",marginTop:4}}>{detail.category}{detail.sub ? ` · ${detail.sub}` : ""}</div>
+            <div style={{fontSize:13,color:"#6b7280",marginTop:8}}>📍 {detail.location}</div>
+            {detail.tags?.length > 0 && (
+              <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:10}}>
+                {detail.tags.map(t => <VintageTag key={t} label={t}/>)}
+              </div>
+            )}
+
+            {detail.description && (
+              <div style={{marginTop:16}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#111",marginBottom:6}}>Description</div>
+                <div style={{fontSize:13,color:"#6b7280",lineHeight:1.7}}>{detail.description}</div>
+              </div>
+            )}
+
+            {/* Seller info */}
+            {(() => {
+              const demoSeller = DEMO_SELLERS[detail.seller_username];
+              return (
+                <div style={{background:"#f8f9fa",borderRadius:16,padding:"14px 16px",marginTop:20}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:42,height:42,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16,flexShrink:0}}>
+                      {(detail.seller_username||"U")[0].toUpperCase()}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,fontSize:14,color:"#111"}}>{detail.seller_username || "Seller"}</div>
+                      <div style={{fontSize:12,color:"#9ca3af"}}>⭐ {detail.rating || "4.5"} · {demoSeller ? `Joined ${demoSeller.joined}` : "Verified seller"}</div>
+                    </div>
+                  </div>
+                  {demoSeller?.bio && (
+                    <div style={{fontSize:12,color:"#6b7280",marginTop:10,lineHeight:1.6,paddingTop:10,borderTop:"1px solid #f0f0f0"}}>
+                      {demoSeller.bio}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* CTA buttons */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"14px 20px 30px",background:"white",borderTop:"1px solid #f3f4f6",display:"flex",gap:10}}>
+          <button onClick={() => openSellerChat(detail)} style={{flex:1,padding:"15px",borderRadius:16,border:`2px solid ${GREEN}`,background:"white",color:GREEN,fontWeight:700,fontSize:14,cursor:"pointer"}}>
+            💬 Message
+          </button>
+          <button onClick={() => showToast("Offers coming soon 🚀")} style={{flex:2,padding:"15px",borderRadius:16,border:"none",background:GREEN,color:"white",fontWeight:700,fontSize:14,cursor:"pointer",boxShadow:`0 6px 18px ${GREEN}44`}}>
+            Make Offer
+          </button>
+        </div>
+        <Toast msg={toast}/>
+      </Phone>
+    );
+  }
+
+  // ════════════════════════════
+  //  SELL
+  // ════════════════════════════
+  if (screen === "sell") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{padding:"2px 20px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div onClick={()=>nav("home")} style={{cursor:"pointer"}}><IcoBack/></div>
+          <span style={{fontSize:17,fontWeight:700,color:"#111"}}>Sell an item</span>
+        </div>
+        {isGuest && <span style={{fontSize:11,color:"#ef4444",fontWeight:600}}>Sign in to list</span>}
+      </div>
+      {/* Progress */}
+      <div style={{padding:"12px 20px",display:"flex",gap:6,flexShrink:0}}>
+        {[1,2,3].map(s => <div key={s} style={{flex:1,height:3,borderRadius:4,background:s<=sellStep?GREEN:"#e5e7eb",transition:"background 0.3s"}}/>)}
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px",paddingBottom:90}}>
+        {sellStep===1 && (
+          <>
+            {/* Photo upload — REAL */}
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handlePhotoSelect} style={{display:"none"}}/>
+            <div onClick={() => fileInputRef.current?.click()}
+              style={{background:"#f9fafb",borderRadius:20,height:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"2px dashed #e5e7eb",marginBottom:16,position:"relative",overflow:"hidden"}}>
+              {sellImages.length > 0
+                ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>
+                : <>
+                    <div style={{width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",marginBottom:10}}><IcoCamera/></div>
+                    <div style={{fontWeight:600,color:"#374151",fontSize:14}}>{uploadingImg?"Uploading…":"Add photos"}</div>
+                    <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>Tap to upload · Up to 5</div>
+                  </>
+              }
+              {sellImages.length > 0 && (
+                <div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.6)",color:"white",fontSize:11,fontWeight:700,padding:"4px 9px",borderRadius:20}}>
+                  {sellImages.length} photo{sellImages.length>1?"s":""}
+                </div>
+              )}
+            </div>
+            <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
+            <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
+            <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
+              opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Baby & Kids","Free Stuff"]}/>
+            {sell.category === "Vintage & Collectibles" && (
+              <FSel value={sell.sub} onChange={v=>setSell(f=>({...f,sub:v}))} ph="Subcategory"
+                opts={["","Vinyl Records","DVD / Blu-ray","Retro Games","Film Cameras","Polaroid Cameras","Cassette Tapes","Vintage Clothing","Retro Electronics","Collectible Toys","Posters & Memorabilia"]}/>
+            )}
+            <FSel value={sell.condition} onChange={v=>setSell(f=>({...f,condition:v}))} ph="Condition *"
+              opts={["","New","Like New","Good","Used","For Parts"]}/>
+            {sell.category === "Vintage & Collectibles" && (
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:8}}>Tags (optional)</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {["90s","Y2K","Retro","Vintage","Collector","Limited Edition","80s"].map(tag => {
+                    const active = sell.tags?.includes(tag);
+                    return (
+                      <button key={tag} onClick={()=>setSell(f=>({...f,tags:active?f.tags.filter(t=>t!==tag):[...(f.tags||[]),tag]}))}
+                        style={{padding:"5px 12px",borderRadius:20,border:"none",fontSize:11,fontWeight:700,cursor:"pointer",
+                          background:active?"linear-gradient(135deg,#7c3aed,#a855f7)":"#f3f4f6",
+                          color:active?"white":"#6b7280",transition:"all 0.15s"}}>
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <GreenBtn onClick={()=>{
+              if (!sell.title.trim()) { showToast("Please add a title"); return; }
+              if (!sell.price || parseFloat(sell.price) <= 0) { showToast("Please add a valid price"); return; }
+              if (!sell.category) { showToast("Please select a category"); return; }
+              if (!sell.condition) { showToast("Please select a condition"); return; }
+              setSellStep(2);
+            }}>Continue →</GreenBtn>
+          </>
+        )}
+        {sellStep===2 && (
+          <>
+            <label style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,display:"block"}}>Description</label>
+            <textarea value={sell.desc} onChange={e=>setSell(f=>({...f,desc:e.target.value}))}
+              placeholder="Describe your item…" rows={5}
+              style={{width:"100%",borderRadius:14,border:"1.5px solid #e5e7eb",padding:"12px 14px",fontSize:13,resize:"none",outline:"none",marginBottom:12,color:"#374151"}}/>
+            {supabase && (
+              <button onClick={aiGen} style={{width:"100%",padding:"12px",borderRadius:14,marginBottom:14,background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:`1.5px solid ${GREEN}`,fontSize:13,fontWeight:700,color:GREEN,cursor:"pointer"}}>
+                {aiLoading?"⏳ Generating…":"✨ Generate with AI"}
+              </button>
+            )}
+            <FInp placeholder="📍 Location (suburb or postcode)" value={sell.location} onChange={v=>setSell(f=>({...f,location:v}))}/>
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              <button onClick={()=>setSellStep(1)} style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Back</button>
+              <GreenBtn onClick={()=>setSellStep(3)} mt={0} style={{flex:2}}>Preview →</GreenBtn>
+            </div>
+          </>
+        )}
+        {sellStep===3 && (
+          <>
+            <div style={{background:"white",borderRadius:20,overflow:"hidden",boxShadow:"0 3px 16px rgba(0,0,0,0.09)",marginBottom:16}}>
+              {sellImages.length > 0
+                ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:160,objectFit:"cover"}}/>
+                : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>📦</div>
+              }
+              <div style={{padding:16}}>
+                <div style={{fontWeight:800,fontSize:22,color:"#111"}}>{sell.price?`$${sell.price}`:"$—"}</div>
+                <div style={{fontSize:16,fontWeight:600,color:"#374151"}}>{sell.title||"Untitled"}</div>
+                <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>{sell.category}{sell.condition?` · ${sell.condition}`:""}</div>
+                {sell.location && <div style={{fontSize:12,color:"#6b7280",marginTop:3}}>📍 {sell.location}</div>}
+                {sell.desc && <div style={{fontSize:13,color:"#6b7280",marginTop:10,lineHeight:1.65}}>{sell.desc}</div>}
+              </div>
+            </div>
+            {isGuest && (
+              <div style={{background:"#fef3c7",borderRadius:14,padding:"12px 16px",marginBottom:12,fontSize:12,color:"#92400e",fontWeight:600}}>
+                ⚠️ Sign in to save your listing permanently
+              </div>
+            )}
+            <GreenBtn onClick={handleList} disabled={loading}>{loading?"Listing…":"🚀 List Item"}</GreenBtn>
+            <button onClick={()=>setSellStep(2)} style={{width:"100%",marginTop:10,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Edit</button>
+          </>
+        )}
+      </div>
+      <BottomNav active="sell" onNav={nav}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  CHATS LIST
+  // ════════════════════════════
+  if (screen === "chats") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{padding:"2px 20px 14px",flexShrink:0}}>
+        <div style={{fontSize:20,fontWeight:800,color:"#111"}}>Messages</div>
+      </div>
+      {isGuest ? (
+        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,gap:16}}>
+          <div style={{fontSize:40}}>💬</div>
+          <div style={{fontWeight:700,fontSize:16,color:"#111",textAlign:"center"}}>Sign in to chat</div>
+          <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Message sellers and buyers once you have an account</div>
+          <GreenBtn onClick={()=>push("auth")} mt={0}>Sign In</GreenBtn>
+        </div>
+      ) : (
+        <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column",gap:8,paddingBottom:78}}>
+          {convos.length === 0
+            ? <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:40}}>No messages yet</div>
+            : convos.map(c => (
+                <div key={c.id} onClick={() => openConvo(c)}
+                  style={{background:"white",borderRadius:18,padding:"13px 15px",display:"flex",gap:12,alignItems:"center",boxShadow:"0 1px 8px rgba(0,0,0,0.06)",cursor:"pointer"}}>
+                  <div style={{position:"relative",flexShrink:0}}>
+                    <div style={{width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:18}}>
+                      {(c.other_user||"U")[0].toUpperCase()}
+                    </div>
+                    {c.online && <div style={{position:"absolute",bottom:1,right:1,width:11,height:11,background:"#22c55e",borderRadius:"50%",border:"2px solid white"}}/>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontWeight:700,fontSize:14,color:"#111"}}>{c.other_user}</span>
+                      <span style={{fontSize:11,color:"#9ca3af"}}>{c.last_time || c.time}</span>
+                    </div>
+                    <div style={{fontSize:11,color:GREEN,marginTop:1,fontWeight:500}}>Re: {c.listing_title || c.item}</div>
+                    <div style={{fontSize:12,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.last_message || c.last}</div>
+                  </div>
+                  {(c.unread>0) && <div style={{background:GREEN,color:"white",borderRadius:"50%",width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{c.unread}</div>}
+                </div>
+              ))
+          }
+        </div>
+      )}
+      <BottomNav active="chats" onNav={nav}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  CHAT
+  // ════════════════════════════
+  if (screen === "chat" && convo) return (
+    <Phone>
+      <StatusBar/>
+      <div style={{padding:"4px 16px 12px",display:"flex",alignItems:"center",gap:10,borderBottom:"1.5px solid #f3f4f6",flexShrink:0}}>
+        <div onClick={pop} style={{cursor:"pointer",padding:"4px 6px 4px 0"}}><IcoBack/></div>
+        <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16}}>
+          {(convo.other_user||"U")[0].toUpperCase()}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{convo.other_user || convo.name}</div>
+          <div style={{fontSize:11,color:convo.online?"#22c55e":"#9ca3af",fontWeight:500}}>{convo.online?"Online":"Offline"}</div>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px",background:"#f8f9fa",display:"flex",flexDirection:"column",gap:10}}>
+        {chatMsgs.map((m, i) => (
+          <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:7}}>
+            {!(m.from_me||m.from==="me") && (
+              <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:11,flexShrink:0}}>
+                {(convo.other_user||"U")[0].toUpperCase()}
+              </div>
+            )}
+            <div style={{maxWidth:"72%",padding:"11px 15px",fontSize:14,fontWeight:500,lineHeight:1.45,borderRadius:(m.from_me||m.from==="me")?"20px 20px 5px 20px":"20px 20px 20px 5px",background:(m.from_me||m.from==="me")?GREEN:"white",color:(m.from_me||m.from==="me")?"white":"#111",boxShadow:(m.from_me||m.from==="me")?`0 3px 12px ${GREEN}33`:"0 1px 6px rgba(0,0,0,0.08)"}}>
+              {m.content || m.text}
+            </div>
+          </div>
+        ))}
+        <div ref={chatEndRef}/>
+      </div>
+
+      <div style={{padding:"10px 14px 20px",background:"white",borderTop:"1.5px solid #f3f4f6",display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
+        <div style={{flex:1,background:"#f3f4f6",borderRadius:24,padding:"10px 16px",display:"flex",alignItems:"center"}}>
+          <input value={msgText} onChange={e=>setMsgText(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="Type a message..."
+            style={{border:"none",background:"transparent",fontSize:14,outline:"none",flex:1,color:"#374151"}}/>
+        </div>
+        <div onClick={sendMsg} style={{width:40,height:40,borderRadius:"50%",background:GREEN,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,boxShadow:`0 4px 14px ${GREEN}55`}}>
+          <IcoSend/>
+        </div>
+      </div>
+      <BottomNav active="chats" onNav={nav}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  PROFILE
+  // ════════════════════════════
+  if (screen === "profile") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{flex:1,overflowY:"auto",paddingBottom:78}}>
+        <div style={{padding:"10px 20px 24px",textAlign:"center"}}>
+          <div style={{width:78,height:78,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",color:"white",fontSize:32,fontWeight:800}}>
+            {isGuest ? "G" : currentUser[0].toUpperCase()}
+          </div>
+          <div style={{fontWeight:800,fontSize:18,color:"#111"}}>{isGuest ? "Guest" : currentUser}</div>
+          {!isGuest && <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>{user?.email}</div>}
+          <div style={{display:"flex",justifyContent:"center",gap:36,marginTop:20}}>
+            {[
+              [isGuest?"—":String(userListings.filter(l=>l.status==="active").length), "Listings"],
+              [isGuest?"—":String(userListings.filter(l=>l.status==="sold").length),   "Sold"],
+              ["—", "Rating"],
+            ].map(([v,l]) => (
+              <div key={l} style={{cursor:l==="Listings"&&!isGuest?"pointer":"default"}} onClick={l==="Listings"&&!isGuest?()=>push("my-listings"):undefined}>
+                <div style={{fontWeight:800,fontSize:20,color:"#111"}}>{v}</div>
+                <div style={{fontSize:11,color:"#9ca3af"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{padding:"0 20px",display:"flex",flexDirection:"column",gap:3}}>
+          {isGuest ? (
+            <>
+              <GreenBtn onClick={()=>push("auth")} mt={0}>Sign In or Register</GreenBtn>
+              <div style={{textAlign:"center",marginTop:16,fontSize:13,color:"#9ca3af"}}>Sign in to manage listings, save items, and chat with sellers</div>
+            </>
+          ) : (
+            [
+              ["My Listings",     "📦", ()=>push("my-listings")],
+              ["Saved Items",     "❤️", ()=>push("saved-items")],
+              ["Account Settings","⚙️", ()=>push("settings")],
+              ["Reviews",         "⭐", ()=>showToast("Reviews coming after beta 🌟")],
+              ["Help & Support",  "💬", ()=>showToast("Support: hello@loopgen.app")],
+              ["Sign Out",        "🚪", handleSignOut],
+            ].map(([label, icon, action], i) => (
+              <div key={label} onClick={action}
+                style={{padding:"15px 16px",background:"white",borderRadius:14,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",marginBottom:i===4?12:0,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>{icon}</span>
+                  <span style={{fontWeight:500,fontSize:14,color:label==="Sign Out"?"#ef4444":"#111"}}>{label}</span>
+                </div>
+                {label!=="Sign Out"&&<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      <BottomNav active="profile" onNav={nav}/>
+      <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  MY LISTINGS
+  // ════════════════════════════
+  if (screen === "my-listings") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+        <div onClick={pop} style={{cursor:"pointer"}}><IcoBack/></div>
+        <div style={{fontSize:18,fontWeight:800,color:"#111"}}>My Listings</div>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88}}>
+        {userListings.length === 0 ? (
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:60,gap:14}}>
+            <div style={{fontSize:44}}>📦</div>
+            <div style={{fontWeight:700,fontSize:16,color:"#111"}}>No listings yet</div>
+            <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Tap the + button to sell your first item</div>
+            <GreenBtn onClick={()=>nav("sell")} mt={8} style={{width:"auto",padding:"13px 28px"}}>Start Selling</GreenBtn>
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {userListings.map(item => {
+              const img = item.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
+              const isSold = item.status === "sold";
+              return (
+                <div key={item.id} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.08)",display:"flex",opacity:isSold?0.75:1}}>
+                  <div style={{position:"relative",flexShrink:0,width:100,height:100}}>
+                    <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover"}}
+                      onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
+                    {isSold && (
+                      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{color:"white",fontWeight:800,fontSize:11,background:"#ef4444",padding:"3px 8px",borderRadius:8}}>SOLD</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{padding:"12px 14px",flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                      <div>
+                        <div style={{fontWeight:800,fontSize:16,color:"#111"}}>${item.price}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:"#374151",marginTop:2}}>{item.title}</div>
+                        <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{item.condition} · {timeSince(item.created_at)}</div>
+                      </div>
+                      {isSold && <span style={{fontSize:10,fontWeight:700,color:"#ef4444",background:"#fef2f2",padding:"3px 8px",borderRadius:8,flexShrink:0}}>SOLD</span>}
+                    </div>
+                    {!isSold && (
+                      <div style={{display:"flex",gap:7,marginTop:10}}>
+                        <button onClick={()=>handleMarkSold(item.id)}
+                          style={{flex:1,padding:"8px",borderRadius:10,border:`1.5px solid ${GREEN}`,background:"white",color:GREEN,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                          Mark Sold
+                        </button>
+                        <button onClick={()=>{setDetail(item);push("detail");}}
+                          style={{flex:1,padding:"8px",borderRadius:10,border:"1.5px solid #e5e7eb",background:"white",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                          View
+                        </button>
+                        <button onClick={()=>handleDeleteListing(item.id)}
+                          style={{padding:"8px 12px",borderRadius:10,border:"1.5px solid #fecaca",background:"#fff5f5",color:"#ef4444",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <BottomNav active="profile" onNav={nav}/>
+      <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  SAVED ITEMS
+  // ════════════════════════════
+  if (screen === "saved-items") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+        <div onClick={pop} style={{cursor:"pointer"}}><IcoBack/></div>
+        <div style={{fontSize:18,fontWeight:800,color:"#111"}}>Saved Items</div>
+        {savedListings.length > 0 && <span style={{marginLeft:"auto",fontSize:12,color:"#9ca3af",fontWeight:500}}>{savedListings.length} item{savedListings.length!==1?"s":""}</span>}
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88}}>
+        {savedListings.length === 0 ? (
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:60,gap:14}}>
+            <div style={{fontSize:44}}>🤍</div>
+            <div style={{fontWeight:700,fontSize:16,color:"#111"}}>Nothing saved yet</div>
+            <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Tap the heart on any listing to save it</div>
+            <GreenBtn onClick={()=>nav("explore")} mt={8} style={{width:"auto",padding:"13px 28px"}}>Browse Listings</GreenBtn>
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {savedListings.map(item => (
+              <div key={item.id} style={{position:"relative"}}>
+                <ListingCard
+                  item={{...item, is_saved:true, time: item.time || timeSince(item.created_at)}}
+                  onTap={openDetail}
+                  onSave={async (id, e) => {
+                    e?.stopPropagation();
+                    setSavedListings(sl => sl.filter(l => l.id !== id));
+                    setListings(ls => ls.map(l => l.id===id ? {...l, is_saved:false} : l));
+                    showToast("Removed from saved");
+                    if (user) await dbToggleSave(id, user.id, true);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <BottomNav active="profile" onNav={nav}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  // ════════════════════════════
+  //  ACCOUNT SETTINGS
+  // ════════════════════════════
+  if (screen === "settings") return (
+    <Phone>
+      <StatusBar/>
+      <DemoBanner/>
+      <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+        <div onClick={pop} style={{cursor:"pointer"}}><IcoBack/></div>
+        <div style={{fontSize:18,fontWeight:800,color:"#111"}}>Account Settings</div>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88,display:"flex",flexDirection:"column",gap:16}}>
+        {/* Account info */}
+        <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Account</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#6b7280"}}>Username</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#111"}}>{currentUser}</span>
+            </div>
+            <div style={{height:1,background:"#f0f0f0"}}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#6b7280"}}>Email</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#111"}}>{user?.email}</span>
+            </div>
+            <div style={{height:1,background:"#f0f0f0"}}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#6b7280"}}>Member since</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#111"}}>{user?.created_at ? new Date(user.created_at).toLocaleDateString("en-AU",{month:"short",year:"numeric"}) : "—"}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Notifications — post-beta stub */}
+        <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Notifications</div>
+          {[["New messages","💬",true],["Listing activity","📦",true],["Promotions","🎉",false]].map(([label,icon,def],i,arr) => (
+            <div key={label}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span>{icon}</span>
+                  <span style={{fontSize:13,color:"#374151"}}>{label}</span>
+                </div>
+                <span style={{fontSize:10,fontWeight:600,color:"#9ca3af",background:"#f0f0f0",padding:"3px 8px",borderRadius:8}}>Coming soon</span>
+              </div>
+              {i<arr.length-1&&<div style={{height:1,background:"#f0f0f0",margin:"6px 0"}}/>}
+            </div>
+          ))}
+        </div>
+
+        {/* Danger zone */}
+        <div style={{background:"#fff5f5",borderRadius:18,padding:"16px",border:"1px solid #fecaca"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#ef4444",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Danger Zone</div>
+          <div onClick={handleSignOut}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer"}}>
+            <span style={{fontSize:18}}>🚪</span>
+            <span style={{fontSize:14,fontWeight:600,color:"#ef4444"}}>Sign Out</span>
+          </div>
+          <div style={{height:1,background:"#fecaca",margin:"4px 0"}}/>
+          <div onClick={()=>setConfirm({
+              msg:"Delete your account? All listings and messages will be lost forever.",
+              onConfirm: async () => {
+                // Supabase doesn't expose deleteUser from client — direct users to support
+                setConfirm(null);
+                showToast("Contact hello@loopgen.app to delete your account");
+              }
+            })}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer"}}>
+            <span style={{fontSize:18}}>🗑️</span>
+            <span style={{fontSize:14,fontWeight:600,color:"#ef4444"}}>Delete Account</span>
+          </div>
+        </div>
+
+        <div style={{fontSize:11,color:"#c4c9d4",textAlign:"center",paddingBottom:8}}>
+          LoopGen Beta v0.1.0 · hello@loopgen.app
+        </div>
+      </div>
+      <BottomNav active="profile" onNav={nav}/>
+      <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
+      <Toast msg={toast}/>
+    </Phone>
+  );
+
+  return null;
+}

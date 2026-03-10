@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LoopGen</string>
+    <string name="title_activity_main">LoopGen</string>
+    <string name="package_name">app.loopgen.marketplace</string>
+    <string name="custom_url_scheme">app.loopgen.marketplace</string>
+</resources>
