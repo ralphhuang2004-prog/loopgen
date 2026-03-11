@@ -386,6 +386,7 @@ function Phone({ children }) {
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px;}
         input,select,textarea,button{font-family:'Plus Jakarta Sans',sans-serif;}
+        @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
       `}</style>
       <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
         {children}
@@ -531,21 +532,21 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
     );
   }
   return (
-    <div onClick={() => onTap(item)} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.08)",cursor:"pointer",display:"flex",gap:0}}>
-      <div style={{position:"relative",flexShrink:0,width:120,height:115}}>
-        <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover"}}
+    <div onClick={() => onTap(item)} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.08)",cursor:"pointer",display:"flex",flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}>
+      <div style={{position:"relative",flexShrink:0,width:120,minWidth:120,height:115}}>
+        <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}
           onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
         {item.condition==="New"&&<div style={{position:"absolute",top:7,left:7,background:GREEN,color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8}}>NEW</div>}
         {item.category==="Vintage & Collectibles"&&<div style={{position:"absolute",bottom:7,left:7,background:"rgba(124,58,237,0.85)",color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8,backdropFilter:"blur(4px)"}}>✦ VINTAGE</div>}
       </div>
-      <div style={{padding:"13px 14px",flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+      <div style={{padding:"13px 14px",flex:1,minWidth:0,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div style={{fontWeight:800,fontSize:18,color:"#111"}}>${item.price}</div>
             <div onClick={e => onSave(item.id, e)} style={{fontSize:18,cursor:"pointer",flexShrink:0}}>{item.is_saved?"❤️":"🤍"}</div>
           </div>
-          <div style={{fontSize:14,fontWeight:600,color:"#374151",marginTop:3}}>{item.title}</div>
-          <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{item.condition} · {item.category}</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#374151",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+          <div style={{fontSize:11,color:"#9ca3af",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.condition} · {item.category}</div>
           {item.tags?.length > 0 && (
             <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
               {item.tags.slice(0,3).map(t => <VintageTag key={t} label={t}/>)}
@@ -553,8 +554,8 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
           )}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-          <div style={{fontSize:11,color:"#6b7280"}}>📍 {item.location}</div>
-          <div style={{fontSize:11,color:"#9ca3af"}}>{item.time}</div>
+          <div style={{fontSize:11,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>📍 {item.location}</div>
+          <div style={{fontSize:11,color:"#9ca3af",flexShrink:0,marginLeft:4}}>{item.time}</div>
         </div>
       </div>
     </div>
@@ -573,7 +574,6 @@ function SkeletonCard({ compact=false }) {
   if (compact) {
     return (
       <div style={{background:"white",borderRadius:22,overflow:"hidden",flexShrink:0,width:162,boxShadow:"0 4px 16px rgba(0,0,0,0.06)"}}>
-        <style>{`@keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
         <div style={{...shine,height:148}}/>
         <div style={{padding:"10px 11px 14px",display:"flex",flexDirection:"column",gap:7}}>
           <div style={{...shine,height:14,borderRadius:6,width:"50%"}}/>
@@ -584,10 +584,9 @@ function SkeletonCard({ compact=false }) {
     );
   }
   return (
-    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",gap:0}}>
-      <style>{`@keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-      <div style={{...shine,flexShrink:0,width:120,height:115}}/>
-      <div style={{padding:"13px 14px",flex:1,display:"flex",flexDirection:"column",gap:8}}>
+    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}>
+      <div style={{...shine,flexShrink:0,width:120,minWidth:120,height:115}}/>
+      <div style={{padding:"13px 14px",flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:8}}>
         <div style={{...shine,height:16,borderRadius:6,width:"35%"}}/>
         <div style={{...shine,height:13,borderRadius:6,width:"75%"}}/>
         <div style={{...shine,height:11,borderRadius:6,width:"55%"}}/>
@@ -652,7 +651,7 @@ export default function LoopGenApp() {
   const [confirm,   setConfirm] = useState(null); // { msg, onConfirm }
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const realtimeSub = useRef(null);
+  const listingsLoaded = useRef(false); // prevent re-fetch on every nav
 
   // ── Init: check existing session ─────────────────────
   useEffect(() => {
@@ -685,7 +684,16 @@ export default function LoopGenApp() {
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
     }
-  }, [screen, user]);
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When a real user logs in/out, force-refresh listings with their saved state
+  useEffect(() => {
+    if (!HAS_SUPABASE) return; // demo mode never needs this
+    listingsLoaded.current = false;
+    if (screen === "home" || screen === "explore") {
+      loadListings({ force: true });
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Realtime messages ────────────────────────────────
   useEffect(() => {
@@ -706,13 +714,22 @@ export default function LoopGenApp() {
   }, [convo, user]);
 
   // ── Data loaders ─────────────────────────────────────
-  async function loadListings() {
+  async function loadListings({ force = false } = {}) {
+    // ── Demo mode: data is synchronous, never show skeletons ──────────────
+    if (!HAS_SUPABASE) {
+      const data = [...DEMO_VINTAGE, ...DEMO_LISTINGS];
+      setListings(data);
+      listingsLoaded.current = true;
+      return; // no loading state touched — listings already in state from init
+    }
+    // ── Supabase mode: only fetch once per session unless forced ──────────
+    if (listingsLoaded.current && !force) return;
     setListingsLoading(true);
     try {
       const data = await dbGetListings(user?.id);
-      // Always include vintage demo listings if none exist in db
       const hasVintage = data.some(l => l.category === "Vintage & Collectibles");
       setListings(hasVintage ? data : [...DEMO_VINTAGE, ...data]);
+      listingsLoaded.current = true;
     } catch (err) {
       console.error("loadListings:", err);
       // Keep showing demo data on error — do not blank the feed
@@ -1175,14 +1192,24 @@ export default function LoopGenApp() {
           );
         })}
       </div>
-      {/* Results */}
-      <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column",gap:12,paddingBottom:80}}>
-        {listingsLoading
-          ? Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)
-          : filtered.length === 0
-            ? <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:40}}>No listings found</div>
-            : filtered.map(item => <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>)
-        }
+      {/* Results — single condition: skeleton XOR cards, never both */}
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:80}}>
+        {listingsLoading ? (
+          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+            {Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:60}}>
+            <div style={{fontSize:32,marginBottom:12}}>🔍</div>
+            No listings found{search ? ` for "${search}"` : catFilter !== "All" ? ` in ${catFilter}` : ""}
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+            {filtered.map(item => (
+              <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
+            ))}
+          </div>
+        )}
       </div>
       <BottomNav active="explore" onNav={nav}/>
       <Toast msg={toast}/>
