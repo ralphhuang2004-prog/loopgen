@@ -18,14 +18,6 @@ const LEGAL_ROUTES = {
   '/legal/privacy':      () => import('./legal/PrivacyPolicy.jsx'),
   '/trust':              () => import('./legal/TrustSafety.jsx'),
   '/legal/trust':        () => import('./legal/TrustSafety.jsx'),
-  '/legal/cookies':      () => import('./legal/PoliciesGroup1.jsx'),
-  '/legal/community':    () => import('./legal/PoliciesGroup1.jsx'),
-  '/legal/prohibited':   () => import('./legal/PoliciesGroup1.jsx'),
-  '/legal/buyer':        () => import('./legal/PoliciesGroup2.jsx'),
-  '/legal/seller':       () => import('./legal/PoliciesGroup2.jsx'),
-  '/legal/refunds':      () => import('./legal/PoliciesGroup2.jsx'),
-  '/legal/antiscam':     () => import('./legal/PoliciesGroup3.jsx'),
-  '/legal/verification': () => import('./legal/PoliciesGroup3.jsx'),
 };
 
 // Named exports for policy group files
