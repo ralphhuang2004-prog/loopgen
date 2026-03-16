@@ -386,7 +386,12 @@ function Phone({ children }) {
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px;}
         input,select,textarea,button{font-family:'Plus Jakarta Sans',sans-serif;}
+        body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+        button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+        input:focus,textarea:focus,select:focus{outline:none;border-color:#1c7c45 !important;box-shadow:0 0 0 3px rgba(28,124,69,0.12);}
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+        @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
       `}</style>
       <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
         {children}
@@ -409,21 +414,24 @@ function StatusBar() {
 
 function BottomNav({ active, onNav }) {
   const tabs = [
-    {id:"home",    label:"Home",    icon: a => <IcoHome a={a}/>},
-    {id:"explore", label:"Explore", icon: a => <IcoExplore a={a}/>},
-    {id:"sell",    label:"",        icon: null},
-    {id:"chats",   label:"Chats",   icon: a => <IcoChats a={a}/>},
-    {id:"profile", label:"Profile", icon: a => <IcoProfile a={a}/>},
+    {id:"home",    label:"Home",     icon: a => <IcoHome a={a}/>},
+    {id:"explore", label:"Search",   icon: a => <IcoExplore a={a}/>},
+    {id:"sell",    label:"Sell",     icon: null},
+    {id:"chats",   label:"Messages", icon: a => <IcoChats a={a}/>},
+    {id:"profile", label:"Profile",  icon: a => <IcoProfile a={a}/>},
   ];
   return (
-    <div style={{position:"absolute",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #f0f1f3",display:"flex",justifyContent:"space-around",alignItems:"center",padding:"10px 4px 22px",zIndex:20,boxShadow:"0 -4px 20px rgba(0,0,0,0.06)"}}>
+    <div style={{position:"absolute",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #f0f1f3",display:"flex",justifyContent:"space-around",alignItems:"center",padding:"10px 4px 24px",zIndex:20,boxShadow:"0 -4px 24px rgba(0,0,0,0.07)"}}>
       {tabs.map(t => (
-        <div key={t.id} onClick={() => onNav(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",minWidth:48,position:"relative"}}>
+        <div key={t.id} onClick={() => onNav(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",minWidth:52,position:"relative"}}>
           {t.id==="sell"
-            ? <div style={{width:62,height:62,borderRadius:18,background:"white",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-28,boxShadow:"0 6px 22px rgba(28,124,69,0.28), 0 2px 8px rgba(0,0,0,0.10)",border:"1.5px solid rgba(28,124,69,0.12)"}}>
-                <img src="/loopgen-logo.png" alt="Sell" style={{width:48,height:32,objectFit:"contain"}}/>
+            ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,marginTop:-4}}>
+                <div style={{width:58,height:58,borderRadius:18,background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",marginTop:-20,boxShadow:`0 8px 24px rgba(28,124,69,0.38)`,border:"3px solid white"}}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+                <span style={{fontSize:10,fontWeight:700,color:GREEN,letterSpacing:0.1}}>Sell</span>
               </div>
-            : <><div style={{width:40,height:32,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,background:active===t.id?"rgba(28,124,69,0.08)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
+            : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
           }
         </div>
       ))}
@@ -555,7 +563,7 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
           <div style={{fontSize:11,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>📍 {item.location}</div>
-          <div style={{fontSize:11,color:"#9ca3af",flexShrink:0,marginLeft:4}}>{item.time}</div>
+          <div style={{fontSize:10,color:"#9ca3af",flexShrink:0,marginLeft:4}}>🕐 {item.time}</div>
         </div>
       </div>
     </div>
@@ -605,8 +613,9 @@ function SkeletonCard({ compact=false }) {
 function DemoBanner() {
   if (HAS_SUPABASE) return null;
   return (
-    <div style={{background:`linear-gradient(90deg,#1c7c45,#22c55e)`,padding:"7px 16px",fontSize:11,fontWeight:700,color:"white",textAlign:"center",flexShrink:0,letterSpacing:0.2}}>
-      ✨ LoopGen Beta — Browse demo listings · Sign-up opens soon
+    <div style={{background:`linear-gradient(90deg,#0d5c33,#1c7c45)`,padding:"7px 16px",fontSize:11,fontWeight:700,color:"white",textAlign:"center",flexShrink:0,letterSpacing:0.2,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+      <span>✨</span>
+      <span>LoopGen Beta — Exploring demo mode · Real listings coming soon</span>
     </div>
   );
 }
@@ -990,32 +999,69 @@ export default function LoopGenApp() {
   if (screen === "splash") return (
     <Phone>
       <DemoBanner/>
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"space-between",padding:"70px 32px 52px",position:"relative",overflow:"hidden",background:"radial-gradient(ellipse at 70% 20%, rgba(34,197,94,0.14) 0%, transparent 60%), radial-gradient(ellipse at 20% 80%, rgba(34,197,94,0.10) 0%, transparent 55%), #fff"}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"space-between",padding:"44px 28px 44px",position:"relative",overflow:"hidden",background:"radial-gradient(ellipse at 70% 20%, rgba(34,197,94,0.14) 0%, transparent 60%), radial-gradient(ellipse at 20% 80%, rgba(34,197,94,0.10) 0%, transparent 55%), #fff"}}>
         <div style={{position:"absolute",top:-80,right:-80,width:220,height:220,borderRadius:"50%",background:"rgba(34,197,94,0.15)",filter:"blur(55px)",pointerEvents:"none"}}/>
         <div style={{position:"absolute",bottom:80,left:-50,width:180,height:180,borderRadius:"50%",background:"rgba(34,197,94,0.10)",filter:"blur(45px)",pointerEvents:"none"}}/>
-        <div/>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+
+        {/* Logo + tagline */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,width:"100%"}}>
           <img
             src="/loopgen-logo.png"
-            alt="LoopGen Logo"
-            style={{width:140,height:"auto",display:"block",marginLeft:"auto",marginRight:"auto",filter:"drop-shadow(0 8px 24px rgba(28,124,69,0.22))"}}
+            alt="LoopGen"
+            style={{width:130,height:"auto",display:"block",filter:"drop-shadow(0 8px 24px rgba(28,124,69,0.22))"}}
             onError={e=>{e.target.onerror=null;e.target.src="/icon-512.png";}}
           />
-          <div style={{fontWeight:800,fontSize:17,color:"#16a34a",textAlign:"center",marginTop:8,letterSpacing:0.1}}>The next generation marketplace</div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontWeight:900,fontSize:22,color:"#111",letterSpacing:-0.5}}>Buy &amp; sell smarter</div>
+            <div style={{fontSize:14,color:"#6b7280",marginTop:4,lineHeight:1.5}}>Discover unique items around you</div>
+          </div>
         </div>
-        <div style={{width:"100%",display:"flex",flexDirection:"column",gap:12}}>
+
+        {/* Feature highlights */}
+        <div style={{width:"100%",display:"flex",flexDirection:"column",gap:10,margin:"20px 0"}}>
+          {[
+            ["🔍","Browse thousands of local listings","Find vintage, fashion, electronics & more"],
+            ["💰","Sell in 3 easy steps","List your item in under 2 minutes"],
+            ["🛡️","Safe & verified community","Trusted sellers with ratings & reviews"],
+          ].map(([emoji,title,sub])=>(
+            <div key={title} style={{display:"flex",alignItems:"center",gap:12,background:"#f8fffe",borderRadius:14,padding:"12px 14px",border:"1px solid #e8f5ee"}}>
+              <span style={{fontSize:22,flexShrink:0}}>{emoji}</span>
+              <div>
+                <div style={{fontWeight:700,fontSize:13,color:"#111"}}>{title}</div>
+                <div style={{fontSize:11,color:"#6b7280",marginTop:1}}>{sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Social proof */}
+        <div style={{display:"flex",gap:20,justifyContent:"center",marginBottom:20}}>
+          {[["10K+","Listings"],["4.9★","Rating"],["🇦🇺","Australia"]].map(([val,label])=>(
+            <div key={label} style={{textAlign:"center"}}>
+              <div style={{fontWeight:800,fontSize:16,color:GREEN}}>{val}</div>
+              <div style={{fontSize:10,color:"#9ca3af",fontWeight:500}}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTAs */}
+        <div style={{width:"100%",display:"flex",flexDirection:"column",gap:10}}>
           <button onClick={() => { setAuthMode("register"); push("auth"); }}
-            style={{width:"100%",padding:"17px",borderRadius:50,background:GREEN,border:"none",color:"white",fontSize:16,fontWeight:700,cursor:"pointer",boxShadow:`0 8px 28px ${GREEN}55`}}>
-            Get Started
+            style={{width:"100%",padding:"17px",borderRadius:50,background:GREEN,border:"none",color:"white",fontSize:16,fontWeight:700,cursor:"pointer",boxShadow:`0 8px 28px ${GREEN}55`,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            Get Started — It's Free
           </button>
           <button onClick={() => { setAuthMode("login"); push("auth"); }}
-            style={{width:"100%",padding:"15px",borderRadius:50,background:"transparent",border:"none",color:"#374151",fontSize:15,fontWeight:600,cursor:"pointer"}}>
+            style={{width:"100%",padding:"15px",borderRadius:50,background:"transparent",border:`1.5px solid #e5e7eb`,color:"#374151",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Sign In
           </button>
           <button onClick={() => nav("home")}
-            style={{width:"100%",padding:"12px",borderRadius:50,background:"transparent",border:"none",color:"#9ca3af",fontSize:13,fontWeight:500,cursor:"pointer"}}>
-            Explore the Demo →
+            style={{width:"100%",padding:"11px",borderRadius:50,background:"transparent",border:"none",color:"#9ca3af",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            Browse without signing in →
           </button>
+        </div>
+
+        <div style={{fontSize:10,color:"#c4c9d4",textAlign:"center",marginTop:8}}>
+          LoopGen Pty Ltd (ACN: 696 134 620) · Australia
         </div>
         <Toast msg={toast}/>
       </div>
@@ -1070,48 +1116,114 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
-      <div style={{flex:1,overflowY:"auto",paddingBottom:80}}>
-        {/* Header */}
-        <div style={{padding:"4px 20px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontSize:22,fontWeight:900,color:"#111"}}>Hey {isGuest?"there":currentUser} 👋</div>
-            <div style={{fontSize:13,color:"#9ca3af",marginTop:2}}>Find your next great deal</div>
+      <div style={{flex:1,overflowY:"auto",paddingBottom:84}}>
+
+        {/* ── TOP NAV BAR ── */}
+        <div style={{padding:"8px 16px 10px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f5f5f5"}}>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <div style={{width:30,height:30,borderRadius:9,background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{color:"white",fontWeight:900,fontSize:14}}>L</span>
+            </div>
+            <span style={{fontSize:16,fontWeight:900,color:"#111",letterSpacing:-0.3}}>LoopGen</span>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <div onClick={()=>nav("explore")} style={{width:38,height:38,borderRadius:13,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><IcoSearch/></div>
-            <div onClick={()=>nav("profile")} style={{width:38,height:38,borderRadius:13,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><IcoUser/></div>
+            <div onClick={()=>nav("explore")} style={{width:36,height:36,borderRadius:12,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><IcoSearch c="#374151"/></div>
+            <div onClick={()=>nav("profile")} style={{width:36,height:36,borderRadius:12,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><IcoUser c="#374151"/></div>
           </div>
         </div>
 
-        {/* Search bar */}
-        <div onClick={()=>nav("explore")} style={{background:"#f3f4f6",borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",margin:"0 20px 20px"}}>
-          <IcoSearch c="#9ca3af"/><span style={{color:"#9ca3af",fontSize:14}}>Search listings…</span>
+        {/* ── HERO SECTION ── */}
+        <div style={{background:`linear-gradient(145deg,#0d5c33 0%,${GREEN} 55%,#22c55e 100%)`,padding:"26px 20px 28px",position:"relative",overflow:"hidden"}}>
+          {/* Decorative circles */}
+          <div style={{position:"absolute",top:-30,right:-30,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,0.06)"}}/>
+          <div style={{position:"absolute",bottom:-20,right:20,width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}/>
+          <div style={{position:"absolute",top:20,right:-10,width:60,height:60,borderRadius:"50%",background:"rgba(34,197,94,0.25)"}}/>
+
+          <div style={{color:"rgba(255,255,255,0.8)",fontSize:12,fontWeight:600,letterSpacing:0.3,marginBottom:6}}>
+            Hey {isGuest?"there":currentUser} 👋
+          </div>
+          <h1 style={{color:"white",fontSize:24,fontWeight:900,lineHeight:1.2,marginBottom:6,letterSpacing:-0.5}}>
+            Discover unique items<br/>around you
+          </h1>
+          <p style={{color:"rgba(255,255,255,0.75)",fontSize:13,fontWeight:500,marginBottom:20,lineHeight:1.5}}>
+            Buy and sell in a smarter circular marketplace.
+          </p>
+
+          {/* Hero search bar */}
+          <div onClick={()=>nav("explore")} style={{background:"white",borderRadius:14,padding:"13px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.18)"}}>
+            <IcoSearch c="#9ca3af"/>
+            <span style={{color:"#9ca3af",fontSize:14,flex:1}}>Search items, brands, or categories…</span>
+          </div>
+
+          {/* Hero CTAs */}
+          <div style={{display:"flex",gap:10,marginTop:14}}>
+            <button onClick={()=>nav("explore")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid rgba(255,255,255,0.7)",background:"transparent",color:"white",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Browse Items
+            </button>
+            <button onClick={()=>nav("sell")} style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:"white",color:GREEN,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:"0 2px 12px rgba(0,0,0,0.15)"}}>
+              + Sell an Item
+            </button>
+          </div>
         </div>
 
-        {/* 🔥 Trending Vintage */}
+        {/* ── TRUST BADGES ROW ── */}
+        <div style={{background:"#f8fffe",borderBottom:"1px solid #e8f5ee",padding:"10px 16px",display:"flex",gap:16,overflowX:"auto",scrollbarWidth:"none"}}>
+          {[["🔒","Secure","Marketplace"],["✅","Verified","Users"],["🛡️","Community","Guidelines"],["⭐","4.9 Avg","Rating"]].map(([icon,line1,line2])=>(
+            <div key={line1} style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              <span style={{fontSize:14}}>{icon}</span>
+              <div style={{lineHeight:1.2}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#111"}}>{line1}</div>
+                <div style={{fontSize:9,color:"#6b7280"}}>{line2}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── CATEGORIES GRID ── */}
+        <div style={{padding:"18px 16px 4px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <span style={{fontSize:15,fontWeight:800,color:"#111"}}>Browse by Category</span>
+            <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+            {[
+              {cat:"Vintage & Collectibles",label:"Vintage",emoji:"🎞️",bg:"linear-gradient(135deg,#f3e8ff,#e9d5ff)"},
+              {cat:"Electronics",label:"Electronics",emoji:"📱",bg:"linear-gradient(135deg,#dbeafe,#bfdbfe)"},
+              {cat:"Fashion",label:"Fashion",emoji:"👟",bg:"linear-gradient(135deg,#fce7f3,#fbcfe8)"},
+              {cat:"Home",label:"Home",emoji:"🏠",bg:"linear-gradient(135deg,#fef3c7,#fde68a)"},
+              {cat:"Sports",label:"Sports",emoji:"⚽",bg:"linear-gradient(135deg,#d1fae5,#a7f3d0)"},
+              {cat:"All",label:"All Items",emoji:"🛍️",bg:"linear-gradient(135deg,#f3f4f6,#e5e7eb)"},
+            ].map(({cat,label,emoji,bg})=>(
+              <div key={cat} onClick={()=>{setCatF(cat);nav("explore");}} style={{borderRadius:16,background:bg,padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer",border:"1px solid rgba(0,0,0,0.04)"}}>
+                <span style={{fontSize:22}}>{emoji}</span>
+                <span style={{fontSize:11,fontWeight:700,color:"#374151",textAlign:"center",lineHeight:1.2}}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── TRENDING VINTAGE ── */}
         {(() => {
           const vintageItems = listings.filter(l => l.category === "Vintage & Collectibles").slice(0, 8);
           if (!vintageItems.length) return null;
           return (
-            <div style={{marginBottom:24}}>
-              <div style={{padding:"0 20px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{marginTop:22,marginBottom:4}}>
+              <div style={{padding:"0 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div style={{display:"flex",alignItems:"center",gap:7}}>
-                  <span style={{fontSize:15,fontWeight:800,color:"#111"}}>🔥 Trending Vintage</span>
-                  <span style={{background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"white",fontSize:9,fontWeight:800,padding:"3px 8px",borderRadius:20,letterSpacing:0.5}}>NEW</span>
+                  <span style={{fontSize:15,fontWeight:800,color:"#111"}}>🔥 Trending near you</span>
                 </div>
-                <span onClick={()=>{setCatF("Vintage & Collectibles");nav("explore");}} style={{fontSize:12,color:"#7c3aed",fontWeight:600,cursor:"pointer"}}>See all ›</span>
+                <span onClick={()=>{setCatF("Vintage & Collectibles");nav("explore");}} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
               </div>
-              {/* Gradient banner */}
-              <div style={{margin:"0 20px 14px",borderRadius:20,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
+              {/* Category banner */}
+              <div style={{margin:"0 16px 12px",borderRadius:18,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
                 <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(255,255,255,0.07)"}}/>
-                <div style={{position:"absolute",bottom:-30,right:40,width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}/>
                 <div style={{fontSize:28}}>🎵</div>
                 <div>
                   <div style={{color:"white",fontWeight:800,fontSize:13,letterSpacing:0.2}}>Vintage & Collectibles</div>
                   <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
                 </div>
               </div>
-              <div style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:20,paddingRight:20,paddingBottom:6,scrollbarWidth:"none"}}>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
                 {listingsLoading
                   ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} compact/>)
                   : vintageItems.map(item => (
@@ -1123,37 +1235,63 @@ export default function LoopGenApp() {
           );
         })()}
 
-        {/* Categories */}
-        <div style={{padding:"0 20px",marginBottom:22}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <span style={{fontSize:15,fontWeight:800,color:"#111"}}>Categories</span>
+        {/* ── NEW LISTINGS ── */}
+        <div style={{padding:"20px 16px 0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <span style={{fontSize:15,fontWeight:800,color:"#111"}}>✨ New listings</span>
             <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
           </div>
-          <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
-            {CATS.filter(c=>c!=="All").map(c => {
-              const Icon = CAT_ICONS[c] || CatAllIcon;
-              return (
-                <div key={c} onClick={()=>{setCatF(c);nav("explore");}} style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",gap:7,cursor:"pointer",width:68}}>
-                  <div style={{width:60,height:60,borderRadius:20,background:"#f8f9fa",display:"flex",alignItems:"center",justifyContent:"center",border:"1.5px solid #f0f0f0"}}><Icon/></div>
-                  <span style={{fontSize:10,fontWeight:600,color:"#374151",textAlign:"center"}}>{c}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* All listings — skeleton while loading */}
-        <div style={{padding:"20px 20px 0"}}>
-          <div style={{fontSize:15,fontWeight:800,color:"#111",marginBottom:14}}>All listings</div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {listingsLoading
-              ? Array.from({length:5}).map((_,i) => <SkeletonCard key={i}/>)
-              : listings.map(item => (
+              ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i}/>)
+              : listings.slice(0,6).map(item => (
                   <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
                 ))
             }
           </div>
+          {listings.length > 6 && (
+            <button onClick={()=>nav("explore")} style={{width:"100%",marginTop:14,padding:"14px",borderRadius:14,border:`1.5px solid ${GREEN}`,background:"white",color:GREEN,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              View all {listings.length} listings →
+            </button>
+          )}
         </div>
+
+        {/* ── POPULAR ITEMS ── */}
+        {(() => {
+          // Popular = highest rated / most-saved items across all categories, excluding vintage (already shown)
+          const popular = listings
+            .filter(l => l.category !== "Vintage & Collectibles")
+            .sort((a,b) => (b.rating||0) - (a.rating||0))
+            .slice(0, 8);
+          if (!popular.length) return null;
+          return (
+            <div style={{marginTop:24,marginBottom:4}}>
+              <div style={{padding:"0 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:15,fontWeight:800,color:"#111"}}>⭐ Popular items</span>
+                <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
+              </div>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
+                {popular.map(item => (
+                  <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave} compact/>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TRUST FOOTER ── */}
+        <div style={{margin:"24px 16px 8px",padding:"18px 16px",background:"#f8faff",borderRadius:18,border:"1px solid #e5e7eb"}}>
+          <div style={{fontWeight:700,fontSize:12,color:"#111",marginBottom:10}}>🛡️ Safe & trusted marketplace</div>
+          <div style={{fontSize:11,color:"#6b7280",lineHeight:1.6,marginBottom:10}}>
+            LoopGen is operated by <strong style={{color:"#374151"}}>LoopGen Pty Ltd (ACN: 696 134 620)</strong>, 2 Patricia Road, Blackburn VIC 3130, Australia. All transactions are between verified users.
+          </div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+            {["Terms","Privacy","Safety","Contact"].map(l=>(
+              <span key={l} onClick={()=>showToast(`${l} — coming soon`)} style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>{l}</span>
+            ))}
+          </div>
+        </div>
+
       </div>
       <BottomNav active="home" onNav={nav}/>
       <Toast msg={toast}/>
@@ -1168,12 +1306,16 @@ export default function LoopGenApp() {
       <StatusBar/>
       <DemoBanner/>
       {/* Search */}
-      <div style={{padding:"4px 20px 10px",flexShrink:0}}>
+      <div style={{padding:"4px 16px 10px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <div onClick={pop} style={{cursor:"pointer",flexShrink:0}}><IcoBack/></div>
+          <span style={{fontSize:16,fontWeight:800,color:"#111"}}>Browse Listings</span>
+        </div>
         <div style={{display:"flex",alignItems:"center",gap:8,background:"#f3f4f6",borderRadius:14,padding:"12px 16px"}}>
           <IcoSearch c="#9ca3af"/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search anything…" autoFocus
-            style={{flex:1,border:"none",background:"transparent",fontSize:14,outline:"none",color:"#374151"}}/>
-          {search && <span onClick={()=>setSearch("")} style={{color:"#9ca3af",cursor:"pointer",fontSize:16}}>✕</span>}
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search items, brands, or categories…" autoFocus
+            style={{flex:1,border:"none",background:"transparent",fontSize:14,outline:"none",color:"#374151",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+          {search && <span onClick={()=>setSearch("")} style={{color:"#9ca3af",cursor:"pointer",fontSize:16,lineHeight:1}}>✕</span>}
         </div>
       </div>
       {/* Category pills */}
@@ -1193,15 +1335,21 @@ export default function LoopGenApp() {
         })}
       </div>
       {/* Results — single condition: skeleton XOR cards, never both */}
-      <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:80}}>
+      <div style={{flex:1,overflowY:"auto",padding:"0 16px",paddingBottom:84}}>
+        {!listingsLoading && filtered.length > 0 && (
+          <div style={{fontSize:12,color:"#9ca3af",fontWeight:600,marginBottom:10,paddingTop:2}}>
+            {filtered.length} listing{filtered.length!==1?"s":""}{search?` for "${search}"`:catFilter!=="All"?` in ${catFilter}`:""}
+          </div>
+        )}
         {listingsLoading ? (
           <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
             {Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)}
           </div>
         ) : filtered.length === 0 ? (
           <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:60}}>
-            <div style={{fontSize:32,marginBottom:12}}>🔍</div>
-            No listings found{search ? ` for "${search}"` : catFilter !== "All" ? ` in ${catFilter}` : ""}
+            <div style={{fontSize:40,marginBottom:12}}>🔍</div>
+            <div style={{fontWeight:700,color:"#374151",fontSize:15,marginBottom:6}}>No listings found</div>
+            <div style={{fontSize:13}}>{search ? `Try a different search term` : `Nothing in ${catFilter} yet`}</div>
           </div>
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
@@ -1241,7 +1389,10 @@ export default function LoopGenApp() {
             </div>
             <div style={{fontSize:18,fontWeight:700,color:"#111",marginTop:4}}>{detail.title}</div>
             <div style={{fontSize:13,color:"#6b7280",marginTop:4}}>{detail.category}{detail.sub ? ` · ${detail.sub}` : ""}</div>
-            <div style={{fontSize:13,color:"#6b7280",marginTop:8}}>📍 {detail.location}</div>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginTop:8,flexWrap:"wrap"}}>
+              <div style={{fontSize:13,color:"#6b7280"}}>📍 {detail.location}</div>
+              {detail.time && <div style={{fontSize:12,color:"#9ca3af"}}>🕐 Posted {detail.time}</div>}
+            </div>
             {detail.tags?.length > 0 && (
               <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:10}}>
                 {detail.tags.map(t => <VintageTag key={t} label={t}/>)}
@@ -1265,7 +1416,10 @@ export default function LoopGenApp() {
                       {(detail.seller_username||"U")[0].toUpperCase()}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:700,fontSize:14,color:"#111"}}>{detail.seller_username || "Seller"}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{fontWeight:700,fontSize:14,color:"#111"}}>{detail.seller_username || "Seller"}</div>
+                        <span style={{background:"#f0fdf4",color:GREEN,fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:6,border:`1px solid #bbf7d0`,flexShrink:0}}>✓ VERIFIED</span>
+                      </div>
                       <div style={{fontSize:12,color:"#9ca3af"}}>⭐ {detail.rating || "4.5"} · {demoSeller ? `Joined ${demoSeller.joined}` : "Verified seller"}</div>
                     </div>
                   </div>
@@ -1274,18 +1428,32 @@ export default function LoopGenApp() {
                       {demoSeller.bio}
                     </div>
                   )}
+                  {demoSeller?.location && (
+                    <div style={{fontSize:11,color:"#9ca3af",marginTop:6}}>📍 {demoSeller.location}</div>
+                  )}
                 </div>
               );
             })()}
+
+            {/* Safety notice */}
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"10px 12px",marginTop:14,display:"flex",gap:8,alignItems:"flex-start"}}>
+              <span style={{fontSize:14,flexShrink:0}}>🛡️</span>
+              <div style={{fontSize:11,color:"#92400e",lineHeight:1.5}}>
+                <strong>Stay safe:</strong> Always meet in a public place. Never transfer money before inspecting the item. <span style={{color:GREEN,fontWeight:600,cursor:"pointer"}} onClick={()=>showToast("Safety tips — coming soon")}>Safety tips →</span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* CTA buttons */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"14px 20px 30px",background:"white",borderTop:"1px solid #f3f4f6",display:"flex",gap:10}}>
-          <button onClick={() => openSellerChat(detail)} style={{flex:1,padding:"15px",borderRadius:16,border:`2px solid ${GREEN}`,background:"white",color:GREEN,fontWeight:700,fontSize:14,cursor:"pointer"}}>
-            💬 Message
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"12px 16px 28px",background:"white",borderTop:"1px solid #f3f4f6",display:"flex",gap:8}}>
+          <button onClick={e=>toggleSave(detail.id,e)} style={{width:50,height:50,borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontSize:20,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {detail.is_saved?"❤️":"🤍"}
           </button>
-          <button onClick={() => showToast("Offers coming soon 🚀")} style={{flex:2,padding:"15px",borderRadius:16,border:"none",background:GREEN,color:"white",fontWeight:700,fontSize:14,cursor:"pointer",boxShadow:`0 6px 18px ${GREEN}44`}}>
+          <button onClick={() => openSellerChat(detail)} style={{flex:1,padding:"14px 8px",borderRadius:14,border:`2px solid ${GREEN}`,background:"white",color:GREEN,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            💬 Message Seller
+          </button>
+          <button onClick={() => showToast("Offers coming soon 🚀")} style={{flex:1,padding:"14px 8px",borderRadius:14,border:"none",background:GREEN,color:"white",fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:`0 6px 18px ${GREEN}44`,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Make Offer
           </button>
         </div>
@@ -1301,16 +1469,19 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
-      <div style={{padding:"2px 20px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{padding:"4px 16px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div onClick={()=>nav("home")} style={{cursor:"pointer"}}><IcoBack/></div>
-          <span style={{fontSize:17,fontWeight:700,color:"#111"}}>Sell an item</span>
+          <div>
+            <div style={{fontSize:17,fontWeight:800,color:"#111"}}>List an item</div>
+            <div style={{fontSize:11,color:"#9ca3af"}}>Step {sellStep} of 3 — {["Photos & details","Description & location","Preview"][sellStep-1]}</div>
+          </div>
         </div>
-        {isGuest && <span style={{fontSize:11,color:"#ef4444",fontWeight:600}}>Sign in to list</span>}
+        {isGuest && <span style={{fontSize:11,color:"#ef4444",fontWeight:600,background:"#fef2f2",padding:"4px 8px",borderRadius:8}}>Sign in to list</span>}
       </div>
       {/* Progress */}
-      <div style={{padding:"12px 20px",display:"flex",gap:6,flexShrink:0}}>
-        {[1,2,3].map(s => <div key={s} style={{flex:1,height:3,borderRadius:4,background:s<=sellStep?GREEN:"#e5e7eb",transition:"background 0.3s"}}/>)}
+      <div style={{padding:"10px 16px 4px",display:"flex",gap:5,flexShrink:0}}>
+        {[1,2,3].map(s => <div key={s} style={{flex:1,height:4,borderRadius:4,background:s<=sellStep?GREEN:"#e5e7eb",transition:"background 0.3s"}}/>)}
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px",paddingBottom:90}}>
@@ -1409,7 +1580,7 @@ export default function LoopGenApp() {
                 ⚠️ Sign in to save your listing permanently
               </div>
             )}
-            <GreenBtn onClick={handleList} disabled={loading}>{loading?"Listing…":"🚀 List Item"}</GreenBtn>
+            <GreenBtn onClick={handleList} disabled={loading}>{loading?"Posting…":"🚀 Post Listing"}</GreenBtn>
             <button onClick={()=>setSellStep(2)} style={{width:"100%",marginTop:10,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Edit</button>
           </>
         )}
@@ -1426,41 +1597,49 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
-      <div style={{padding:"2px 20px 14px",flexShrink:0}}>
+      <div style={{padding:"4px 16px 12px",flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{fontSize:20,fontWeight:800,color:"#111"}}>Messages</div>
+        {!isGuest && convos.length > 0 && (
+          <span style={{fontSize:12,color:"#9ca3af",fontWeight:500}}>{convos.length} conversation{convos.length!==1?"s":""}</span>
+        )}
       </div>
       {isGuest ? (
-        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,gap:16}}>
-          <div style={{fontSize:40}}>💬</div>
-          <div style={{fontWeight:700,fontSize:16,color:"#111",textAlign:"center"}}>Sign in to chat</div>
-          <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Message sellers and buyers once you have an account</div>
-          <GreenBtn onClick={()=>push("auth")} mt={0}>Sign In</GreenBtn>
+        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 28px",gap:16}}>
+          <div style={{fontSize:52}}>💬</div>
+          <div style={{fontWeight:800,fontSize:18,color:"#111",textAlign:"center"}}>Chat with sellers</div>
+          <div style={{fontSize:14,color:"#9ca3af",textAlign:"center",lineHeight:1.6}}>Sign in to message sellers and buyers, and get notified when someone's interested in your items.</div>
+          <GreenBtn onClick={()=>push("auth")} mt={4}>Sign In to Message</GreenBtn>
+          <button onClick={()=>nav("explore")} style={{background:"transparent",border:"none",color:"#9ca3af",fontSize:13,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"8px"}}>Browse listings first →</button>
         </div>
       ) : (
-        <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column",gap:8,paddingBottom:78}}>
-          {convos.length === 0
-            ? <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:40}}>No messages yet</div>
-            : convos.map(c => (
-                <div key={c.id} onClick={() => openConvo(c)}
-                  style={{background:"white",borderRadius:18,padding:"13px 15px",display:"flex",gap:12,alignItems:"center",boxShadow:"0 1px 8px rgba(0,0,0,0.06)",cursor:"pointer"}}>
-                  <div style={{position:"relative",flexShrink:0}}>
-                    <div style={{width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:18}}>
-                      {(c.other_user||"U")[0].toUpperCase()}
-                    </div>
-                    {c.online && <div style={{position:"absolute",bottom:1,right:1,width:11,height:11,background:"#22c55e",borderRadius:"50%",border:"2px solid white"}}/>}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontWeight:700,fontSize:14,color:"#111"}}>{c.other_user}</span>
-                      <span style={{fontSize:11,color:"#9ca3af"}}>{c.last_time || c.time}</span>
-                    </div>
-                    <div style={{fontSize:11,color:GREEN,marginTop:1,fontWeight:500}}>Re: {c.listing_title || c.item}</div>
-                    <div style={{fontSize:12,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.last_message || c.last}</div>
-                  </div>
-                  {(c.unread>0) && <div style={{background:GREEN,color:"white",borderRadius:"50%",width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{c.unread}</div>}
+        <div style={{flex:1,overflowY:"auto",padding:"0 16px",display:"flex",flexDirection:"column",gap:8,paddingBottom:78}}>
+          {convos.length === 0 ? (
+            <div style={{textAlign:"center",padding:"52px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+              <div style={{fontSize:48}}>📭</div>
+              <div style={{fontWeight:700,fontSize:16,color:"#111"}}>No messages yet</div>
+              <div style={{fontSize:13,color:"#9ca3af",lineHeight:1.6}}>Find something you like and tap<br/>"Message Seller" to start a chat</div>
+              <button onClick={()=>nav("explore")} style={{marginTop:4,padding:"13px 24px",borderRadius:50,background:GREEN,border:"none",color:"white",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:`0 6px 18px ${GREEN}44`}}>Browse Listings</button>
+            </div>
+          ) : convos.map(c => (
+            <div key={c.id} onClick={() => openConvo(c)}
+              style={{background:"white",borderRadius:18,padding:"14px 15px",display:"flex",gap:12,alignItems:"center",boxShadow:"0 1px 8px rgba(0,0,0,0.06)",cursor:"pointer",minHeight:70}}>
+              <div style={{position:"relative",flexShrink:0}}>
+                <div style={{width:50,height:50,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:18}}>
+                  {(c.other_user||"U")[0].toUpperCase()}
                 </div>
-              ))
-          }
+                {c.online && <div style={{position:"absolute",bottom:1,right:1,width:12,height:12,background:"#22c55e",borderRadius:"50%",border:"2px solid white"}}/>}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontWeight:700,fontSize:14,color:"#111"}}>{c.other_user}</span>
+                  <span style={{fontSize:11,color:"#9ca3af"}}>{c.last_time || c.time}</span>
+                </div>
+                <div style={{fontSize:11,color:GREEN,marginTop:1,fontWeight:600}}>Re: {c.listing_title || c.item}</div>
+                <div style={{fontSize:12,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{c.last_message || c.last}</div>
+              </div>
+              {(c.unread>0) && <div style={{background:GREEN,color:"white",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{c.unread}</div>}
+            </div>
+          ))}
         </div>
       )}
       <BottomNav active="chats" onNav={nav}/>
@@ -1524,17 +1703,24 @@ export default function LoopGenApp() {
       <StatusBar/>
       <DemoBanner/>
       <div style={{flex:1,overflowY:"auto",paddingBottom:78}}>
-        <div style={{padding:"10px 20px 24px",textAlign:"center"}}>
-          <div style={{width:78,height:78,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",color:"white",fontSize:32,fontWeight:800}}>
+        {/* Profile hero */}
+        <div style={{background:`linear-gradient(160deg,#f0fdf4,#dcfce7)`,padding:"20px 20px 24px",textAlign:"center",borderBottom:"1px solid #e8f5ee"}}>
+          <div style={{width:80,height:80,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",color:"white",fontSize:34,fontWeight:800,boxShadow:`0 6px 20px ${GREEN}44`}}>
             {isGuest ? "G" : currentUser[0].toUpperCase()}
           </div>
-          <div style={{fontWeight:800,fontSize:18,color:"#111"}}>{isGuest ? "Guest" : currentUser}</div>
-          {!isGuest && <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>{user?.email}</div>}
-          <div style={{display:"flex",justifyContent:"center",gap:36,marginTop:20}}>
+          <div style={{fontWeight:800,fontSize:18,color:"#111"}}>{isGuest ? "Guest User" : currentUser}</div>
+          {!isGuest && <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{user?.email}</div>}
+          {!isGuest && (
+            <div style={{display:"inline-flex",alignItems:"center",gap:5,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 12px",marginTop:8}}>
+              <span style={{fontSize:11}}>✅</span>
+              <span style={{fontSize:11,fontWeight:700,color:GREEN}}>Verified Member</span>
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"center",gap:32,marginTop:18}}>
             {[
               [isGuest?"—":String(userListings.filter(l=>l.status==="active").length), "Listings"],
               [isGuest?"—":String(userListings.filter(l=>l.status==="sold").length),   "Sold"],
-              ["—", "Rating"],
+              ["4.9★", "Rating"],
             ].map(([v,l]) => (
               <div key={l} style={{cursor:l==="Listings"&&!isGuest?"pointer":"default"}} onClick={l==="Listings"&&!isGuest?()=>push("my-listings"):undefined}>
                 <div style={{fontWeight:800,fontSize:20,color:"#111"}}>{v}</div>
@@ -1544,31 +1730,44 @@ export default function LoopGenApp() {
           </div>
         </div>
 
-        <div style={{padding:"0 20px",display:"flex",flexDirection:"column",gap:3}}>
+        <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:3}}>
           {isGuest ? (
             <>
               <GreenBtn onClick={()=>push("auth")} mt={0}>Sign In or Register</GreenBtn>
-              <div style={{textAlign:"center",marginTop:16,fontSize:13,color:"#9ca3af"}}>Sign in to manage listings, save items, and chat with sellers</div>
+              <div style={{textAlign:"center",marginTop:14,fontSize:13,color:"#9ca3af",lineHeight:1.6}}>Sign in to manage listings,<br/>save items, and chat with sellers</div>
             </>
           ) : (
             [
-              ["My Listings",     "📦", ()=>push("my-listings")],
-              ["Saved Items",     "❤️", ()=>push("saved-items")],
-              ["Account Settings","⚙️", ()=>push("settings")],
-              ["Reviews",         "⭐", ()=>showToast("Reviews coming after beta 🌟")],
-              ["Help & Support",  "💬", ()=>showToast("Support: hello@loopgen.app")],
-              ["Sign Out",        "🚪", handleSignOut],
+              ["My Listings",      "📦", ()=>push("my-listings")],
+              ["Saved Items",      "❤️", ()=>push("saved-items")],
+              ["Account Settings", "⚙️", ()=>push("settings")],
+              ["Reviews",          "⭐", ()=>showToast("Reviews coming after beta 🌟")],
+              ["Help & Support",   "💬", ()=>showToast("Support: hello@loopgen.app")],
+              ["Sign Out",         "🚪", handleSignOut],
             ].map(([label, icon, action], i) => (
               <div key={label} onClick={action}
-                style={{padding:"15px 16px",background:"white",borderRadius:14,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",marginBottom:i===4?12:0,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:18}}>{icon}</span>
-                  <span style={{fontWeight:500,fontSize:14,color:label==="Sign Out"?"#ef4444":"#111"}}>{label}</span>
+                style={{padding:"16px",background:"white",borderRadius:14,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",marginBottom:i===4?10:0,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",minHeight:54}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <span style={{fontSize:20}}>{icon}</span>
+                  <span style={{fontWeight:600,fontSize:14,color:label==="Sign Out"?"#ef4444":"#111"}}>{label}</span>
                 </div>
                 {label!=="Sign Out"&&<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>}
               </div>
             ))
           )}
+        </div>
+
+        {/* Trust footer on profile */}
+        <div style={{margin:"8px 16px 16px",padding:"14px",background:"#f8f9fa",borderRadius:14,border:"1px solid #f0f0f0"}}>
+          <div style={{fontSize:11,color:"#9ca3af",textAlign:"center",lineHeight:1.6}}>
+            🛡️ LoopGen Pty Ltd (ACN: 696 134 620)<br/>
+            2 Patricia Road, Blackburn VIC 3130, Australia<br/>
+            <span style={{color:GREEN,fontWeight:600,cursor:"pointer"}} onClick={()=>showToast("Legal pages — coming soon")}>Terms</span>
+            {" · "}
+            <span style={{color:GREEN,fontWeight:600,cursor:"pointer"}} onClick={()=>showToast("Privacy policy — coming soon")}>Privacy</span>
+            {" · "}
+            <span style={{color:GREEN,fontWeight:600,cursor:"pointer"}} onClick={()=>showToast("Safety tips — coming soon")}>Safety</span>
+          </div>
         </div>
       </div>
       <BottomNav active="profile" onNav={nav}/>
@@ -1748,6 +1947,29 @@ export default function LoopGenApp() {
           ))}
         </div>
 
+        {/* Legal & Safety */}
+        <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Legal &amp; Safety</div>
+          {[
+            ["Terms of Service",    "📄", ()=>showToast("Terms — loopgen.app/legal/terms")],
+            ["Privacy Policy",      "🔒", ()=>showToast("Privacy — loopgen.app/legal/privacy")],
+            ["Community Guidelines","🤝", ()=>showToast("Guidelines — loopgen.app/legal/community")],
+            ["Safety Tips",         "🛡️", ()=>showToast("Safety — loopgen.app/legal/safety")],
+            ["Contact Support",     "💬", ()=>showToast("Email: hello@loopgen.app")],
+          ].map(([label,icon,action],i,arr) => (
+            <div key={label}>
+              <div onClick={action} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:16}}>{icon}</span>
+                  <span style={{fontSize:13,color:"#374151"}}>{label}</span>
+                </div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+              {i<arr.length-1&&<div style={{height:1,background:"#f0f0f0"}}/>}
+            </div>
+          ))}
+        </div>
+
         {/* Danger zone */}
         <div style={{background:"#fff5f5",borderRadius:18,padding:"16px",border:"1px solid #fecaca"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#ef4444",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Danger Zone</div>
@@ -1771,8 +1993,10 @@ export default function LoopGenApp() {
           </div>
         </div>
 
-        <div style={{fontSize:11,color:"#c4c9d4",textAlign:"center",paddingBottom:8}}>
-          LoopGen Beta v0.1.0 · hello@loopgen.app
+        <div style={{fontSize:11,color:"#c4c9d4",textAlign:"center",paddingBottom:8,lineHeight:1.8}}>
+          LoopGen Beta v0.1.0 · <a href="mailto:hello@loopgen.app" style={{color:"#9ca3af",textDecoration:"none"}}>hello@loopgen.app</a><br/>
+          LoopGen Pty Ltd (ACN: 696 134 620)<br/>
+          2 Patricia Road, Blackburn VIC 3130, Australia
         </div>
       </div>
       <BottomNav active="profile" onNav={nav}/>
