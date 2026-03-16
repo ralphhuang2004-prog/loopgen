@@ -1,5 +1,5 @@
 // /legal/trust — LoopGen Trust & Safety Architecture
-
+import LegalLayout, { Section, H2, H3, P, Ul, Li, Callout, DataTable } from "./LegalLayout.jsx";
 
 const SECTIONS = [
   { id: "overview",      label: "Framework Overview" },
@@ -15,7 +15,12 @@ const SECTIONS = [
 
 export default function TrustSafetyArchitecture() {
   return (
-    <>
+    <LegalLayout
+      pageId="trust"
+      title="Trust & Safety Architecture"
+      badge="Internal System Design"
+      sections={SECTIONS}
+    >
       <Callout title="About This Document" type="blue">
         <p>This document describes LoopGen's complete Trust & Safety system design — covering seller reputation scoring, verification levels, anti-scam detection, community reporting, and buyer protection processes. It is published for transparency and user education.</p>
       </Callout>
@@ -272,6 +277,6 @@ export default function TrustSafetyArchitecture() {
           ]}
         />
       </Section>
-    </>
+    </LegalLayout>
   );
 }

@@ -1,5 +1,5 @@
 // /legal/privacy — LoopGen Privacy Policy
-
+import LegalLayout, { Section, H2, H3, P, Ul, Li, Callout, DataTable } from "./LegalLayout.jsx";
 
 const SECTIONS = [
   { id: "framework",  label: "Compliance Framework" },
@@ -17,7 +17,12 @@ const SECTIONS = [
 
 export default function PrivacyPolicy() {
   return (
-    <>
+    <LegalLayout
+      pageId="privacy"
+      title="Privacy Policy"
+      badge="Privacy Act 1988 (Cth) compliant"
+      sections={SECTIONS}
+    >
       <Callout title="Our Commitment" type="green">
         <p>LoopGen complies with the Privacy Act 1988 (Cth) and all 13 Australian Privacy Principles (APPs). We are committed to transparent, lawful handling of your personal information. We do not sell your data to third parties under any circumstances.</p>
       </Callout>
@@ -145,6 +150,6 @@ export default function PrivacyPolicy() {
         <P><strong>Privacy Officer:</strong> <a href="mailto:privacy@loopgen.app">privacy@loopgen.app</a></P>
         <P>If you are not satisfied with our response, you may lodge a complaint with the Office of the Australian Information Commissioner (OAIC) at <a href="https://oaic.gov.au" target="_blank" rel="noreferrer">oaic.gov.au</a>.</P>
       </Section>
-    </>
+    </LegalLayout>
   );
 }

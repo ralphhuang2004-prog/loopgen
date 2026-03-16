@@ -1,5 +1,5 @@
 // /legal/terms — LoopGen Terms of Service
-
+import LegalLayout, { Section, H2, H3, P, Ul, Li, Callout, DataTable } from "./LegalLayout.jsx";
 
 const SECTIONS = [
   { id: "overview",     label: "Platform Overview" },
@@ -20,7 +20,12 @@ const SECTIONS = [
 
 export default function TermsOfService() {
   return (
-    <>
+    <LegalLayout
+      pageId="terms"
+      title="Terms of Service"
+      badge="Version 8.0"
+      sections={SECTIONS}
+    >
       <Callout title="Important Notice" type="amber">
         <p>By creating an account or using LoopGen, you agree to these Terms. LoopGen is a classified listing platform only — it is NOT a seller, agent, payment processor, or transaction guarantor. All transactions occur directly between buyers and sellers.</p>
       </Callout>
@@ -179,6 +184,6 @@ export default function TermsOfService() {
           ]}
         />
       </Section>
-    </>
+    </LegalLayout>
   );
 }
