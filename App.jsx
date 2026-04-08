@@ -18,7 +18,6 @@
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import LandingPage from "./LandingPage.jsx";
-import InstallPrompt from "./InstallPrompt.jsx";
 
 // ── ENV VARS ─────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
@@ -2592,5 +2591,5 @@ export default function LoopGenApp() {
     </Phone>
   );
 
-  return <InstallPrompt />;
+  return null;
 }

@@ -27,7 +27,7 @@ export default function TrustSafetyArchitecture() {
 
       <Section id="overview">
         <H2>1. Framework Overview</H2>
-        <P>LoopGen is operated by <strong>NexaraX Pty Ltd</strong> (ACN: 696 134 620 / ABN: 43 696 134 620), 2 Patricia Road, Blackburn VIC 3130, Australia.</P>
+        <P>LoopGen is operated by <strong>NexaraX Pty Ltd</strong> (ACN: 696 134 620 / ABN: 43 696 134 620).</P>
         <P>LoopGen's Trust & Safety (T&S) system operates across four pillars that together create a safe classified marketplace:</P>
         <DataTable
           headers={["Pillar", "Components"]}
@@ -252,7 +252,7 @@ export default function TrustSafetyArchitecture() {
             ["Law Enforcement Referral", "User details shared with AFP, ACCC, or state police per valid legal request.", "Criminal activity or imminent harm"],
           ]}
         />
-        <P>Users may appeal account actions within 14 days by contacting <a href="mailto:appeals@loopgen.app">appeals@loopgen.app</a>. Appeals are reviewed by a senior T&S team member not involved in the original decision.</P>
+        <P>Users may appeal account actions within 14 days by contacting <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a>. Appeals are reviewed by a senior T&S team member not involved in the original decision.</P>
       </Section>
 
       <Section id="law">
@@ -262,20 +262,10 @@ export default function TrustSafetyArchitecture() {
           <Li>Emergency disclosures may be made without a court order where there is an imminent threat to life</Li>
           <Li>CSAM reports are referred immediately to the Australian Federal Police and eSafety Commissioner — no exceptions</Li>
           <Li>LoopGen maintains records of all law enforcement requests and responses</Li>
-          <Li>Contact: <a href="mailto:lawenforcement@loopgen.app">lawenforcement@loopgen.app</a></Li>
+          <Li>Contact: <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a></Li>
         </Ul>
-        <H3>Safety Inboxes</H3>
-        <DataTable
-          headers={["Inbox", "Purpose"]}
-          rows={[
-            ["safety@loopgen.app", "Trust & Safety general enquiries — monitored during AU business hours"],
-            ["disputes@loopgen.app", "Dispute facilitation — monitored during AU business hours"],
-            ["appeals@loopgen.app", "Account action appeals — 5 business day response SLA"],
-            ["legal@loopgen.app", "Legal and compliance enquiries"],
-            ["privacy@loopgen.app", "Privacy Officer and data rights requests"],
-            ["lawenforcement@loopgen.app", "Law enforcement requests"],
-          ]}
-        />
+        <H3>Contact</H3>
+        <P>For all Trust &amp; Safety enquiries: <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a></P>
       </Section>
     </LegalLayout>
   );

@@ -1,6 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({ immediate: false });
 
 // ── Path-based router ─────────────────────────────────────────────────────────
 // Legal pages are served at /terms, /privacy, /trust (and full /legal/* paths).
