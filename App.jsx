@@ -950,6 +950,7 @@ export default function LoopGenApp() {
   const [authForm,  setAuthForm]= useState({email:"",password:"",username:""});
   const [authError, setAuthError]= useState("");
   const [authLoading,setAuthLoading]= useState(false);
+  const [sessionReady, setSessionReady] = useState(!HAS_SUPABASE); // true immediately in demo mode
 
   // ── Data state ───────────────────────────────────────
   const [listings,  setListings]= useState([...DEMO_VINTAGE, ...DEMO_LISTINGS]);
@@ -1006,7 +1007,11 @@ export default function LoopGenApp() {
       if (session?.user) {
         setUser(session.user);
         loadProfile(session.user.id);
+      } else {
+        setUser(null);
+        setProfile(null);
       }
+      setSessionReady(true);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
@@ -1015,6 +1020,7 @@ export default function LoopGenApp() {
       } else {
         setUser(null); setProfile(null);
       }
+      setSessionReady(true);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -1116,6 +1122,7 @@ export default function LoopGenApp() {
   const push = s => { setHistory(h => [...h, screen]); setScreen(s); };
   const pop  = () => { const h=[...history]; const prev=h.pop()||"home"; setHistory(h); setScreen(prev); };
   const nav  = s => {
+    if (s === "sell" && !sessionReady) { showToast("Loading…"); return; }
     if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
     if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); }
     setHistory([]); setScreen(s); setDetail(null); setConvo(null);
@@ -1287,6 +1294,7 @@ export default function LoopGenApp() {
   };
 
   const openSellerChat = async (item) => {
+    if (!sessionReady) { showToast("Loading…"); return; }
     if (!user) { showToast("Sign in to message seller"); push("auth"); return; }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
     showToast("💬 Opening chat…");
@@ -1913,7 +1921,7 @@ export default function LoopGenApp() {
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
-            if (!user) { showToast("Sign in to make an offer"); setOfferModal(null); push("auth"); return; }
+            if (!user) { if (!sessionReady) { showToast("Loading…"); return; } showToast("Sign in to make an offer"); setOfferModal(null); push("auth"); return; }
             // Persist to Supabase — silent fallback if table missing
             try {
               await dbSaveOffer({
