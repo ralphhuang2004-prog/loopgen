@@ -950,7 +950,7 @@ export default function LoopGenApp() {
   const [authForm,  setAuthForm]= useState({email:"",password:"",username:""});
   const [authError, setAuthError]= useState("");
   const [authLoading,setAuthLoading]= useState(false);
-  const [sessionReady, setSessionReady] = useState(!HAS_SUPABASE); // true immediately in demo mode
+  const [sessionReady, setSessionReady] = useState(!HAS_SUPABASE);
 
   // ── Data state ───────────────────────────────────────
   const [listings,  setListings]= useState([...DEMO_VINTAGE, ...DEMO_LISTINGS]);
@@ -1216,12 +1216,15 @@ export default function LoopGenApp() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     if (!user) { showToast("Sign in to upload photos"); return; }
+    // Validate file sizes (max 10MB each)
+    const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
+    if (oversized.length) { showToast(`${oversized.length} photo(s) exceed 10MB limit`); return; }
     setUploadingImg(true);
     try {
       const urls = await Promise.all(files.slice(0,5).map(f => dbUploadImage(f, user.id)));
       const valid = urls.filter(Boolean);
-      setSellImages(prev => [...prev, ...valid]);
-      setSell(f => ({...f, image_urls:[...f.image_urls, ...valid]}));
+      setSellImages(prev => [...prev, ...valid].slice(0, 5));
+      setSell(f => ({...f, image_urls:[...f.image_urls, ...valid].slice(0, 5)}));
       showToast(`📸 ${valid.length} photo(s) uploaded`);
     } catch (e) {
       showToast("Upload failed — " + e.message);
