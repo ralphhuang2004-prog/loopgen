@@ -973,7 +973,7 @@ function mapAuthError(error, mode) {
     code === "23505" ||
     code === "user_already_exists"
   ) {
-    return "This email is already registered. Tap "Sign In" below to log in instead.";
+    return "This email is already registered. Tap 'Sign In' below to log in instead.";
   }
 
   // ── Email not confirmed ───────────────────────────────
@@ -1048,7 +1048,7 @@ function mapAuthError(error, mode) {
 
   // ── Generic fallback ──────────────────────────────────
   if (mode === "register") {
-    return "We couldn\'t create your account right now. Please try again.";
+    return "We couldn't create your account right now. Please try again.";
   }
   return "Sign in failed. Please check your details and try again.";
 }
@@ -1065,7 +1065,7 @@ function mapListingError(error) {
   if (msg.includes("row-level") || msg.includes("permission") || msg.includes("policy")) {
     return "You need to be signed in to post a listing.";
   }
-  return "Couldn\'t post your listing. Please try again.";
+  return "Couldn't post your listing. Please try again.";
 }
 
 // ═══════════════════════════════════════════════════════
