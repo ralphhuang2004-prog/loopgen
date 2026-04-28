@@ -954,6 +954,121 @@ function HomeTicker() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  ERROR MESSAGE MAPPING
+// ═══════════════════════════════════════════════════════
+
+function mapAuthError(error, mode) {
+  if (!error) return "Something went wrong. Please try again.";
+
+  const msg = (error.message || "").toLowerCase();
+  const code = error.code || error.status || "";
+
+  // ── Email / user already exists ───────────────────────
+  if (
+    msg.includes("user already registered") ||
+    msg.includes("already been registered") ||
+    msg.includes("already registered") ||
+    msg.includes("email already") ||
+    msg.includes("duplicate") ||
+    code === "23505" ||
+    code === "user_already_exists"
+  ) {
+    return "This email is already registered. Tap "Sign In" below to log in instead.";
+  }
+
+  // ── Email not confirmed ───────────────────────────────
+  if (msg.includes("email not confirmed") || msg.includes("confirm your email")) {
+    return "Please check your inbox and confirm your email before signing in.";
+  }
+
+  // ── Wrong password / invalid credentials ──────────────
+  if (
+    msg.includes("invalid login") ||
+    msg.includes("invalid credentials") ||
+    msg.includes("wrong password") ||
+    msg.includes("invalid password") ||
+    msg.includes("email or password") ||
+    code === "invalid_credentials"
+  ) {
+    return "Incorrect email or password. Please check and try again.";
+  }
+
+  // ── Weak password ─────────────────────────────────────
+  if (msg.includes("password") && (msg.includes("short") || msg.includes("least 6") || msg.includes("weak"))) {
+    return "Your password must be at least 6 characters long.";
+  }
+
+  // ── Invalid email format ──────────────────────────────
+  if (msg.includes("invalid email") || msg.includes("valid email") || msg.includes("email format")) {
+    return "Please enter a valid email address.";
+  }
+
+  // ── Too many attempts / rate limited ──────────────────
+  if (
+    msg.includes("too many") ||
+    msg.includes("rate limit") ||
+    msg.includes("try again later") ||
+    code === "over_request_rate_limit" ||
+    code === 429
+  ) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+
+  // ── Network / connection error ────────────────────────
+  if (
+    msg.includes("network") ||
+    msg.includes("fetch") ||
+    msg.includes("timeout") ||
+    msg.includes("connection") ||
+    msg.includes("failed to fetch")
+  ) {
+    return "Connection problem. Please check your internet and try again.";
+  }
+
+  // ── Database / profile save error ────────────────────
+  if (
+    msg.includes("database") ||
+    msg.includes("saving") ||
+    msg.includes("profiles") ||
+    msg.includes("violates") ||
+    msg.includes("foreign key") ||
+    code === "42501" ||
+    code === "42P01"
+  ) {
+    if (mode === "register") {
+      return "We had trouble setting up your account. Please try again — it usually works on the second attempt.";
+    }
+    return "Something went wrong on our end. Please try again.";
+  }
+
+  // ── User not found ────────────────────────────────────
+  if (msg.includes("user not found") || msg.includes("no user")) {
+    return "No account found with this email. Try registering instead.";
+  }
+
+  // ── Generic fallback ──────────────────────────────────
+  if (mode === "register") {
+    return "We couldn\'t create your account right now. Please try again.";
+  }
+  return "Sign in failed. Please check your details and try again.";
+}
+
+function mapListingError(error) {
+  if (!error) return "Something went wrong. Please try again.";
+  const msg = (error.message || "").toLowerCase();
+  if (msg.includes("network") || msg.includes("fetch") || msg.includes("timeout")) {
+    return "Connection problem. Check your internet and try again.";
+  }
+  if (msg.includes("storage") || msg.includes("upload")) {
+    return "Photo upload failed. Try a smaller image or check your connection.";
+  }
+  if (msg.includes("row-level") || msg.includes("permission") || msg.includes("policy")) {
+    return "You need to be signed in to post a listing.";
+  }
+  return "Couldn\'t post your listing. Please try again.";
+}
+
+// ═══════════════════════════════════════════════════════
 //  MAIN APP
 // ═══════════════════════════════════════════════════════
 export default function LoopGenApp() {
@@ -1183,7 +1298,7 @@ export default function LoopGenApp() {
         loadConversations(data.user.id);
       }
     } catch (e) {
-      setAuthError(e.message || "Authentication failed");
+      setAuthError(mapAuthError(e, authMode));
     }
     setAuthLoading(false);
   }
@@ -1215,7 +1330,7 @@ export default function LoopGenApp() {
           await dbMarkAsSold(listingId);
           setUserListings(ls => ls.map(l => l.id===listingId ? {...l, status:"sold"} : l));
           showToast("✅ Marked as sold!");
-        } catch (e) { showToast("Failed: " + e.message); }
+        } catch { showToast("Couldn't mark as sold. Please try again."); }
         setConfirm(null);
       }
     });
@@ -1230,7 +1345,7 @@ export default function LoopGenApp() {
           setUserListings(ls => ls.filter(l => l.id !== listingId));
           setListings(ls => ls.filter(l => l.id !== listingId));
           showToast("Listing removed.");
-        } catch (e) { showToast("Failed: " + e.message); }
+        } catch { showToast("Couldn't remove listing. Please try again."); }
         setConfirm(null);
       }
     });
@@ -1254,7 +1369,7 @@ export default function LoopGenApp() {
       setSell(f => ({...f, image_urls:[...f.image_urls, ...valid].slice(0, 5)}));
       showToast(`📸 ${valid.length} photo(s) uploaded`);
     } catch (e) {
-      showToast("Upload failed — " + e.message);
+      showToast(mapListingError(e));
     }
     setUploadingImg(false);
   }
@@ -1293,7 +1408,7 @@ export default function LoopGenApp() {
       setSellImages([]);
       nav("home");
     } catch (e) {
-      showToast("Failed to list: " + e.message);
+      showToast(mapListingError(e));
     }
     setLoading(false);
   }
@@ -1382,7 +1497,7 @@ export default function LoopGenApp() {
     setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
     if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
       try { await dbSendMessage(convo.id, user.id, text); }
-      catch (e) { showToast("Send failed"); }
+      catch { showToast("Message didn't send. Please try again."); }
     }
   };
 
@@ -1447,7 +1562,25 @@ export default function LoopGenApp() {
           </label>
         )}
 
-        {authError && <div style={{color:"#ef4444",fontSize:13,marginBottom:12,fontWeight:500}}>{authError}</div>}
+        {authError && (
+          <div style={{
+            display:"flex", alignItems:"flex-start", gap:10,
+            background: authError.startsWith("✅") ? "#f0fdf4" : "#fff8f8",
+            border: `1.5px solid ${authError.startsWith("✅") ? "#bbf7d0" : "#fecaca"}`,
+            borderRadius:12, padding:"12px 14px", marginBottom:14,
+          }}>
+            <span style={{fontSize:16,flexShrink:0,marginTop:1}}>
+              {authError.startsWith("✅") ? "✅" : "⚠️"}
+            </span>
+            <span style={{
+              fontSize:13, lineHeight:1.5,
+              color: authError.startsWith("✅") ? "#166534" : "#b91c1c",
+              fontWeight:500,
+            }}>
+              {authError.replace(/^✅\s*/, "")}
+            </span>
+          </div>
+        )}
 
         <GreenBtn onClick={handleAuth} disabled={authLoading || (authMode==="register" && !agreeTerms)} mt={8}>
           {authLoading ? "Loading…" : authMode==="login" ? "Sign In" : "Create Account"}
