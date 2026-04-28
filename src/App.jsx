@@ -224,18 +224,34 @@ async function dbGetConversations(userId) {
     .from("conversations")
     .select(`
       *,
-      buyer:buyer_id(id, profiles(username, avatar_url)),
-      seller:seller_id(id, profiles(username, avatar_url)),
+      buyer_profile:profiles!conversations_buyer_id_fkey(username, avatar_url),
+      seller_profile:profiles!conversations_seller_id_fkey(username, avatar_url),
       listing:listing_id(title),
       messages(content, created_at, sender_id)
     `)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
-  if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
+  if (error) {
+    // Fallback: simpler query without nested joins if FK alias fails
+    console.error("getConversations:", error);
+    const { data: simple } = await supabase
+      .from("conversations")
+      .select("*, listing:listing_id(title), messages(content, created_at, sender_id)")
+      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+      .order("updated_at", { ascending: false });
+    if (!simple) return DEMO_CONVOS;
+    return (simple || []).map(c => {
+      const isBuyer = c.buyer_id === userId;
+      const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      return { ...c, other_user: isBuyer ? "Seller" : "Buyer", other_avatar: null,
+        listing_title: c.listing?.title || "Item",
+        last_message: lastMsg?.content || "", last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
+        unread: 0, online: false };
+    });
+  }
   return (data || []).map(c => {
-    // Determine which participant is the "other" person
     const isBuyer = c.buyer_id === userId;
-    const otherProfile = isBuyer ? c.seller?.profiles : c.buyer?.profiles;
+    const otherProfile = isBuyer ? c.seller_profile : c.buyer_profile;
     const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
     return {
       ...c,
@@ -954,7 +970,7 @@ export default function LoopGenApp() {
 
   // ── Data state ───────────────────────────────────────
   const [listings,  setListings]= useState([...DEMO_VINTAGE, ...DEMO_LISTINGS]);
-  const [convos,    setConvos]  = useState(DEMO_CONVOS);
+  const [convos,    setConvos]  = useState(HAS_SUPABASE ? [] : DEMO_CONVOS);
   const [detail,    setDetail]  = useState(null);
   const [convo,     setConvo]   = useState(null);
   const [chatMsgs,  setChatMsgs]= useState([]);
@@ -1102,9 +1118,10 @@ export default function LoopGenApp() {
     }
   }
 
-  async function loadConversations() {
-    if (!user) return;
-    const data = await dbGetConversations(user.id);
+  async function loadConversations(uid) {
+    const id = uid || user?.id;
+    if (!id) return;
+    const data = await dbGetConversations(id);
     setConvos(data);
   }
 
@@ -1162,6 +1179,8 @@ export default function LoopGenApp() {
         await loadProfile(data.user.id);
         showToast("👋 Welcome back!");
         nav("home");
+        // Pre-load conversations so chats tab is ready immediately
+        loadConversations(data.user.id);
       }
     } catch (e) {
       setAuthError(e.message || "Authentication failed");
@@ -1329,13 +1348,19 @@ export default function LoopGenApp() {
       if (supabase && item.seller_id) {
         const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
         if (conv) {
-          openConvo({
+          const enriched = {
             ...conv,
             other_user: item.seller_username || "Seller",
             other_avatar: item.seller_avatar || null,
             listing_title: item.title || "Item",
+            last_message: "",
+            last_time: "now",
+            unread: 0,
             online: false,
-          });
+          };
+          // Add to convos list if not already there
+          setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+          openConvo(enriched);
           return;
         }
       }
@@ -2131,16 +2156,19 @@ export default function LoopGenApp() {
               if (!sell.price || parseFloat(sell.price) <= 0) { showToast("Please add a valid price"); return; }
               if (!sell.category) { showToast("Please select a category"); return; }
               if (!sell.condition) { showToast("Please select a condition"); return; }
+              if (uploadingImg) { showToast("Please wait — photos still uploading…"); return; }
               if (sellImages.length === 0) { showToast("Please add at least 1 photo"); return; }
               // T6: ensure at least 1 tag; auto-fill Type+Condition if missing
               const curTags = sell.tags || [];
               const hasType = TAG_TAXONOMY.type.some(t => curTags.includes(t));
               const hasCond = TAG_TAXONOMY.condition.some(t => curTags.includes(t));
+              let finalTags = curTags;
               if (!hasType || !hasCond || curTags.length === 0) {
                 const auto = autoTagAssist(sell.title, sell.category, sell.condition);
-                const filled = [...curTags, ...auto.filter(t => !curTags.includes(t))].slice(0, MAX_TAGS);
-                if (filled.length === 0) { showToast("Please add at least 1 tag"); return; }
-                setSell(f => ({...f, tags: filled}));
+                finalTags = [...curTags, ...auto.filter(t => !curTags.includes(t))].slice(0, MAX_TAGS);
+                if (finalTags.length === 0) { showToast("Please add at least 1 tag"); return; }
+                // Update tags and advance step atomically in one render cycle
+                setSell(f => ({...f, tags: finalTags}));
               }
               setSellStep(2);
             }}>Continue →</GreenBtn>
