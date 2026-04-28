@@ -1049,7 +1049,7 @@ export default function LoopGenApp() {
 
   // ── Realtime messages ────────────────────────────────
   useEffect(() => {
-    if (!supabase || !convo?.id || typeof convo.id === "string") return;
+    if (!supabase || !convo?.id || String(convo.id).startsWith("mock_")) return;
     realtimeSub.current = supabase
       .channel(`messages:${convo.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convo.id}` },
@@ -1143,16 +1143,23 @@ export default function LoopGenApp() {
       if (authMode === "register") {
         const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
         if (error) throw error;
-        if (data.user) {
+        if (data.user && data.session) {
+          // Email confirmation OFF — user is fully signed in immediately
           await dbUpsertProfile(data.user.id, { username: authForm.username || authForm.email.split("@")[0] });
           setUser(data.user);
           showToast("🎉 Account created! Welcome to LoopGen.");
           nav("home");
+        } else if (data.user && !data.session) {
+          // Email confirmation ON — user created but needs to verify email
+          setAuthError("✅ Account created! Check your email to confirm before signing in.");
+        } else {
+          setAuthError("Something went wrong. Please try again.");
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         setUser(data.user);
+        await loadProfile(data.user.id);
         showToast("👋 Welcome back!");
         nav("home");
       }
@@ -1286,8 +1293,9 @@ export default function LoopGenApp() {
   // ── Chat ──────────────────────────────────────────────
   const openConvo = async (c) => {
     setConvo(c);
-    // If real DB conversation, load messages
-    if (supabase && user && c.id && typeof c.id === "number") {
+    // UUID ids are strings — check truthy and not a mock id
+    const isRealConvo = supabase && user && c.id && !String(c.id).startsWith("mock_");
+    if (isRealConvo) {
       const msgs = await dbGetMessages(c.id);
       setChatMsgs(msgs.map(m => ({...m, from_me: m.sender_id === user.id})));
     } else {
@@ -1345,7 +1353,7 @@ export default function LoopGenApp() {
     const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
     setChatMsgs(m => [...m, optimistic]);
     setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
-    if (supabase && user && convo?.id && typeof convo.id === "number") {
+    if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
       try { await dbSendMessage(convo.id, user.id, text); }
       catch (e) { showToast("Send failed"); }
     }
