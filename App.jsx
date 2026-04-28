@@ -1181,8 +1181,9 @@ export default function LoopGenApp() {
     e?.stopPropagation();
     const item = listings.find(x => x.id === id);
     if (!item) return;
-    // Optimistic update
+    // Optimistic update — listings list + detail screen
     setListings(ls => ls.map(x => x.id===id ? {...x, is_saved:!x.is_saved} : x));
+    if (detail?.id === id) setDetail(d => d ? {...d, is_saved:!d.is_saved} : d);
     showToast(item.is_saved ? "Removed from saved" : "❤️ Saved!");
     if (user) await dbToggleSave(id, user.id, item.is_saved);
   };
@@ -1260,7 +1261,8 @@ export default function LoopGenApp() {
       if (user && supabase) {
         await dbCreateListing(listing, user.id);
         showToast("🎉 Listed! Your item is live.");
-        await loadListings();
+        listingsLoaded.current = false;
+        await loadListings({ force: true });
       } else {
         // Demo mode — add locally
         const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
@@ -1343,7 +1345,7 @@ export default function LoopGenApp() {
       // Backend failure — still open contextual mock chat, no crash
       openConvo(mockConvo);
     }
-  };;
+  };
 
   const sendMsg = async () => {
     if (!msgText.trim()) return;
