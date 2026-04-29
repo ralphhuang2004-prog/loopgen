@@ -174,26 +174,48 @@ const DEMO_CONVOS = [
 
 async function dbGetListings(userId) {
   if (!supabase) return [...DEMO_VINTAGE, ...DEMO_LISTINGS];
-  // Build select: include saved_items filtered to current user if logged in
-  const savedSelect = userId
-    ? `*, profiles(username, avatar_url), saved_items!left(id, user_id)`
-    : `*, profiles(username, avatar_url)`;
-  const { data, error } = await supabase
+
+  // Step 1: Fetch listings (always public — no auth required)
+  const { data: rawListings, error: listError } = await supabase
     .from("listings")
-    .select(savedSelect)
+    .select("*")
     .eq("status", "active")
     .order("created_at", { ascending: false });
-  if (error) { console.error("getListings:", error); return []; } // Never return demo data to real users
-  return (data || []).map(l => ({
+
+  if (listError) { console.error("getListings:", listError); return []; }
+  if (!rawListings || rawListings.length === 0) return [];
+
+  // Step 2: Fetch profiles separately to avoid join failures
+  const sellerIds = [...new Set(rawListings.map(l => l.seller_id).filter(Boolean))];
+  let profileMap = {};
+  if (sellerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", sellerIds);
+    (profiles || []).forEach(p => { profileMap[p.id] = p; });
+  }
+
+  // Step 3: Fetch saved items for this user (if logged in)
+  let savedSet = new Set();
+  if (userId) {
+    const listingIds = rawListings.map(l => l.id);
+    const { data: saved } = await supabase
+      .from("saved_items")
+      .select("listing_id")
+      .eq("user_id", userId)
+      .in("listing_id", listingIds);
+    (saved || []).forEach(s => savedSet.add(s.listing_id));
+  }
+
+  return rawListings.map(l => ({
     ...l,
-    seller_username: l.profiles?.username || "user",
-    seller_avatar:   l.profiles?.avatar_url,
-    is_saved: userId
-      ? (l.saved_items || []).some(s => s.user_id === userId)
-      : false,
-    image_urls: l.image_urls || [],
-    tags: l.tags || [],
-    time: timeSince(l.created_at),
+    seller_username: profileMap[l.seller_id]?.username || "LoopGen User",
+    seller_avatar:   profileMap[l.seller_id]?.avatar_url || null,
+    is_saved:        savedSet.has(l.id),
+    image_urls:      l.image_urls || [],
+    tags:            l.tags || [],
+    time:            timeSince(l.created_at),
   }));
 }
 
