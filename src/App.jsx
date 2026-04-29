@@ -183,7 +183,7 @@ async function dbGetListings(userId) {
     .select(savedSelect)
     .eq("status", "active")
     .order("created_at", { ascending: false });
-  if (error) { console.error("getListings:", error); return [...DEMO_VINTAGE, ...DEMO_LISTINGS]; }
+  if (error) { console.error("getListings:", error); return []; } // Never return demo data to real users
   return (data || []).map(l => ({
     ...l,
     seller_username: l.profiles?.username || "user",
@@ -233,13 +233,13 @@ async function dbGetConversations(userId) {
     .order("updated_at", { ascending: false });
   if (error) {
     // Fallback: simpler query without nested joins if FK alias fails
-    console.error("getConversations:", error);
+    console.error("getConversations — trying simple query:", error);
     const { data: simple } = await supabase
       .from("conversations")
       .select("*, listing:listing_id(title), messages(content, created_at, sender_id)")
       .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
       .order("updated_at", { ascending: false });
-    if (!simple) return DEMO_CONVOS;
+    if (!simple) return []; // Never return demo convos to real users
     return (simple || []).map(c => {
       const isBuyer = c.buyer_id === userId;
       const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
@@ -357,7 +357,7 @@ async function dbDeleteListing(listingId) {
 }
 
 async function dbGetSavedListings(userId) {
-  if (!supabase) return DEMO_LISTINGS.filter(l => l.is_saved);
+  if (!supabase) return [];
   const { data } = await supabase
     .from("saved_items")
     .select("listings(*, profiles(username, avatar_url))")
@@ -1088,7 +1088,7 @@ export default function LoopGenApp() {
   const [sessionReady, setSessionReady] = useState(!HAS_SUPABASE);
 
   // ── Data state ───────────────────────────────────────
-  const [listings,  setListings]= useState([...DEMO_VINTAGE, ...DEMO_LISTINGS]);
+  const [listings,  setListings]= useState(HAS_SUPABASE ? [] : [...DEMO_VINTAGE, ...DEMO_LISTINGS]);
   const [convos,    setConvos]  = useState(HAS_SUPABASE ? [] : DEMO_CONVOS);
   const [detail,    setDetail]  = useState(null);
   const [convo,     setConvo]   = useState(null);
@@ -1219,12 +1219,11 @@ export default function LoopGenApp() {
     setListingsLoading(true);
     try {
       const data = await dbGetListings(user?.id);
-      const hasVintage = data.some(l => l.category === "Vintage & Collectibles");
-      setListings(hasVintage ? data : [...DEMO_VINTAGE, ...data]);
+      setListings(data); // Real data only — no demo mixing
       listingsLoaded.current = true;
     } catch (err) {
       console.error("loadListings:", err);
-      // Keep showing demo data on error — do not blank the feed
+      setListings([]); // Show empty on error — never show fake data to real users
     } finally {
       setListingsLoading(false);
     }
@@ -2455,12 +2454,10 @@ export default function LoopGenApp() {
       </div>
 
       <div style={{padding:"10px 14px 20px",background:"white",borderTop:"1.5px solid #f3f4f6",display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
-        <div style={{flex:1,background:"#f3f4f6",borderRadius:24,padding:"10px 16px",display:"flex",alignItems:"center",touchAction:"auto",pointerEvents:"auto"}}>
-          <input value={msgText} onChange={e=>setMsgText(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="Type a message..."
-            autoComplete="off" autoCorrect="off" spellCheck="false"
-            style={{border:"none",background:"transparent",fontSize:14,outline:"none",flex:1,color:"#374151",WebkitUserSelect:"text",userSelect:"text",touchAction:"auto",pointerEvents:"auto"}}/>
-        </div>
+        <input value={msgText} onChange={e=>setMsgText(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="Type a message..."
+          autoComplete="off" autoCorrect="off" spellCheck="false"
+          style={{flex:1,background:"#f3f4f6",borderRadius:24,padding:"10px 16px",border:"none",fontSize:14,outline:"none",color:"#374151",WebkitUserSelect:"text",userSelect:"text",touchAction:"auto",WebkitAppearance:"none",appearance:"none"}}/>
         <div onClick={sendMsg} style={{width:40,height:40,borderRadius:"50%",background:GREEN,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,boxShadow:`0 4px 14px ${GREEN}55`}}>
           <IcoSend/>
         </div>
