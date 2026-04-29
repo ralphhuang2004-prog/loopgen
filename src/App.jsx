@@ -1108,7 +1108,7 @@ export default function LoopGenApp() {
   const [msgText,   setMsgText] = useState("");
   const [aiLoading, setAiLoading]=useState(false);
   const [loading,   setLoading] = useState(false);
-  const [listingsLoading, setListingsLoading] = useState(false);
+  const [listingsLoading, setListingsLoading] = useState(HAS_SUPABASE); // true = show skeleton on first load
   const [toast,     setToast]   = useState(null);
   const [confirm,   setConfirm] = useState(null); // { msg, onConfirm }
   // P1 — Offer modal
@@ -1265,6 +1265,8 @@ export default function LoopGenApp() {
     if (s === "sell" && !sessionReady) { showToast("Loading…"); return; }
     if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
     if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); }
+    // Reset explore filters when navigating to explore fresh
+    if (s === "explore") { setSearch(""); setCatF("All"); }
     setHistory([]); setScreen(s); setDetail(null); setConvo(null);
   };
 
@@ -1701,7 +1703,7 @@ export default function LoopGenApp() {
                 img:"https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=500&q=90",
                 imgPos:"center" },
             ].map(({cat,label,bg,glow,img,imgPos,tintOpacity})=>(
-              <div key={cat} onClick={()=>{setCatF(cat);nav("explore");}}
+              <div key={cat} onClick={()=>{setCatF(cat);push("explore");}}
                 style={{
                   borderRadius:22,
                   overflow:"hidden",
@@ -1744,7 +1746,7 @@ export default function LoopGenApp() {
                 <div style={{display:"flex",alignItems:"center",gap:7}}>
                   <span style={{fontSize:15,fontWeight:800,color:"#111"}}>🔥 Trending near you</span>
                 </div>
-                <span onClick={()=>{setCatF("Vintage & Collectibles");nav("explore");}} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
+                <span onClick={()=>{setCatF("Vintage & Collectibles");push("explore");}} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
               </div>
               {/* Category banner */}
               <div style={{margin:"0 16px 12px",borderRadius:18,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
@@ -1776,6 +1778,12 @@ export default function LoopGenApp() {
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {listingsLoading
               ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i}/>)
+              : listings.length === 0
+              ? <div style={{textAlign:"center",padding:"40px 20px",color:"#9ca3af"}}>
+                  <div style={{fontSize:32,marginBottom:8}}>🛍️</div>
+                  <div style={{fontWeight:700,color:"#374151",fontSize:14,marginBottom:4}}>No listings yet</div>
+                  <div style={{fontSize:12}}>Be the first to list an item!</div>
+                </div>
               : listings.slice(0,6).map(item => (
                   <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
                 ))
@@ -1879,9 +1887,17 @@ export default function LoopGenApp() {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:60}}>
-            <div style={{fontSize:40,marginBottom:12}}>🔍</div>
-            <div style={{fontWeight:700,color:"#374151",fontSize:15,marginBottom:6}}>No listings found</div>
-            <div style={{fontSize:13}}>{search ? `Try a different search term` : `Nothing in ${catFilter} yet`}</div>
+            <div style={{fontSize:40,marginBottom:12}}>{search || catFilter !== "All" ? "🔍" : "🛍️"}</div>
+            <div style={{fontWeight:700,color:"#374151",fontSize:15,marginBottom:6}}>
+              {search ? "No results found" : catFilter !== "All" ? `Nothing in ${catFilter} yet` : "No listings yet"}
+            </div>
+            <div style={{fontSize:13,lineHeight:1.6}}>
+              {search
+                ? "Try a different search term or browse all categories"
+                : catFilter !== "All"
+                ? `Be the first to list something in ${catFilter}!`
+                : "Be the first to list an item — tap the + button below"}
+            </div>
           </div>
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
