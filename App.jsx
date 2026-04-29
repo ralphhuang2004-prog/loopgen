@@ -476,6 +476,7 @@ function Phone({ children }) {
         input,select,textarea,button{font-family:'Plus Jakarta Sans',sans-serif;}
         body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
         button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+        input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;}
         input:focus,textarea:focus,select:focus{outline:none;border-color:#1c7c45 !important;box-shadow:0 0 0 3px rgba(28,124,69,0.12);}
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -1007,11 +1008,14 @@ function mapAuthError(error, mode) {
   if (
     msg.includes("too many") ||
     msg.includes("rate limit") ||
+    msg.includes("email rate limit") ||
     msg.includes("try again later") ||
+    msg.includes("for security purposes") ||
     code === "over_request_rate_limit" ||
+    code === "email_rate_limit_exceeded" ||
     code === 429
   ) {
-    return "Too many attempts. Please wait a minute and try again.";
+    return "You've made too many attempts. Please wait a few minutes and try again.";
   }
 
   // ── Network / connection error ────────────────────────
@@ -1161,8 +1165,13 @@ export default function LoopGenApp() {
     if (screen === "home" || screen === "explore") {
       loadListings();
     }
-    if (screen === "chats" && user) {
-      loadConversations();
+    if (screen === "chats") {
+      if (user) {
+        setConvos([]); // Clear any demo/stale data first
+        loadConversations();
+      } else {
+        setConvos([]); // Guest sees empty chat list, not demo data
+      }
     }
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
@@ -2446,10 +2455,11 @@ export default function LoopGenApp() {
       </div>
 
       <div style={{padding:"10px 14px 20px",background:"white",borderTop:"1.5px solid #f3f4f6",display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
-        <div style={{flex:1,background:"#f3f4f6",borderRadius:24,padding:"10px 16px",display:"flex",alignItems:"center"}}>
+        <div style={{flex:1,background:"#f3f4f6",borderRadius:24,padding:"10px 16px",display:"flex",alignItems:"center",touchAction:"auto",pointerEvents:"auto"}}>
           <input value={msgText} onChange={e=>setMsgText(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="Type a message..."
-            style={{border:"none",background:"transparent",fontSize:14,outline:"none",flex:1,color:"#374151"}}/>
+            autoComplete="off" autoCorrect="off" spellCheck="false"
+            style={{border:"none",background:"transparent",fontSize:14,outline:"none",flex:1,color:"#374151",WebkitUserSelect:"text",userSelect:"text",touchAction:"auto",pointerEvents:"auto"}}/>
         </div>
         <div onClick={sendMsg} style={{width:40,height:40,borderRadius:"50%",background:GREEN,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,boxShadow:`0 4px 14px ${GREEN}55`}}>
           <IcoSend/>
