@@ -1344,6 +1344,7 @@ export default function LoopGenApp() {
       console.error("openSellerChat:", e);
       showToast("Couldn't open chat. Try again.");
     }
+  };
 
   const sendMsg = async () => {
     if (!msgText.trim()) return;
@@ -2322,7 +2323,7 @@ export default function LoopGenApp() {
     </div>
   );
 
-    // ════════════════════════════
+  // ════════════════════════════
   //  PROFILE
   // ════════════════════════════
   if (screen === "profile") return (
