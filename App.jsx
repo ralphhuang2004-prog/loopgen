@@ -1521,54 +1521,59 @@ export default function LoopGenApp() {
     push("chat");
   };
 
-  const openSellerChat = async (item) => {
+  const openSellerChat = async (item, autoMessage = null) => {
     if (!sessionReady) { showToast("Loading…"); return; }
     if (!user) { showToast("Sign in to message seller"); push("auth"); return; }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
     showToast("💬 Opening chat…");
 
-    // Build a contextual mock convo — always available regardless of backend
-    const mockConvo = {
-      id: `mock_${item.id}`,
-      other_user: item.seller_username || "Seller",
-      other_avatar: null,
-      listing_title: item.title || "Item",
-      last_message: "",
-      last_time: "now",
-      unread: 0,
-      online: false,
-      messages: [],
-    };
-
-    // No Supabase connected — open mock chat (demo mode only)
+    // No Supabase — open mock chat (demo mode only)
     if (!supabase || !item.seller_id) {
+      const mockConvo = {
+        id: `mock_${item.id}`,
+        other_user: item.seller_username || "Seller",
+        other_avatar: null,
+        listing_title: item.title || "Item",
+        last_message: "", last_time: "now", unread: 0, online: false, messages: [],
+      };
       openConvo(mockConvo);
       return;
     }
 
     try {
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (!conv) {
-        showToast("Couldn't open chat. Please try again.");
-        return;
-      }
+      if (!conv) { showToast("Couldn't open chat. Please try again."); return; }
+
       const enriched = {
         ...conv,
         other_user: item.seller_username || "Seller",
         other_avatar: item.seller_avatar || null,
         listing_title: item.title || "Item",
-        last_message: "",
-        last_time: "now",
-        unread: 0,
-        online: false,
+        last_message: "", last_time: "now", unread: 0, online: false,
       };
-      // Add to convos list if not already there
       setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
-      openConvo(enriched);
+
+      // If an autoMessage was passed (e.g. from offer), send it immediately after opening
+      if (autoMessage) {
+        await openConvo(enriched);
+        // Small delay to ensure convo state is set before sending
+        setTimeout(async () => {
+          try {
+            const saved = await dbSendMessage(conv.id, user.id, autoMessage);
+            if (saved) {
+              setChatMsgs(m => [...m, { ...saved, from_me: true }]);
+              setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+            }
+          } catch (e) {
+            console.error("Auto-send offer message failed:", e);
+          }
+        }, 300);
+      } else {
+        openConvo(enriched);
+      }
     } catch (e) {
       console.error("openSellerChat error:", e);
       showToast("Couldn't open chat. Please try again.");
-      // DO NOT fall back to mock — user should know messages won't persist
     }
   };
 
@@ -2235,9 +2240,11 @@ export default function LoopGenApp() {
             // Always update local state regardless of DB outcome
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
+            const capturedPrice = offerPrice;
             setOfferModal(null);
-            showToast(`Offer of $${offerPrice} sent to seller`);
-            openSellerChat(item);
+            showToast(`Offer of $${capturedPrice} sent to seller`);
+            // Auto-send offer message in chat so seller sees it
+            openSellerChat(item, `💰 Hi! I'd like to offer $${capturedPrice} for "${item.title}". Is this price okay with you?`);
           }}
         />
         <ReportModal
@@ -2597,6 +2604,8 @@ export default function LoopGenApp() {
           autoCapitalize="sentences"
           spellCheck="false"
           enterKeyHint="send"
+          readOnly={false}
+          disabled={false}
           style={{
             flex:1,
             background:"#f3f4f6",
@@ -2612,6 +2621,8 @@ export default function LoopGenApp() {
             WebkitAppearance:"none",
             appearance:"none",
             minHeight:44,
+            cursor:"text",
+            pointerEvents:"auto",
           }}
         />
         <button
