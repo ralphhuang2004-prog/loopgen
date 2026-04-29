@@ -499,12 +499,14 @@ function Phone({ children }) {
         body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
         button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
         input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;}
+        @supports(height:100dvh){body{height:100dvh;}}
+        input[type="text"],input:not([type]),textarea{font-size:16px !important;} /* Prevent iOS zoom on focus */
         input:focus,textarea:focus,select:focus{outline:none;border-color:#1c7c45 !important;box-shadow:0 0 0 3px rgba(28,124,69,0.12);}
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
       `}</style>
-      <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
+      <div style={{width:"min(390px,100vw)",height:"min(844px,100dvh)",background:"white",borderRadius:"clamp(0px,4vw,52px)",overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
         {children}
       </div>
     </div>
@@ -2476,6 +2478,13 @@ export default function LoopGenApp() {
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"14px 16px",background:"#f8f9fa",display:"flex",flexDirection:"column",gap:10}}>
+        {chatMsgs.length === 0 && (
+          <div style={{textAlign:"center",padding:"40px 20px",color:"#9ca3af"}}>
+            <div style={{fontSize:36,marginBottom:10}}>👋</div>
+            <div style={{fontWeight:700,color:"#374151",fontSize:14,marginBottom:4}}>Say hi to start the conversation</div>
+            <div style={{fontSize:12}}>Your messages are private between you and the seller.</div>
+          </div>
+        )}
         {chatMsgs.map((m, i) => (
           <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:7}}>
             {!(m.from_me||m.from==="me") && (
@@ -2491,16 +2500,52 @@ export default function LoopGenApp() {
         <div ref={chatEndRef}/>
       </div>
 
-      <div style={{padding:"10px 14px 20px",background:"white",borderTop:"1.5px solid #f3f4f6",display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
-        <input value={msgText} onChange={e=>setMsgText(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="Type a message..."
-          autoComplete="off" autoCorrect="off" spellCheck="false"
-          style={{flex:1,background:"#f3f4f6",borderRadius:24,padding:"10px 16px",border:"none",fontSize:14,outline:"none",color:"#374151",WebkitUserSelect:"text",userSelect:"text",touchAction:"auto",WebkitAppearance:"none",appearance:"none"}}/>
-        <div onClick={sendMsg} style={{width:40,height:40,borderRadius:"50%",background:GREEN,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,boxShadow:`0 4px 14px ${GREEN}55`}}>
+      <div style={{padding:"10px 14px env(safe-area-inset-bottom,16px)",background:"white",borderTop:"1.5px solid #f3f4f6",display:"flex",gap:10,alignItems:"center",flexShrink:0,position:"relative",zIndex:30}}>
+        <input
+          value={msgText}
+          onChange={e => setMsgText(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && sendMsg()}
+          placeholder="Type a message..."
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="sentences"
+          spellCheck="false"
+          enterKeyHint="send"
+          style={{
+            flex:1,
+            background:"#f3f4f6",
+            borderRadius:24,
+            padding:"12px 18px",
+            border:"none",
+            fontSize:16,
+            outline:"none",
+            color:"#374151",
+            WebkitUserSelect:"text",
+            userSelect:"text",
+            touchAction:"auto",
+            WebkitAppearance:"none",
+            appearance:"none",
+            minHeight:44,
+          }}
+        />
+        <button
+          onClick={sendMsg}
+          disabled={!msgText.trim()}
+          style={{
+            width:44,height:44,borderRadius:"50%",
+            background:msgText.trim() ? GREEN : "#d1fae5",
+            border:"none",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            cursor:msgText.trim() ? "pointer" : "default",
+            flexShrink:0,
+            boxShadow:msgText.trim() ? `0 4px 14px ${GREEN}55` : "none",
+            transition:"all 0.15s",
+            WebkitTapHighlightColor:"transparent",
+          }}
+        >
           <IcoSend/>
-        </div>
+        </button>
       </div>
-      <BottomNav active="chats" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
   );
