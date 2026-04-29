@@ -2553,59 +2553,96 @@ export default function LoopGenApp() {
   //  CHAT
   // ════════════════════════════
   if (screen === "chat" && convo) return (
-    <Phone>
-      <StatusBar/>
-      <div style={{padding:"4px 16px 12px",display:"flex",alignItems:"center",gap:10,borderBottom:"1.5px solid #f3f4f6",flexShrink:0}}>
-        <div onClick={pop} style={{cursor:"pointer",padding:"4px 6px 4px 0"}}><IcoBack/></div>
-        <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16}}>
+    // Chat uses FULL VIEWPORT — not the Phone frame
+    // Phone frame has overflow:hidden which clips the input when keyboard opens on mobile
+    <div style={{
+      fontFamily:"'Plus Jakarta Sans',sans-serif",
+      position:"fixed", top:0, left:0, right:0, bottom:0,
+      background:"white",
+      display:"flex", flexDirection:"column",
+      zIndex:100,
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+        *{box-sizing:border-box;}
+        input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;font-family:'Plus Jakarta Sans',sans-serif;}
+        input[type="text"],input:not([type]),textarea{font-size:16px !important;}
+      `}</style>
+
+      {/* Header */}
+      <div style={{
+        padding:"env(safe-area-inset-top,12px) 16px 12px",
+        paddingTop:"max(env(safe-area-inset-top,12px),12px)",
+        display:"flex", alignItems:"center", gap:12,
+        borderBottom:"1px solid #f0f1f3",
+        background:"white", flexShrink:0,
+        boxShadow:"0 1px 8px rgba(0,0,0,0.06)",
+      }}>
+        <div onClick={pop} style={{cursor:"pointer",padding:"8px 8px 8px 0",WebkitTapHighlightColor:"transparent"}}>
+          <IcoBack/>
+        </div>
+        <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16,flexShrink:0}}>
           {(convo.other_user||"U")[0].toUpperCase()}
         </div>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{convo.other_user || convo.name}</div>
-          <div style={{fontSize:11,color:convo.online?"#22c55e":"#9ca3af",fontWeight:500}}>{convo.online?"Online":"Offline"}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:15,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{convo.other_user || convo.name}</div>
+          <div style={{fontSize:11,color:"#9ca3af",fontWeight:500}}>Re: {convo.listing_title || "Item"}</div>
         </div>
       </div>
 
-      <div style={{flex:1,overflowY:"auto",padding:"14px 16px",background:"#f8f9fa",display:"flex",flexDirection:"column",gap:10}}>
+      {/* Messages */}
+      <div style={{flex:1,overflowY:"auto",padding:"16px",background:"#f8f9fa",display:"flex",flexDirection:"column",gap:10}}>
         {chatMsgs.length === 0 && (
-          <div style={{textAlign:"center",padding:"40px 20px",color:"#9ca3af"}}>
-            <div style={{fontSize:36,marginBottom:10}}>👋</div>
-            <div style={{fontWeight:700,color:"#374151",fontSize:14,marginBottom:4}}>Say hi to start the conversation</div>
-            <div style={{fontSize:12}}>Your messages are private between you and the seller.</div>
+          <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af"}}>
+            <div style={{fontSize:40,marginBottom:12}}>👋</div>
+            <div style={{fontWeight:700,color:"#374151",fontSize:15,marginBottom:6}}>Say hi to start the conversation</div>
+            <div style={{fontSize:13,lineHeight:1.6}}>Your messages are private between<br/>you and the seller.</div>
           </div>
         )}
         {chatMsgs.map((m, i) => (
-          <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:7}}>
+          <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:8}}>
             {!(m.from_me||m.from==="me") && (
-              <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:11,flexShrink:0}}>
+              <div style={{width:28,height:28,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:11,flexShrink:0}}>
                 {(convo.other_user||"U")[0].toUpperCase()}
               </div>
             )}
-            <div style={{maxWidth:"72%"}}>
-              <div style={{padding:"11px 15px",fontSize:14,fontWeight:500,lineHeight:1.45,borderRadius:(m.from_me||m.from==="me")?"20px 20px 5px 20px":"20px 20px 20px 5px",background:(m.from_me||m.from==="me")?(m._failed?"#fecaca":GREEN):"white",color:(m.from_me||m.from==="me")?"white":"#111",boxShadow:(m.from_me||m.from==="me")?`0 3px 12px ${GREEN}33`:"0 1px 6px rgba(0,0,0,0.08)",opacity:m._pending?0.7:1,transition:"opacity 0.2s"}}>
+            <div style={{maxWidth:"75%"}}>
+              <div style={{
+                padding:"12px 16px",fontSize:15,fontWeight:500,lineHeight:1.5,
+                borderRadius:(m.from_me||m.from==="me")?"20px 20px 4px 20px":"20px 20px 20px 4px",
+                background:(m.from_me||m.from==="me")?(m._failed?"#fecaca":GREEN):"white",
+                color:(m.from_me||m.from==="me")?"white":"#111",
+                boxShadow:(m.from_me||m.from==="me")?`0 2px 10px ${GREEN}33`:"0 1px 4px rgba(0,0,0,0.08)",
+                opacity:m._pending?0.75:1,
+              }}>
                 {m.content || m.text}
               </div>
-              {m._failed && <div style={{fontSize:10,color:"#ef4444",textAlign:"right",marginTop:2,paddingRight:4}}>Failed to send · tap to retry</div>}
-              {m._pending && <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",textAlign:"right",marginTop:2,paddingRight:4}}>Sending…</div>}
+              {m._failed && <div style={{fontSize:11,color:"#ef4444",textAlign:"right",marginTop:3}}>Failed to send</div>}
+              {m._pending && <div style={{fontSize:11,color:"#9ca3af",textAlign:"right",marginTop:3}}>Sending…</div>}
             </div>
           </div>
         ))}
         <div ref={chatEndRef}/>
       </div>
 
-      <div style={{padding:"10px 14px env(safe-area-inset-bottom,16px)",background:"white",borderTop:"1.5px solid #f3f4f6",display:"flex",gap:10,alignItems:"center",flexShrink:0,position:"relative",zIndex:30}}>
+      {/* Input — sits at natural bottom, moves up with keyboard automatically */}
+      <div style={{
+        background:"white",
+        borderTop:"1px solid #f0f1f3",
+        padding:"12px 16px",
+        paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",
+        display:"flex", gap:10, alignItems:"center",
+      }}>
         <input
           value={msgText}
           onChange={e => setMsgText(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && sendMsg()}
+          onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMsg()}
           placeholder="Type a message..."
           autoComplete="off"
-          autoCorrect="off"
+          autoCorrect="on"
           autoCapitalize="sentences"
-          spellCheck="false"
+          spellCheck="true"
           enterKeyHint="send"
-          readOnly={false}
-          disabled={false}
           style={{
             flex:1,
             background:"#f3f4f6",
@@ -2614,27 +2651,20 @@ export default function LoopGenApp() {
             border:"none",
             fontSize:16,
             outline:"none",
-            color:"#374151",
-            WebkitUserSelect:"text",
-            userSelect:"text",
-            touchAction:"auto",
+            color:"#111",
+            fontFamily:"'Plus Jakarta Sans',sans-serif",
             WebkitAppearance:"none",
             appearance:"none",
-            minHeight:44,
-            cursor:"text",
-            pointerEvents:"auto",
           }}
         />
         <button
           onClick={sendMsg}
-          disabled={!msgText.trim()}
           style={{
-            width:44,height:44,borderRadius:"50%",
-            background:msgText.trim() ? GREEN : "#d1fae5",
+            width:46, height:46, borderRadius:"50%",
+            background:msgText.trim() ? GREEN : "#e5e7eb",
             border:"none",
-            display:"flex",alignItems:"center",justifyContent:"center",
-            cursor:msgText.trim() ? "pointer" : "default",
-            flexShrink:0,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            cursor:"pointer", flexShrink:0,
             boxShadow:msgText.trim() ? `0 4px 14px ${GREEN}55` : "none",
             transition:"all 0.15s",
             WebkitTapHighlightColor:"transparent",
@@ -2644,7 +2674,7 @@ export default function LoopGenApp() {
         </button>
       </div>
       <Toast msg={toast}/>
-    </Phone>
+    </div>
   );
 
   // ════════════════════════════
