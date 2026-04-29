@@ -314,21 +314,44 @@ async function dbSendMessage(conversationId, senderId, content) {
 
 async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
   if (!supabase) return null;
-  // Check existing — use maybeSingle() so no error is thrown when no row exists
-  const { data: existing } = await supabase
+
+  // Step 1: Look for exact existing conversation (buyer + seller + listing)
+  const { data: existing, error: fetchErr } = await supabase
     .from("conversations")
     .select("*")
     .eq("listing_id", listingId)
     .eq("buyer_id", buyerId)
+    .eq("seller_id", sellerId)
     .maybeSingle();
+
+  if (fetchErr) {
+    console.error("getConversation fetch error:", fetchErr);
+    // Don't throw — try to create instead
+  }
+
   if (existing) return existing;
-  // Create new
+
+  // Step 2: Create new conversation
   const { data, error } = await supabase
     .from("conversations")
     .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
     .select()
     .single();
-  if (error) throw error;
+
+  if (error) {
+    // Step 3: If insert fails (e.g. race condition created it already), try fetching again
+    console.error("getOrCreateConversation insert error:", error);
+    const { data: retry } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("listing_id", listingId)
+      .eq("buyer_id", buyerId)
+      .eq("seller_id", sellerId)
+      .maybeSingle();
+    if (retry) return retry;
+    throw error;
+  }
+
   return data;
 }
 
@@ -1220,7 +1243,17 @@ export default function LoopGenApp() {
         payload => {
           const msg = payload.new;
           setChatMsgs(prev => {
-            if (prev.find(m => m.id === msg.id)) return prev;
+            // If already have real message with this id, skip
+            if (prev.find(m => m.id === msg.id && !m._pending)) return prev;
+            // Replace any pending/optimistic message with same content sent by me
+            const optimisticIdx = prev.findIndex(m =>
+              m._pending && m.from_me && m.content === msg.content && msg.sender_id === user?.id
+            );
+            if (optimisticIdx !== -1) {
+              const next = [...prev];
+              next[optimisticIdx] = { ...msg, from_me: true };
+              return next;
+            }
             return [...prev, { ...msg, from_me: msg.sender_id === user?.id }];
           });
           setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -1493,45 +1526,80 @@ export default function LoopGenApp() {
       messages: [],
     };
 
+    // No Supabase connected — open mock chat (demo mode only)
+    if (!supabase || !item.seller_id) {
+      openConvo(mockConvo);
+      return;
+    }
+
     try {
-      if (supabase && item.seller_id) {
-        const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-        if (conv) {
-          const enriched = {
-            ...conv,
-            other_user: item.seller_username || "Seller",
-            other_avatar: item.seller_avatar || null,
-            listing_title: item.title || "Item",
-            last_message: "",
-            last_time: "now",
-            unread: 0,
-            online: false,
-          };
-          // Add to convos list if not already there
-          setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
-          openConvo(enriched);
-          return;
-        }
+      const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
+      if (!conv) {
+        showToast("Couldn't open chat. Please try again.");
+        return;
       }
-      // No Supabase or no seller_id — open contextual mock chat (never a dead button)
-      openConvo(mockConvo);
-    } catch {
-      // Backend failure — still open contextual mock chat, no crash
-      openConvo(mockConvo);
+      const enriched = {
+        ...conv,
+        other_user: item.seller_username || "Seller",
+        other_avatar: item.seller_avatar || null,
+        listing_title: item.title || "Item",
+        last_message: "",
+        last_time: "now",
+        unread: 0,
+        online: false,
+      };
+      // Add to convos list if not already there
+      setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+      openConvo(enriched);
+    } catch (e) {
+      console.error("openSellerChat error:", e);
+      showToast("Couldn't open chat. Please try again.");
+      // DO NOT fall back to mock — user should know messages won't persist
     }
   };
 
   const sendMsg = async () => {
     if (!msgText.trim()) return;
-    const text = msgText;
+    const text = msgText.trim();
     setMsgText("");
-    const time = new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
+
+    const optId = `opt_${Date.now()}`;
+    const optimistic = {
+      id: optId,
+      from_me: true,
+      content: text,
+      created_at: new Date().toISOString(),
+      sender_id: user?.id,
+      _pending: true,
+    };
+
+    // Show immediately (optimistic UI)
     setChatMsgs(m => [...m, optimistic]);
     setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+
+    // Save to DB
     if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
-      try { await dbSendMessage(convo.id, user.id, text); }
-      catch { showToast("Message didn't send. Please try again."); }
+      try {
+        const saved = await dbSendMessage(convo.id, user.id, text);
+        if (saved) {
+          // Replace optimistic with real DB message (has real id + created_at)
+          setChatMsgs(m => m.map(msg =>
+            msg.id === optId
+              ? { ...saved, from_me: true }
+              : msg
+          ));
+        }
+      } catch (e) {
+        // Mark optimistic as failed — don't remove, let user see it grayed
+        setChatMsgs(m => m.map(msg =>
+          msg.id === optId ? { ...msg, _failed: true } : msg
+        ));
+        showToast("Message couldn't send. Check your connection.");
+      }
+    } else if (String(convo?.id || "").startsWith("mock_")) {
+      // Mock convo — warn user their messages won't persist
+      // (This only happens when seller_id was missing from listing)
+      console.warn("Message sent to mock convo — not persisted");
     }
   };
 
@@ -2492,8 +2560,12 @@ export default function LoopGenApp() {
                 {(convo.other_user||"U")[0].toUpperCase()}
               </div>
             )}
-            <div style={{maxWidth:"72%",padding:"11px 15px",fontSize:14,fontWeight:500,lineHeight:1.45,borderRadius:(m.from_me||m.from==="me")?"20px 20px 5px 20px":"20px 20px 20px 5px",background:(m.from_me||m.from==="me")?GREEN:"white",color:(m.from_me||m.from==="me")?"white":"#111",boxShadow:(m.from_me||m.from==="me")?`0 3px 12px ${GREEN}33`:"0 1px 6px rgba(0,0,0,0.08)"}}>
-              {m.content || m.text}
+            <div style={{maxWidth:"72%"}}>
+              <div style={{padding:"11px 15px",fontSize:14,fontWeight:500,lineHeight:1.45,borderRadius:(m.from_me||m.from==="me")?"20px 20px 5px 20px":"20px 20px 20px 5px",background:(m.from_me||m.from==="me")?(m._failed?"#fecaca":GREEN):"white",color:(m.from_me||m.from==="me")?"white":"#111",boxShadow:(m.from_me||m.from==="me")?`0 3px 12px ${GREEN}33`:"0 1px 6px rgba(0,0,0,0.08)",opacity:m._pending?0.7:1,transition:"opacity 0.2s"}}>
+                {m.content || m.text}
+              </div>
+              {m._failed && <div style={{fontSize:10,color:"#ef4444",textAlign:"right",marginTop:2,paddingRight:4}}>Failed to send · tap to retry</div>}
+              {m._pending && <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",textAlign:"right",marginTop:2,paddingRight:4}}>Sending…</div>}
             </div>
           </div>
         ))}
