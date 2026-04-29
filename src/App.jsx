@@ -242,38 +242,36 @@ async function dbToggleSave(listingId, userId, isSaved) {
 
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
+  // Use simple reliable query — no FK alias joins that may fail
   const { data, error } = await supabase
     .from("conversations")
-    .select(`
-      *,
-      buyer_profile:profiles!conversations_buyer_id_fkey(username, avatar_url),
-      seller_profile:profiles!conversations_seller_id_fkey(username, avatar_url),
-      listing:listing_id(title),
-      messages(content, created_at, sender_id)
-    `)
+    .select("*, listing:listing_id(title), messages(content, created_at, sender_id)")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
-  if (error) {
-    // Fallback: simpler query without nested joins if FK alias fails
-    console.error("getConversations — trying simple query:", error);
-    const { data: simple } = await supabase
-      .from("conversations")
-      .select("*, listing:listing_id(title), messages(content, created_at, sender_id)")
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-      .order("updated_at", { ascending: false });
-    if (!simple) return []; // Never return demo convos to real users
-    return (simple || []).map(c => {
-      const isBuyer = c.buyer_id === userId;
-      const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
-      return { ...c, other_user: isBuyer ? "Seller" : "Buyer", other_avatar: null,
-        listing_title: c.listing?.title || "Item",
-        last_message: lastMsg?.content || "", last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
-        unread: 0, online: false };
-    });
+
+  if (error || !data) {
+    console.error("getConversations error:", error);
+    return [];
   }
-  return (data || []).map(c => {
+
+  // Fetch profiles for all participants separately (avoids FK alias failures)
+  const participantIds = [...new Set(
+    data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean)
+  )].filter(id => id !== userId);
+
+  let profileMap = {};
+  if (participantIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", participantIds);
+    (profiles || []).forEach(p => { profileMap[p.id] = p; });
+  }
+
+  return data.map(c => {
     const isBuyer = c.buyer_id === userId;
-    const otherProfile = isBuyer ? c.seller_profile : c.buyer_profile;
+    const otherId = isBuyer ? c.seller_id : c.buyer_id;
+    const otherProfile = profileMap[otherId];
     const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
     return {
       ...c,
@@ -315,23 +313,30 @@ async function dbSendMessage(conversationId, senderId, content) {
 async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
   if (!supabase) return null;
 
-  // Step 1: Look for exact existing conversation (buyer + seller + listing)
+  console.log("[LoopGen Chat] Looking up conversation:", { listingId, buyerId, sellerId });
+
+  // Step 1: Look for existing conversation — check BOTH role directions
+  // (buyer could be seller in another context — be safe)
   const { data: existing, error: fetchErr } = await supabase
     .from("conversations")
     .select("*")
     .eq("listing_id", listingId)
-    .eq("buyer_id", buyerId)
-    .eq("seller_id", sellerId)
+    .or(`and(buyer_id.eq.${buyerId},seller_id.eq.${sellerId}),and(buyer_id.eq.${sellerId},seller_id.eq.${buyerId})`)
     .maybeSingle();
 
   if (fetchErr) {
-    console.error("getConversation fetch error:", fetchErr);
-    // Don't throw — try to create instead
+    console.error("[LoopGen Chat] Lookup error:", fetchErr.message);
+    // Don't throw — continue to create
   }
 
-  if (existing) return existing;
+  if (existing) {
+    console.log("[LoopGen Chat] ✅ REUSING existing conversation:", existing.id);
+    return existing;
+  }
 
-  // Step 2: Create new conversation
+  console.log("[LoopGen Chat] 🆕 Creating new conversation...");
+
+  // Step 2: Create new conversation (buyer_id = current user who initiates)
   const { data, error } = await supabase
     .from("conversations")
     .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
@@ -339,19 +344,26 @@ async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
     .single();
 
   if (error) {
-    // Step 3: If insert fails (e.g. race condition created it already), try fetching again
-    console.error("getOrCreateConversation insert error:", error);
-    const { data: retry } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("listing_id", listingId)
-      .eq("buyer_id", buyerId)
-      .eq("seller_id", sellerId)
-      .maybeSingle();
-    if (retry) return retry;
+    console.error("[LoopGen Chat] Insert error:", error.message, error.code);
+
+    // If UNIQUE violation — someone else created it simultaneously, fetch it
+    if (error.code === "23505") {
+      console.log("[LoopGen Chat] Unique conflict — fetching existing...");
+      const { data: retry } = await supabase
+        .from("conversations")
+        .select("*")
+        .eq("listing_id", listingId)
+        .or(`and(buyer_id.eq.${buyerId},seller_id.eq.${sellerId}),and(buyer_id.eq.${sellerId},seller_id.eq.${buyerId})`)
+        .maybeSingle();
+      if (retry) {
+        console.log("[LoopGen Chat] ✅ Recovered conversation:", retry.id);
+        return retry;
+      }
+    }
     throw error;
   }
 
+  console.log("[LoopGen Chat] ✅ Created new conversation:", data.id);
   return data;
 }
 
@@ -1496,12 +1508,14 @@ export default function LoopGenApp() {
   // ── Chat ──────────────────────────────────────────────
   const openConvo = async (c) => {
     setConvo(c);
-    // UUID ids are strings — check truthy and not a mock id
     const isRealConvo = supabase && user && c.id && !String(c.id).startsWith("mock_");
+    console.log("[LoopGen Chat] openConvo:", { id: c.id, isReal: isRealConvo, listing: c.listing_title });
     if (isRealConvo) {
       const msgs = await dbGetMessages(c.id);
+      console.log("[LoopGen Chat] Loaded", msgs.length, "messages for convo", c.id);
       setChatMsgs(msgs.map(m => ({...m, from_me: m.sender_id === user.id})));
     } else {
+      console.log("[LoopGen Chat] Mock convo — messages not persisted");
       setChatMsgs(c.messages || []);
     }
     push("chat");
