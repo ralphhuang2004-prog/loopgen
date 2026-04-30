@@ -938,18 +938,11 @@ function HomeTicker() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  CHAT SCREEN — fully self-contained, local state + optional Supabase
+//  CHAT SCREEN — controlled: messages live in parent store
+//  props: sellerName, listingTitle, messages[], onSend(msg), onBack
 // ═══════════════════════════════════════════════════════
-function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
+function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
-  const [messages, setMessages] = useState(
-    (initialMessages || []).map((m, i) => ({
-      id: m.id || `init_${i}`,
-      from_me: !!(m.from_me || m.from === "me"),
-      content: m.content || m.text || "",
-      time: m.created_at || "",
-    }))
-  );
   const endRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -961,17 +954,13 @@ function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
   const send = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    setMessages(prev => [
-      ...prev,
-      {
-        id: `msg_${Date.now()}`,
-        from_me: true,
-        content: trimmed,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ]);
+    onSend({
+      id: `msg_${Date.now()}`,
+      from_me: true,
+      content: trimmed,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    });
     setText("");
-    // Keep focus on input after sending
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
@@ -1208,7 +1197,10 @@ export default function LoopGenApp() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
   // chatContext drives the new ChatScreen component
-  const [chatContext, setChatContext] = useState(null); // { sellerName, listingTitle, initialMessages }
+  const [chatContext, setChatContext] = useState(null); // { id, sellerName, listingTitle }
+  // localChatStore: persists messages across navigations, keyed by chat id
+  // { [chatId]: [ { id, from_me, content, time } ] }
+  const [localChatStore, setLocalChatStore] = useState({});
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
 
@@ -1543,14 +1535,37 @@ export default function LoopGenApp() {
   };
 
   // ── Chat ──────────────────────────────────────────────
-  // openChat: the single entry point — works for guests and logged-in users
-  const openChat = (item, initialMessages = []) => {
+  // Derive a stable key for a conversation so history persists across navigations
+  const chatKey = (item) => {
+    const seller = item.seller_username || item.other_user || "seller";
+    const listing = item.id || item.listing_id || item.title || "item";
+    return `chat_${seller}_${listing}`.replace(/\s+/g, "_").toLowerCase();
+  };
+
+  // openChat: single entry point — seeds store with seed messages if this convo is new
+  const openChat = (item, seedMessages = []) => {
+    const key = chatKey(item);
+    // Only seed if this convo has never been opened before
+    setLocalChatStore(store => {
+      if (!store[key] || store[key].length === 0) {
+        return { ...store, [key]: seedMessages };
+      }
+      return store; // keep existing history
+    });
     setChatContext({
+      id: key,
       sellerName: item.seller_username || item.other_user || "Seller",
       listingTitle: item.title || item.listing_title || "Item",
-      initialMessages,
     });
     push("chat");
+  };
+
+  // addMessageToStore: called by ChatScreen when user sends a message
+  const addMessageToStore = (key, msg) => {
+    setLocalChatStore(store => ({
+      ...store,
+      [key]: [...(store[key] || []), msg],
+    }));
   };
 
   // Legacy: used by the chats list screen
@@ -1568,7 +1583,6 @@ export default function LoopGenApp() {
   const openSellerChat = async (item) => {
     // Always open chat — no auth gate for demo/guest mode
     if (!supabase || !user) {
-      // Guest / demo mode: open local chat immediately
       openChat(item, []);
       return;
     }
@@ -2197,16 +2211,22 @@ export default function LoopGenApp() {
             const price = offerPrice;
             setOfferModal(null);
             showToast(`Offer of $${price} sent!`);
-            // Open chat with offer pre-filled as first message
+            // Seed the chat store with the offer message, then open chat
+            const key = `chat_${(item.seller_username||"seller")}_${(item.id||item.title||"item")}`.replace(/\s+/g,"_").toLowerCase();
+            const offerMsg = {
+              id: `offer_${Date.now()}`,
+              from_me: true,
+              content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            };
+            setLocalChatStore(store => ({
+              ...store,
+              [key]: [...(store[key] || []), offerMsg],
+            }));
             setChatContext({
+              id: key,
               sellerName: item.seller_username || "Seller",
               listingTitle: item.title || "Item",
-              initialMessages: [{
-                id: `offer_${Date.now()}`,
-                from_me: true,
-                content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              }],
             });
             push("chat");
           }}
@@ -2517,7 +2537,8 @@ export default function LoopGenApp() {
     <ChatScreen
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
-      initialMessages={chatContext?.initialMessages || []}
+      messages={localChatStore[chatContext?.id] || []}
+      onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
       onBack={pop}
     />
   );
