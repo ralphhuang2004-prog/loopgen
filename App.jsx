@@ -29,7 +29,6 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const BUILD_VERSION = "CHAT-FIX-002";
 
 // ── LoopGen Logo component — use everywhere branding is needed ────────────────
 // height: desired display height in px. Width scales automatically (ratio ~1.61:1).
@@ -175,9 +174,9 @@ const DEMO_CONVOS = [
 
 async function dbGetListings(userId) {
   if (!supabase) return [...DEMO_VINTAGE, ...DEMO_LISTINGS];
-  const { data: rawListings, error: listError } = await supabase
+  const { data: rawListings, error } = await supabase
     .from("listings").select("*").eq("status", "active").order("created_at", { ascending: false });
-  if (listError || !rawListings || rawListings.length === 0) return [];
+  if (error || !rawListings || rawListings.length === 0) return [];
   const sellerIds = [...new Set(rawListings.map(l => l.seller_id).filter(Boolean))];
   let profileMap = {};
   if (sellerIds.length > 0) {
@@ -192,7 +191,7 @@ async function dbGetListings(userId) {
   return rawListings.map(l => ({
     ...l,
     seller_username: profileMap[l.seller_id]?.username || "LoopGen User",
-    seller_avatar:   profileMap[l.seller_id]?.avatar_url || null,
+    seller_avatar: profileMap[l.seller_id]?.avatar_url || null,
     is_saved: savedSet.has(l.id),
     image_urls: l.image_urls || [], tags: l.tags || [], time: timeSince(l.created_at),
   }));
@@ -223,20 +222,20 @@ async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
   const { data, error } = await supabase
     .from("conversations")
-    .select("*, listing:listing_id(title), messages(content, created_at, sender_id)")
+    .select(`
+      *,
+      buyer:buyer_id(id, profiles(username, avatar_url)),
+      seller:seller_id(id, profiles(username, avatar_url)),
+      listing:listing_id(title),
+      messages(content, created_at, sender_id)
+    `)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
-  if (error || !data) { console.error("getConversations:", error); return []; }
-  const participantIds = [...new Set(data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))].filter(id => id !== userId);
-  let profileMap = {};
-  if (participantIds.length > 0) {
-    const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", participantIds);
-    (profiles || []).forEach(p => { profileMap[p.id] = p; });
-  }
+  if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
   return (data || []).map(c => {
+    // Determine which participant is the "other" person
     const isBuyer = c.buyer_id === userId;
-    const otherId = isBuyer ? c.seller_id : c.buyer_id;
-    const otherProfile = profileMap[otherId];
+    const otherProfile = isBuyer ? c.seller?.profiles : c.buyer?.profiles;
     const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
     return {
       ...c,
@@ -277,26 +276,21 @@ async function dbSendMessage(conversationId, senderId, content) {
 
 async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
   if (!supabase) return null;
-  // Look for existing — bidirectional check
+  // Check existing — use maybeSingle() so no error is thrown when no row exists
   const { data: existing } = await supabase
-    .from("conversations").select("*").eq("listing_id", listingId)
-    .or(`and(buyer_id.eq.${buyerId},seller_id.eq.${sellerId}),and(buyer_id.eq.${sellerId},seller_id.eq.${buyerId})`)
+    .from("conversations")
+    .select("*")
+    .eq("listing_id", listingId)
+    .eq("buyer_id", buyerId)
     .maybeSingle();
-  if (existing) { console.log("[Chat] Reusing conversation:", existing.id); return existing; }
+  if (existing) return existing;
+  // Create new
   const { data, error } = await supabase
     .from("conversations")
     .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
-    .select().single();
-  if (error) {
-    if (error.code === "23505") {
-      const { data: retry } = await supabase.from("conversations").select("*").eq("listing_id", listingId)
-        .or(`and(buyer_id.eq.${buyerId},seller_id.eq.${sellerId}),and(buyer_id.eq.${sellerId},seller_id.eq.${buyerId})`)
-        .maybeSingle();
-      if (retry) return retry;
-    }
-    throw error;
-  }
-  console.log("[Chat] Created conversation:", data.id);
+    .select()
+    .single();
+  if (error) throw error;
   return data;
 }
 
@@ -466,14 +460,12 @@ function Phone({ children }) {
         input,select,textarea,button{font-family:'Plus Jakarta Sans',sans-serif;}
         body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
         button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
-        input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;}
-        input[type="text"],input:not([type]),textarea{font-size:16px !important;}
         input:focus,textarea:focus,select:focus{outline:none;border-color:#1c7c45 !important;box-shadow:0 0 0 3px rgba(28,124,69,0.12);}
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
       `}</style>
-      <div style={{width:"min(390px,100vw)",height:"min(844px,100dvh)",background:"white",borderRadius:"clamp(0px,4vw,52px)",overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
+      <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
         {children}
       </div>
     </div>
@@ -1010,16 +1002,6 @@ export default function LoopGenApp() {
       return { ...f, tags: merged };
     });
   }, [sell.title, sell.category, sell.condition]); // eslint-disable-line react-hooks/exhaustive-deps
-  // ── Force SW update on each load ────────────────────────────────────────
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(reg => reg.update());
-        console.log("[LoopGen] SW update triggered, build:", BUILD_VERSION);
-      });
-    }
-  }, []);
-
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1049,9 +1031,8 @@ export default function LoopGenApp() {
     if (screen === "home" || screen === "explore") {
       loadListings();
     }
-    if (screen === "chats") {
-      if (user) { setConvos([]); loadConversations(); }
-      else { setConvos([]); }
+    if (screen === "chats" && user) {
+      loadConversations();
     }
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
@@ -1099,11 +1080,12 @@ export default function LoopGenApp() {
     setListingsLoading(true);
     try {
       const data = await dbGetListings(user?.id);
-      setListings(data);
+      const hasVintage = data.some(l => l.category === "Vintage & Collectibles");
+      setListings(hasVintage ? data : [...DEMO_VINTAGE, ...data]);
       listingsLoaded.current = true;
     } catch (err) {
       console.error("loadListings:", err);
-      setListings([]);
+      // Keep showing demo data on error — do not blank the feed
     } finally {
       setListingsLoading(false);
     }
@@ -1144,7 +1126,6 @@ export default function LoopGenApp() {
     if (s === "sell" && !sessionReady) { showToast("Loading…"); return; }
     if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
     if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); }
-    if (s === "explore") { setSearch(""); setCatF("All"); }
     setHistory([]); setScreen(s); setDetail(null); setConvo(null);
   };
 
@@ -1201,8 +1182,8 @@ export default function LoopGenApp() {
     e?.stopPropagation();
     const item = listings.find(x => x.id === id);
     if (!item) return;
+    // Optimistic update
     setListings(ls => ls.map(x => x.id===id ? {...x, is_saved:!x.is_saved} : x));
-    if (detail?.id === id) setDetail(d => d ? {...d, is_saved:!d.is_saved} : d);
     showToast(item.is_saved ? "Removed from saved" : "❤️ Saved!");
     if (user) await dbToggleSave(id, user.id, item.is_saved);
   };
@@ -1280,8 +1261,7 @@ export default function LoopGenApp() {
       if (user && supabase) {
         await dbCreateListing(listing, user.id);
         showToast("🎉 Listed! Your item is live.");
-        listingsLoaded.current = false;
-        await loadListings({ force: true });
+        await loadListings();
       } else {
         // Demo mode — add locally
         const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
@@ -1316,7 +1296,7 @@ export default function LoopGenApp() {
     setChatLoading(true);
     setChatMsgs([]);
     setConvo(c);
-    push("chat"); // navigate first so user sees loading state
+    push("chat");
     try {
       const isRealConvo = supabase && user && c.id && !String(c.id).startsWith("mock_");
       if (isRealConvo) {
@@ -1325,11 +1305,8 @@ export default function LoopGenApp() {
       } else {
         setChatMsgs(c.messages || []);
       }
-    } catch (e) {
-      console.error("openConvo load messages error:", e);
-    } finally {
-      setChatLoading(false);
-    }
+    } catch(e) { console.error("openConvo:", e); }
+    finally { setChatLoading(false); }
   };
 
   const openSellerChat = async (item) => {
@@ -1338,27 +1315,23 @@ export default function LoopGenApp() {
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
     showToast("💬 Opening chat…");
 
-    // No Supabase or no seller_id — open mock chat
+    // Build a contextual mock convo — always available regardless of backend
     const mockConvo = {
       id: `mock_${item.id}`,
       other_user: item.seller_username || "Seller",
       other_avatar: null,
       listing_title: item.title || "Item",
-      last_message: "", last_time: "now", unread: 0, online: false, messages: [],
+      last_message: "",
+      last_time: "now",
+      unread: 0,
+      online: false,
+      messages: [],
     };
+
     if (!supabase || !item.seller_id) { openConvo(mockConvo); return; }
     try {
-      console.log("[LoopGen v2] Opening chat:", {
-        listingId: item.id, sellerId: item.seller_id, buyerId: user.id,
-        build: BUILD_VERSION
-      });
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (!conv) {
-        console.error("[LoopGen v2] No conversation returned");
-        showToast("Couldn't open chat. Please try again.");
-        return;
-      }
-      console.log("[LoopGen v2] Conversation:", conv.id, "is new:", !conv.updated_at);
+      if (!conv) { showToast("Couldn't open chat. Try again."); return; }
       const enriched = {
         ...conv,
         other_user: item.seller_username || "Seller",
@@ -1368,29 +1341,25 @@ export default function LoopGenApp() {
       };
       setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
       openConvo(enriched);
-    } catch (e) {
-      console.error("[LoopGen v2] openSellerChat error:", e.message, e.code);
-      showToast(`Chat error: ${e.message || "Please try again."}`);
+    } catch(e) {
+      console.error("openSellerChat error:", e.message, e.code);
+      showToast("Chat error: " + (e.message || "Please try again."));
     }
-  };
+  };;
 
   const sendMsg = async () => {
     if (!msgText.trim()) return;
-    const text = msgText.trim();
+    const text = msgText;
     setMsgText("");
-    const optId = `opt_${Date.now()}`;
-    setChatMsgs(m => [...m, {id:optId,from_me:true,content:text,created_at:new Date().toISOString(),_pending:true}]);
+    const time = new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
+    setChatMsgs(m => [...m, optimistic]);
     setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
     if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
-      try {
-        const saved = await dbSendMessage(convo.id, user.id, text);
-        if (saved) setChatMsgs(m => m.map(msg => msg.id===optId ? {...saved,from_me:true} : msg));
-      } catch {
-        setChatMsgs(m => m.map(msg => msg.id===optId ? {...msg,_failed:true} : msg));
-        showToast("Message couldn't send. Try again.");
-      }
+      try { await dbSendMessage(convo.id, user.id, text); }
+      catch (e) { showToast("Send failed"); }
     }
-  };;
+  };
 
   // ── Derived data ──────────────────────────────────────
   const filtered = listings.filter(l => {
@@ -1474,7 +1443,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   //  HOME
   // ════════════════════════════
-  if (screen === "home") return ( /* BUILD:CHAT-FIX-002 */
+  if (screen === "home") return (
     <Phone>
       <StatusBar/>
       <DemoBanner/>
@@ -1978,12 +1947,9 @@ export default function LoopGenApp() {
             // Always update local state regardless of DB outcome
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
-            const capturedPrice = offerPrice;
             setOfferModal(null);
-            showToast(`Offer of $${capturedPrice} sent to seller`);
+            showToast(`Offer of $${offerPrice} sent to seller`);
             openSellerChat(item);
-            // Slight delay then set the offer text in input for user to send
-            setTimeout(() => setMsgText(`💰 Hi! I'd like to offer $${capturedPrice} for "${item.title}". Is this okay?`), 600);
           }}
         />
         <ReportModal
@@ -2293,101 +2259,60 @@ export default function LoopGenApp() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;}
-        input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;font-family:'Plus Jakarta Sans',sans-serif;}
+        input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;}
         input[type="text"],input:not([type]),textarea{font-size:16px !important;}
       `}</style>
-
-      {/* Version marker — visible for debugging */}
       <div style={{background:"#1c7c45",color:"white",fontSize:10,textAlign:"center",padding:"2px 0",letterSpacing:1,flexShrink:0}}>
-        {BUILD_VERSION}
+        CHAT-FIX-002
       </div>
-      {/* Header */}
-      <div style={{padding:"12px 16px",paddingTop:"max(env(safe-area-inset-top,12px),12px)",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #f0f1f3",background:"white",flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.06)"}}>
+      <div style={{padding:"10px 16px",paddingTop:"max(env(safe-area-inset-top,10px),10px)",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #f0f1f3",background:"white",flexShrink:0}}>
         <div onClick={pop} style={{cursor:"pointer",padding:"8px 8px 8px 0",WebkitTapHighlightColor:"transparent"}}><IcoBack/></div>
-        <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16,flexShrink:0}}>
+        <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#1c7c45,#22c55e)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16,flexShrink:0}}>
           {((convo?.other_user)||"?")[0].toUpperCase()}
         </div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:700,fontSize:15,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{convo?.other_user || "Loading…"}</div>
-          <div style={{fontSize:11,color:"#9ca3af",fontWeight:500}}>Re: {convo?.listing_title || "Item"}</div>
+          <div style={{fontWeight:700,fontSize:15,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{convo?.other_user||"Loading…"}</div>
+          <div style={{fontSize:11,color:"#9ca3af"}}>Re: {convo?.listing_title||"Item"}</div>
         </div>
       </div>
-
-      {/* Messages area */}
       <div style={{flex:1,overflowY:"auto",padding:"16px",background:"#f8f9fa",display:"flex",flexDirection:"column",gap:10}}>
         {chatLoading ? (
-          // Loading skeleton
-          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:8}}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{display:"flex",justifyContent:i%2===0?"flex-end":"flex-start"}}>
-                <div style={{width:`${40+i*15}%`,height:40,borderRadius:16,background:"#e5e7eb",animation:"pulse 1.5s infinite"}}/>
-              </div>
-            ))}
-            <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+          <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af"}}>
+            <div style={{fontSize:13}}>Loading messages…</div>
           </div>
         ) : chatMsgs.length === 0 ? (
           <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af"}}>
-            <div style={{fontSize:40,marginBottom:12}}>👋</div>
-            <div style={{fontWeight:700,color:"#374151",fontSize:15,marginBottom:6}}>Say hi to start the conversation</div>
-            <div style={{fontSize:13,lineHeight:1.6}}>Messages are private between you and the seller.</div>
+            <div style={{fontSize:36,marginBottom:10}}>👋</div>
+            <div style={{fontWeight:700,color:"#374151",fontSize:14,marginBottom:4}}>Say hi to start the conversation</div>
+            <div style={{fontSize:12}}>Messages are private between you and the seller.</div>
           </div>
-        ) : (
-          chatMsgs.map((m,i) => (
-            <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:8}}>
-              {!(m.from_me||m.from==="me") && (
-                <div style={{width:28,height:28,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:11,flexShrink:0}}>
-                  {((convo?.other_user)||"?")[0].toUpperCase()}
-                </div>
-              )}
-              <div style={{maxWidth:"75%"}}>
-                <div style={{padding:"12px 16px",fontSize:15,fontWeight:500,lineHeight:1.5,borderRadius:(m.from_me||m.from==="me")?"20px 20px 4px 20px":"20px 20px 20px 4px",background:(m.from_me||m.from==="me")?(m._failed?"#fecaca":GREEN):"white",color:(m.from_me||m.from==="me")?"white":"#111",opacity:m._pending?0.7:1}}>
-                  {m.content||m.text}
-                </div>
-                {m._failed && <div style={{fontSize:11,color:"#ef4444",textAlign:"right",marginTop:3}}>Failed to send</div>}
-                {m._pending && <div style={{fontSize:11,color:"#9ca3af",textAlign:"right",marginTop:3}}>Sending…</div>}
+        ) : chatMsgs.map((m,i) => (
+          <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:8}}>
+            {!(m.from_me||m.from==="me") && (
+              <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#1c7c45,#22c55e)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:11,flexShrink:0}}>
+                {((convo?.other_user)||"?")[0].toUpperCase()}
               </div>
+            )}
+            <div style={{maxWidth:"75%",padding:"12px 16px",fontSize:15,fontWeight:500,lineHeight:1.5,borderRadius:(m.from_me||m.from==="me")?"20px 20px 4px 20px":"20px 20px 20px 4px",background:(m.from_me||m.from==="me")?"#1c7c45":"white",color:(m.from_me||m.from==="me")?"white":"#111",opacity:m._pending?0.7:1}}>
+              {m.content||m.text}
             </div>
-          ))
-        )}
+          </div>
+        ))}
         <div ref={chatEndRef}/>
       </div>
-
-      {/* Input — always rendered, disabled only while loading */}
       <div style={{background:"white",borderTop:"1px solid #f0f1f3",padding:"12px 16px",paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",display:"flex",gap:10,alignItems:"center"}}>
         <input
           value={msgText}
-          onChange={e => setMsgText(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMsg()}
-          placeholder={chatLoading ? "Loading conversation…" : "Type a message…"}
+          onChange={e=>setMsgText(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMsg()}
+          placeholder={chatLoading?"Loading…":"Type a message…"}
           disabled={chatLoading}
-          autoComplete="off"
-          autoCorrect="on"
-          autoCapitalize="sentences"
-          spellCheck="true"
+          autoComplete="off" autoCorrect="on" autoCapitalize="sentences"
           enterKeyHint="send"
-          style={{
-            flex:1,background:chatLoading?"#f9fafb":"#f3f4f6",
-            borderRadius:24,padding:"12px 18px",border:"none",
-            fontSize:16,outline:"none",
-            color:chatLoading?"#9ca3af":"#111",
-            fontFamily:"'Plus Jakarta Sans',sans-serif",
-            WebkitAppearance:"none",appearance:"none",
-            transition:"background 0.2s",
-          }}
+          style={{flex:1,background:chatLoading?"#f9fafb":"#f3f4f6",borderRadius:24,padding:"12px 18px",border:"none",fontSize:16,outline:"none",color:"#111",fontFamily:"inherit",WebkitAppearance:"none",appearance:"none"}}
         />
-        <button
-          onClick={sendMsg}
-          disabled={chatLoading || !msgText.trim()}
-          style={{
-            width:46,height:46,borderRadius:"50%",
-            background:(chatLoading||!msgText.trim())?"#e5e7eb":GREEN,
-            border:"none",display:"flex",alignItems:"center",justifyContent:"center",
-            cursor:(chatLoading||!msgText.trim())?"default":"pointer",
-            flexShrink:0,
-            boxShadow:(!chatLoading&&msgText.trim())?`0 4px 14px ${GREEN}55`:"none",
-            transition:"all 0.15s",WebkitTapHighlightColor:"transparent",
-          }}
-        >
+        <button onClick={sendMsg} disabled={chatLoading||!msgText.trim()}
+          style={{width:46,height:46,borderRadius:"50%",background:(chatLoading||!msgText.trim())?"#e5e7eb":"#1c7c45",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:(chatLoading||!msgText.trim())?"default":"pointer",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
           <IcoSend/>
         </button>
       </div>
