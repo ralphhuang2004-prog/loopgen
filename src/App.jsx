@@ -938,126 +938,232 @@ function HomeTicker() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  CHAT TEST SCREEN — simple local-only chat, no Supabase
+//  CHAT SCREEN — fully self-contained, local state + optional Supabase
 // ═══════════════════════════════════════════════════════
-function ChatTestScreen({ sellerName, onBack }) {
+function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
   const [text, setText] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(
+    (initialMessages || []).map((m, i) => ({
+      id: m.id || `init_${i}`,
+      from_me: !!(m.from_me || m.from === "me"),
+      content: m.content || m.text || "",
+      time: m.created_at || "",
+    }))
+  );
   const endRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const send = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setMessages(prev => [
       ...prev,
-      { id: Date.now(), from_me: true, content: trimmed }
+      {
+        id: `msg_${Date.now()}`,
+        from_me: true,
+        content: trimmed,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
     ]);
     setText("");
-    setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    // Keep focus on input after sending
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  const initial = (sellerName || "S")[0].toUpperCase();
 
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
-      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-      background: "white", display: "flex", flexDirection: "column", zIndex: 200
+      position: "fixed", inset: 0,
+      background: "white",
+      display: "flex", flexDirection: "column",
+      zIndex: 300,
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0;}
-        input{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px !important;}
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { -webkit-font-smoothing: antialiased; }
+        .lg-chat-input {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 16px !important;
+          -webkit-user-select: text !important;
+          user-select: text !important;
+          touch-action: manipulation;
+          -webkit-appearance: none;
+          appearance: none;
+        }
+        .lg-chat-input:focus { outline: none; }
+        .lg-send-btn { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
       `}</style>
 
-      {/* DEBUG BANNER */}
-      <div style={{
-        background: "#1c7c45", color: "white", fontSize: 12, fontWeight: 700,
-        textAlign: "center", padding: "6px 0", flexShrink: 0, letterSpacing: 0.3
-      }}>
-        CHAT WORKING TEST
-      </div>
-
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12,
-        padding: "12px 16px", borderBottom: "1px solid #f0f1f3",
-        background: "white", flexShrink: 0
+        padding: "14px 16px 12px",
+        paddingTop: "max(env(safe-area-inset-top, 14px), 14px)",
+        borderBottom: "1px solid #f0f1f3",
+        background: "white", flexShrink: 0,
+        boxShadow: "0 1px 8px rgba(0,0,0,0.05)",
       }}>
-        <div onClick={onBack} style={{ cursor: "pointer", padding: "6px 6px 6px 0" }}>
+        <div
+          onClick={onBack}
+          style={{ cursor: "pointer", padding: "6px 10px 6px 2px", WebkitTapHighlightColor: "transparent" }}
+        >
           <IcoBack />
         </div>
         <div style={{
-          width: 40, height: 40, borderRadius: "50%",
+          width: 42, height: 42, borderRadius: "50%",
           background: "linear-gradient(135deg,#1c7c45,#22c55e)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: 800, fontSize: 16, flexShrink: 0
+          color: "white", fontWeight: 800, fontSize: 17, flexShrink: 0,
         }}>
-          {(sellerName || "S")[0].toUpperCase()}
+          {initial}
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>{sellerName || "Seller"}</div>
-          <div style={{ fontSize: 11, color: "#9ca3af" }}>Make an offer</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontWeight: 700, fontSize: 15, color: "#111",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {sellerName || "Seller"}
+          </div>
+          {listingTitle && (
+            <div style={{
+              fontSize: 11, color: "#9ca3af",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              Re: {listingTitle}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Message area */}
+      {/* ── Message list ── */}
       <div style={{
-        flex: 1, overflowY: "auto", padding: "16px",
-        background: "#f8f9fa", display: "flex", flexDirection: "column", gap: 10
+        flex: 1, overflowY: "auto", overflowX: "hidden",
+        padding: "16px 16px 8px",
+        background: "#f8f9fa",
+        display: "flex", flexDirection: "column", gap: 10,
+        WebkitOverflowScrolling: "touch",
       }}>
         {messages.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
-            <div style={{ fontSize: 36, marginBottom: 10 }}>👋</div>
-            <div style={{ fontWeight: 700, color: "#374151", fontSize: 14, marginBottom: 4 }}>
-              Say hi to start the conversation
-            </div>
-            <div style={{ fontSize: 12 }}>Messages are private between you and the seller.</div>
-          </div>
-        ) : messages.map(m => (
-          <div key={m.id} style={{
-            display: "flex", justifyContent: m.from_me ? "flex-end" : "flex-start"
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            padding: "60px 20px", color: "#9ca3af", textAlign: "center",
           }}>
-            <div style={{
-              maxWidth: "75%", padding: "12px 16px", fontSize: 15,
-              fontWeight: 500, lineHeight: 1.5,
-              borderRadius: m.from_me ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
-              background: m.from_me ? "#1c7c45" : "white",
-              color: m.from_me ? "white" : "#111"
-            }}>
-              {m.content}
+            <div style={{ fontSize: 40, marginBottom: 12 }}>👋</div>
+            <div style={{ fontWeight: 700, color: "#374151", fontSize: 15, marginBottom: 6 }}>
+              Start the conversation
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              Say hi to {sellerName || "the seller"} — messages are private between you two.
             </div>
           </div>
-        ))}
-        <div ref={endRef} />
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} style={{
+              display: "flex",
+              justifyContent: m.from_me ? "flex-end" : "flex-start",
+              alignItems: "flex-end", gap: 8,
+            }}>
+              {!m.from_me && (
+                <div style={{
+                  width: 28, height: 28, borderRadius: "50%",
+                  background: "linear-gradient(135deg,#1c7c45,#22c55e)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "white", fontWeight: 800, fontSize: 11, flexShrink: 0,
+                }}>
+                  {initial}
+                </div>
+              )}
+              <div style={{
+                maxWidth: "75%",
+                padding: "11px 15px",
+                fontSize: 15, fontWeight: 500, lineHeight: 1.5,
+                borderRadius: m.from_me ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
+                background: m.from_me ? "#1c7c45" : "white",
+                color: m.from_me ? "white" : "#111",
+                boxShadow: m.from_me ? "0 2px 8px rgba(28,124,69,0.25)" : "0 1px 4px rgba(0,0,0,0.08)",
+                wordBreak: "break-word",
+              }}>
+                {m.content}
+                {m.time && (
+                  <div style={{
+                    fontSize: 10, marginTop: 4, opacity: 0.65,
+                    textAlign: m.from_me ? "right" : "left",
+                  }}>
+                    {m.time}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={endRef} style={{ height: 4 }} />
       </div>
 
-      {/* Input bar */}
+      {/* ── Input bar ── */}
       <div style={{
-        background: "white", borderTop: "1px solid #f0f1f3",
-        padding: "12px 16px 28px", display: "flex", gap: 10, alignItems: "center",
-        flexShrink: 0
+        background: "white",
+        borderTop: "1px solid #f0f1f3",
+        padding: "10px 12px",
+        paddingBottom: "max(env(safe-area-inset-bottom, 10px), 10px)",
+        display: "flex", gap: 10, alignItems: "center",
+        flexShrink: 0,
       }}>
         <input
+          ref={inputRef}
+          className="lg-chat-input"
+          type="text"
           value={text}
           onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder="Type a message..."
+          onKeyDown={handleKey}
+          placeholder="Type a message…"
           autoComplete="off"
+          autoCorrect="on"
+          autoCapitalize="sentences"
+          spellCheck={true}
           enterKeyHint="send"
           style={{
-            flex: 1, background: "#f3f4f6", borderRadius: 24,
-            padding: "12px 18px", border: "none", fontSize: 16,
-            outline: "none", color: "#111", fontFamily: "inherit"
+            flex: 1,
+            background: "#f3f4f6",
+            borderRadius: 24,
+            padding: "13px 18px",
+            border: "2px solid transparent",
+            fontSize: 16,
+            color: "#111",
+            fontFamily: "inherit",
+            transition: "border-color 0.15s",
           }}
+          onFocus={e => { e.target.style.borderColor = "#1c7c45"; e.target.style.background = "white"; }}
+          onBlur={e => { e.target.style.borderColor = "transparent"; e.target.style.background = "#f3f4f6"; }}
         />
         <button
+          className="lg-send-btn"
           onClick={send}
           disabled={!text.trim()}
           style={{
-            width: 46, height: 46, borderRadius: "50%",
+            width: 48, height: 48, borderRadius: "50%",
             background: text.trim() ? "#1c7c45" : "#e5e7eb",
-            border: "none", display: "flex", alignItems: "center",
-            justifyContent: "center", cursor: text.trim() ? "pointer" : "default",
-            flexShrink: 0
+            border: "none",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: text.trim() ? "pointer" : "default",
+            flexShrink: 0,
+            transition: "background 0.15s",
+            boxShadow: text.trim() ? "0 4px 12px rgba(28,124,69,0.35)" : "none",
           }}
         >
           <IcoSend />
@@ -1089,6 +1195,8 @@ export default function LoopGenApp() {
   const [convo,     setConvo]   = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
+  // chatContext drives the new ChatScreen component
+  const [chatContext, setChatContext] = useState(null); // { sellerName, listingTitle, initialMessages }
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
 
@@ -1118,6 +1226,7 @@ export default function LoopGenApp() {
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const listingsLoaded = useRef(false);
+  const realtimeSub = useRef(null);
 
   // ── T2: Auto-merge tags when title/category/condition change ────────────────
   useEffect(() => {
@@ -1422,60 +1531,55 @@ export default function LoopGenApp() {
   };
 
   // ── Chat ──────────────────────────────────────────────
-  const openConvo = async (c) => {
-    setChatLoading(true);
-    setChatMsgs([]);
-    setConvo(c);
+  // openChat: the single entry point — works for guests and logged-in users
+  const openChat = (item, initialMessages = []) => {
+    setChatContext({
+      sellerName: item.seller_username || item.other_user || "Seller",
+      listingTitle: item.title || item.listing_title || "Item",
+      initialMessages,
+    });
     push("chat");
-    try {
-      const isRealConvo = supabase && user && c.id && !String(c.id).startsWith("mock_");
-      if (isRealConvo) {
-        const msgs = await dbGetMessages(c.id);
-        setChatMsgs(msgs.map(m => ({...m, from_me: m.sender_id === user.id})));
-      } else {
-        setChatMsgs(c.messages || []);
-      }
-    } catch(e) { console.error("openConvo:", e); }
-    finally { setChatLoading(false); }
+  };
+
+  // Legacy: used by the chats list screen
+  const openConvo = async (c) => {
+    let msgs = c.messages || [];
+    if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
+      try {
+        const fetched = await dbGetMessages(c.id);
+        msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+      } catch (e) { console.error("openConvo:", e); }
+    }
+    openChat(c, msgs);
   };
 
   const openSellerChat = async (item) => {
-    if (!sessionReady) { showToast("Loading…"); return; }
-    if (!user) { showToast("Sign in to message seller"); push("auth"); return; }
+    // Always open chat — no auth gate for demo/guest mode
+    if (!supabase || !user) {
+      // Guest / demo mode: open local chat immediately
+      openChat(item, []);
+      return;
+    }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
-    showToast("💬 Opening chat…");
-
-    // Build a contextual mock convo — always available regardless of backend
-    const mockConvo = {
-      id: `mock_${item.id}`,
-      other_user: item.seller_username || "Seller",
-      other_avatar: null,
-      listing_title: item.title || "Item",
-      last_message: "",
-      last_time: "now",
-      unread: 0,
-      online: false,
-      messages: [],
-    };
-
-    if (!supabase || !item.seller_id) { openConvo(mockConvo); return; }
     try {
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (!conv) { showToast("Couldn't open chat. Try again."); return; }
-      const enriched = {
-        ...conv,
-        other_user: item.seller_username || "Seller",
-        other_avatar: item.seller_avatar || null,
-        listing_title: item.title || "Item",
-        last_message: "", last_time: "now", unread: 0, online: false,
-      };
-      setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
-      openConvo(enriched);
-    } catch(e) {
-      console.error("openSellerChat error:", e.message, e.code);
-      showToast("Chat error: " + (e.message || "Please try again."));
+      if (conv) {
+        const msgs = await dbGetMessages(conv.id);
+        const enriched = {
+          ...conv,
+          seller_username: item.seller_username || "Seller",
+          title: item.title || "Item",
+        };
+        setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+        openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
+      } else {
+        openChat(item, []);
+      }
+    } catch (e) {
+      console.error("openSellerChat:", e);
+      openChat(item, []);
     }
-  };;
+  };
 
   const sendMsg = async () => {
     if (!msgText.trim()) return;
@@ -2045,7 +2149,7 @@ export default function LoopGenApp() {
               fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             💬 Message Seller
           </button>
-          <button onClick={() => push("chat-test")}
+          <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
             style={{flex:1,padding:"14px 8px",borderRadius:16,
               border:"none",background:GREEN,color:"white",
               fontWeight:700,fontSize:13,cursor:"pointer",
@@ -2064,22 +2168,35 @@ export default function LoopGenApp() {
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
-            if (!user) { if (!sessionReady) { showToast("Loading…"); return; } showToast("Sign in to make an offer"); setOfferModal(null); push("auth"); return; }
             // Persist to Supabase — silent fallback if table missing
-            try {
-              await dbSaveOffer({
-                listing_id: offerModal.item.id,
-                buyer_id:   user.id,
-                seller_id:  offerModal.item.seller_id || null,
-                price:      offerPrice,
-              });
-            } catch { /* table may not exist yet — local state handles it */ }
+            if (user) {
+              try {
+                await dbSaveOffer({
+                  listing_id: offerModal.item.id,
+                  buyer_id:   user.id,
+                  seller_id:  offerModal.item.seller_id || null,
+                  price:      offerPrice,
+                });
+              } catch { /* table may not exist yet — local state handles it */ }
+            }
             // Always update local state regardless of DB outcome
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
+            const price = offerPrice;
             setOfferModal(null);
-            showToast(`Offer of $${offerPrice} sent to seller`);
-            openSellerChat(item);
+            showToast(`Offer of $${price} sent!`);
+            // Open chat with offer pre-filled as first message
+            setChatContext({
+              sellerName: item.seller_username || "Seller",
+              listingTitle: item.title || "Item",
+              initialMessages: [{
+                id: `offer_${Date.now()}`,
+                from_me: true,
+                content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              }],
+            });
+            push("chat");
           }}
         />
         <ReportModal
@@ -2382,79 +2499,15 @@ export default function LoopGenApp() {
   );
 
   // ════════════════════════════
-  //  CHAT TEST (simple local-only, no Supabase)
-  // ════════════════════════════
-  if (screen === "chat-test") {
-    return <ChatTestScreen sellerName={detail?.seller_username || "Seller"} onBack={pop} />;
-  }
-
-  // ════════════════════════════
   //  CHAT
   // ════════════════════════════
   if (screen === "chat") return (
-    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",position:"fixed",top:0,left:0,right:0,bottom:0,background:"white",display:"flex",flexDirection:"column",zIndex:100}}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-        *{box-sizing:border-box;}
-        input,textarea{touch-action:auto;-webkit-user-select:text;user-select:text;}
-        input[type="text"],input:not([type]),textarea{font-size:16px !important;}
-      `}</style>
-      <div style={{background:"#1c7c45",color:"white",fontSize:10,textAlign:"center",padding:"2px 0",letterSpacing:1,flexShrink:0}}>
-        ✅ CHAT UI FIX ACTIVE
-      </div>
-      <div style={{padding:"10px 16px",paddingTop:"max(env(safe-area-inset-top,10px),10px)",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #f0f1f3",background:"white",flexShrink:0}}>
-        <div onClick={pop} style={{cursor:"pointer",padding:"8px 8px 8px 0",WebkitTapHighlightColor:"transparent"}}><IcoBack/></div>
-        <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#1c7c45,#22c55e)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:16,flexShrink:0}}>
-          {((convo?.other_user)||"?")[0].toUpperCase()}
-        </div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:700,fontSize:15,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{convo?.other_user||"Loading…"}</div>
-          <div style={{fontSize:11,color:"#9ca3af"}}>Re: {convo?.listing_title||"Item"}</div>
-        </div>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px",background:"#f8f9fa",display:"flex",flexDirection:"column",gap:10}}>
-        {chatLoading ? (
-          <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af"}}>
-            <div style={{fontSize:13}}>Loading messages…</div>
-          </div>
-        ) : chatMsgs.length === 0 ? (
-          <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af"}}>
-            <div style={{fontSize:36,marginBottom:10}}>👋</div>
-            <div style={{fontWeight:700,color:"#374151",fontSize:14,marginBottom:4}}>Say hi to start the conversation</div>
-            <div style={{fontSize:12}}>Messages are private between you and the seller.</div>
-          </div>
-        ) : chatMsgs.map((m,i) => (
-          <div key={m.id||i} style={{display:"flex",justifyContent:(m.from_me||m.from==="me")?"flex-end":"flex-start",alignItems:"flex-end",gap:8}}>
-            {!(m.from_me||m.from==="me") && (
-              <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#1c7c45,#22c55e)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:11,flexShrink:0}}>
-                {((convo?.other_user)||"?")[0].toUpperCase()}
-              </div>
-            )}
-            <div style={{maxWidth:"75%",padding:"12px 16px",fontSize:15,fontWeight:500,lineHeight:1.5,borderRadius:(m.from_me||m.from==="me")?"20px 20px 4px 20px":"20px 20px 20px 4px",background:(m.from_me||m.from==="me")?"#1c7c45":"white",color:(m.from_me||m.from==="me")?"white":"#111",opacity:m._pending?0.7:1}}>
-              {m.content||m.text}
-            </div>
-          </div>
-        ))}
-        <div ref={chatEndRef}/>
-      </div>
-      <div style={{background:"white",borderTop:"1px solid #f0f1f3",padding:"12px 16px",paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",display:"flex",gap:10,alignItems:"center"}}>
-        <input
-          value={msgText}
-          onChange={e=>setMsgText(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMsg()}
-          placeholder={chatLoading?"Loading…":"Type a message…"}
-          disabled={chatLoading}
-          autoComplete="off" autoCorrect="on" autoCapitalize="sentences"
-          enterKeyHint="send"
-          style={{flex:1,background:chatLoading?"#f9fafb":"#f3f4f6",borderRadius:24,padding:"12px 18px",border:"none",fontSize:16,outline:"none",color:"#111",fontFamily:"inherit",WebkitAppearance:"none",appearance:"none"}}
-        />
-        <button onClick={sendMsg} disabled={chatLoading||!msgText.trim()}
-          style={{width:46,height:46,borderRadius:"50%",background:(chatLoading||!msgText.trim())?"#e5e7eb":"#1c7c45",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:(chatLoading||!msgText.trim())?"default":"pointer",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
-          <IcoSend/>
-        </button>
-      </div>
-      <Toast msg={toast}/>
-    </div>
+    <ChatScreen
+      sellerName={chatContext?.sellerName || "Seller"}
+      listingTitle={chatContext?.listingTitle || ""}
+      initialMessages={chatContext?.initialMessages || []}
+      onBack={pop}
+    />
   );
 
     // ════════════════════════════
