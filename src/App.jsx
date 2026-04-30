@@ -987,15 +987,19 @@ function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
-      position: "fixed", inset: 0,
+      position: "fixed",
+      top: 0, left: 0, right: 0,
+      height: "100dvh",
       background: "white",
-      display: "flex", flexDirection: "column",
+      display: "flex",
+      flexDirection: "column",
       zIndex: 300,
+      overflow: "hidden",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { -webkit-font-smoothing: antialiased; }
+        html, body { height: 100%; overflow: hidden; -webkit-font-smoothing: antialiased; }
         .lg-chat-input {
           font-family: 'Plus Jakarta Sans', sans-serif;
           font-size: 16px !important;
@@ -1004,9 +1008,12 @@ function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
           touch-action: manipulation;
           -webkit-appearance: none;
           appearance: none;
+          border: none;
+          outline: none;
         }
-        .lg-chat-input:focus { outline: none; }
+        .lg-chat-input:focus { outline: none; border: none; }
         .lg-send-btn { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .lg-messages { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
       `}</style>
 
       {/* ── Header ── */}
@@ -1051,12 +1058,12 @@ function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
       </div>
 
       {/* ── Message list ── */}
-      <div style={{
-        flex: 1, overflowY: "auto", overflowX: "hidden",
+      <div className="lg-messages" style={{
+        flex: 1,
         padding: "16px 16px 8px",
         background: "#f8f9fa",
         display: "flex", flexDirection: "column", gap: 10,
-        WebkitOverflowScrolling: "touch",
+        minHeight: 0,
       }}>
         {messages.length === 0 ? (
           <div style={{
@@ -1119,10 +1126,13 @@ function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
       <div style={{
         background: "white",
         borderTop: "1px solid #f0f1f3",
-        padding: "10px 12px",
-        paddingBottom: "max(env(safe-area-inset-bottom, 10px), 10px)",
+        padding: "10px 12px 10px",
+        paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 10px, 10px)",
         display: "flex", gap: 10, alignItems: "center",
         flexShrink: 0,
+        /* Never let this be obscured */
+        position: "relative",
+        zIndex: 1,
       }}>
         <input
           ref={inputRef}
@@ -1146,9 +1156,11 @@ function ChatScreen({ sellerName, listingTitle, initialMessages, onBack }) {
             fontSize: 16,
             color: "#111",
             fontFamily: "inherit",
-            transition: "border-color 0.15s",
+            lineHeight: "normal",
+            minWidth: 0,
+            transition: "border-color 0.15s, background 0.15s",
           }}
-          onFocus={e => { e.target.style.borderColor = "#1c7c45"; e.target.style.background = "white"; }}
+          onFocus={e => { e.target.style.borderColor = "#1c7c45"; e.target.style.background = "#f0fdf4"; }}
           onBlur={e => { e.target.style.borderColor = "transparent"; e.target.style.background = "#f3f4f6"; }}
         />
         <button
