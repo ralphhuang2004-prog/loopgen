@@ -938,6 +938,136 @@ function HomeTicker() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  CHAT TEST SCREEN — simple local-only chat, no Supabase
+// ═══════════════════════════════════════════════════════
+function ChatTestScreen({ sellerName, onBack }) {
+  const [text, setText] = useState("");
+  const [messages, setMessages] = useState([]);
+  const endRef = useRef(null);
+
+  const send = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setMessages(prev => [
+      ...prev,
+      { id: Date.now(), from_me: true, content: trimmed }
+    ]);
+    setText("");
+    setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  };
+
+  return (
+    <div style={{
+      fontFamily: "'Plus Jakarta Sans',sans-serif",
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "white", display: "flex", flexDirection: "column", zIndex: 200
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        input{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px !important;}
+      `}</style>
+
+      {/* DEBUG BANNER */}
+      <div style={{
+        background: "#1c7c45", color: "white", fontSize: 12, fontWeight: 700,
+        textAlign: "center", padding: "6px 0", flexShrink: 0, letterSpacing: 0.3
+      }}>
+        CHAT WORKING TEST
+      </div>
+
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "12px 16px", borderBottom: "1px solid #f0f1f3",
+        background: "white", flexShrink: 0
+      }}>
+        <div onClick={onBack} style={{ cursor: "pointer", padding: "6px 6px 6px 0" }}>
+          <IcoBack />
+        </div>
+        <div style={{
+          width: 40, height: 40, borderRadius: "50%",
+          background: "linear-gradient(135deg,#1c7c45,#22c55e)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "white", fontWeight: 800, fontSize: 16, flexShrink: 0
+        }}>
+          {(sellerName || "S")[0].toUpperCase()}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>{sellerName || "Seller"}</div>
+          <div style={{ fontSize: 11, color: "#9ca3af" }}>Make an offer</div>
+        </div>
+      </div>
+
+      {/* Message area */}
+      <div style={{
+        flex: 1, overflowY: "auto", padding: "16px",
+        background: "#f8f9fa", display: "flex", flexDirection: "column", gap: 10
+      }}>
+        {messages.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>👋</div>
+            <div style={{ fontWeight: 700, color: "#374151", fontSize: 14, marginBottom: 4 }}>
+              Say hi to start the conversation
+            </div>
+            <div style={{ fontSize: 12 }}>Messages are private between you and the seller.</div>
+          </div>
+        ) : messages.map(m => (
+          <div key={m.id} style={{
+            display: "flex", justifyContent: m.from_me ? "flex-end" : "flex-start"
+          }}>
+            <div style={{
+              maxWidth: "75%", padding: "12px 16px", fontSize: 15,
+              fontWeight: 500, lineHeight: 1.5,
+              borderRadius: m.from_me ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
+              background: m.from_me ? "#1c7c45" : "white",
+              color: m.from_me ? "white" : "#111"
+            }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      {/* Input bar */}
+      <div style={{
+        background: "white", borderTop: "1px solid #f0f1f3",
+        padding: "12px 16px 28px", display: "flex", gap: 10, alignItems: "center",
+        flexShrink: 0
+      }}>
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
+          placeholder="Type a message..."
+          autoComplete="off"
+          enterKeyHint="send"
+          style={{
+            flex: 1, background: "#f3f4f6", borderRadius: 24,
+            padding: "12px 18px", border: "none", fontSize: 16,
+            outline: "none", color: "#111", fontFamily: "inherit"
+          }}
+        />
+        <button
+          onClick={send}
+          disabled={!text.trim()}
+          style={{
+            width: 46, height: 46, borderRadius: "50%",
+            background: text.trim() ? "#1c7c45" : "#e5e7eb",
+            border: "none", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: text.trim() ? "pointer" : "default",
+            flexShrink: 0
+          }}
+        >
+          <IcoSend />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 //  MAIN APP
 // ═══════════════════════════════════════════════════════
 export default function LoopGenApp() {
@@ -1915,7 +2045,7 @@ export default function LoopGenApp() {
               fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             💬 Message Seller
           </button>
-          <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
+          <button onClick={() => push("chat-test")}
             style={{flex:1,padding:"14px 8px",borderRadius:16,
               border:"none",background:GREEN,color:"white",
               fontWeight:700,fontSize:13,cursor:"pointer",
@@ -2250,6 +2380,13 @@ export default function LoopGenApp() {
       <Toast msg={toast}/>
     </Phone>
   );
+
+  // ════════════════════════════
+  //  CHAT TEST (simple local-only, no Supabase)
+  // ════════════════════════════
+  if (screen === "chat-test") {
+    return <ChatTestScreen sellerName={detail?.seller_username || "Seller"} onBack={pop} />;
+  }
 
   // ════════════════════════════
   //  CHAT
