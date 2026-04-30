@@ -29,6 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
+const BUILD_VERSION = "CHAT-FIX-002";
 
 // ── LoopGen Logo component — use everywhere branding is needed ────────────────
 // height: desired display height in px. Width scales automatically (ratio ~1.61:1).
@@ -1009,6 +1010,16 @@ export default function LoopGenApp() {
       return { ...f, tags: merged };
     });
   }, [sell.title, sell.category, sell.condition]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── Force SW update on each load ────────────────────────────────────────
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.update());
+        console.log("[LoopGen] SW update triggered, build:", BUILD_VERSION);
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1337,8 +1348,17 @@ export default function LoopGenApp() {
     };
     if (!supabase || !item.seller_id) { openConvo(mockConvo); return; }
     try {
+      console.log("[LoopGen v2] Opening chat:", {
+        listingId: item.id, sellerId: item.seller_id, buyerId: user.id,
+        build: BUILD_VERSION
+      });
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (!conv) { showToast("Couldn't open chat. Try again."); return; }
+      if (!conv) {
+        console.error("[LoopGen v2] No conversation returned");
+        showToast("Couldn't open chat. Please try again.");
+        return;
+      }
+      console.log("[LoopGen v2] Conversation:", conv.id, "is new:", !conv.updated_at);
       const enriched = {
         ...conv,
         other_user: item.seller_username || "Seller",
@@ -1349,8 +1369,8 @@ export default function LoopGenApp() {
       setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
       openConvo(enriched);
     } catch (e) {
-      console.error("openSellerChat:", e);
-      showToast("Couldn't open chat. Try again.");
+      console.error("[LoopGen v2] openSellerChat error:", e.message, e.code);
+      showToast(`Chat error: ${e.message || "Please try again."}`);
     }
   };
 
@@ -1454,7 +1474,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   //  HOME
   // ════════════════════════════
-  if (screen === "home") return (
+  if (screen === "home") return ( /* BUILD:CHAT-FIX-002 */
     <Phone>
       <StatusBar/>
       <DemoBanner/>
@@ -2277,6 +2297,10 @@ export default function LoopGenApp() {
         input[type="text"],input:not([type]),textarea{font-size:16px !important;}
       `}</style>
 
+      {/* Version marker — visible for debugging */}
+      <div style={{background:"#1c7c45",color:"white",fontSize:10,textAlign:"center",padding:"2px 0",letterSpacing:1,flexShrink:0}}>
+        {BUILD_VERSION}
+      </div>
       {/* Header */}
       <div style={{padding:"12px 16px",paddingTop:"max(env(safe-area-inset-top,12px),12px)",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #f0f1f3",background:"white",flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.06)"}}>
         <div onClick={pop} style={{cursor:"pointer",padding:"8px 8px 8px 0",WebkitTapHighlightColor:"transparent"}}><IcoBack/></div>
