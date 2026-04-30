@@ -2263,7 +2263,7 @@ export default function LoopGenApp() {
         input[type="text"],input:not([type]),textarea{font-size:16px !important;}
       `}</style>
       <div style={{background:"#1c7c45",color:"white",fontSize:10,textAlign:"center",padding:"2px 0",letterSpacing:1,flexShrink:0}}>
-        CHAT-FIX-002
+        ✅ CHAT UI FIX ACTIVE
       </div>
       <div style={{padding:"10px 16px",paddingTop:"max(env(safe-area-inset-top,10px),10px)",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #f0f1f3",background:"white",flexShrink:0}}>
         <div onClick={pop} style={{cursor:"pointer",padding:"8px 8px 8px 0",WebkitTapHighlightColor:"transparent"}}><IcoBack/></div>
