@@ -1542,15 +1542,20 @@ export default function LoopGenApp() {
     return `chat_${seller}_${listing}`.replace(/\s+/g, "_").toLowerCase();
   };
 
-  // openChat: single entry point — seeds store with seed messages if this convo is new
+  // openChat: single entry point — merges seed messages into store without duplicates
   const openChat = (item, seedMessages = []) => {
     const key = chatKey(item);
-    // Only seed if this convo has never been opened before
     setLocalChatStore(store => {
-      if (!store[key] || store[key].length === 0) {
-        return { ...store, [key]: seedMessages };
+      const existing = store[key] || [];
+      if (seedMessages.length === 0) {
+        // No seeds — preserve whatever history exists (including empty)
+        return store[key] !== undefined ? store : { ...store, [key]: [] };
       }
-      return store; // keep existing history
+      // Append any seed messages whose id isn't already in the store
+      const existingIds = new Set(existing.map(m => m.id));
+      const toAdd = seedMessages.filter(m => !existingIds.has(m.id));
+      if (toAdd.length === 0) return store; // nothing new
+      return { ...store, [key]: [...existing, ...toAdd] };
     });
     setChatContext({
       id: key,
@@ -2211,24 +2216,15 @@ export default function LoopGenApp() {
             const price = offerPrice;
             setOfferModal(null);
             showToast(`Offer of $${price} sent!`);
-            // Seed the chat store with the offer message, then open chat
-            const key = `chat_${(item.seller_username||"seller")}_${(item.id||item.title||"item")}`.replace(/\s+/g,"_").toLowerCase();
+            // Open chat — openChat uses chatKey(item) consistently
+            // and appends the offer message into the store before opening
             const offerMsg = {
               id: `offer_${Date.now()}`,
               from_me: true,
               content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
               time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             };
-            setLocalChatStore(store => ({
-              ...store,
-              [key]: [...(store[key] || []), offerMsg],
-            }));
-            setChatContext({
-              id: key,
-              sellerName: item.seller_username || "Seller",
-              listingTitle: item.title || "Item",
-            });
-            push("chat");
+            openChat(item, [offerMsg]);
           }}
         />
         <ReportModal
