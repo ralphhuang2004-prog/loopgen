@@ -944,28 +944,38 @@ function HomeTicker() {
 // ═══════════════════════════════════════════════════════
 function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
-  // viewH tracks the visual viewport height so the chat shrinks correctly
-  // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
-  const [viewH, setViewH] = useState(
-    () => window.visualViewport?.height || window.innerHeight
-  );
+  // Track visual viewport size AND offset — needed for mobile Safari where
+  // the visual viewport shifts when URL bar shows/hides
+  const [vpState, setVpState] = useState(() => ({
+    top:    window.visualViewport?.offsetTop  ?? 0,
+    height: window.visualViewport?.height     ?? window.innerHeight,
+  }));
   const endRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Visual Viewport API: fires when keyboard opens/closes or browser chrome resizes
+  // Visual Viewport API — fires on keyboard open/close and browser chrome resize
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return; // desktop fallback — 100dvh handles it
-    const onResize = () => {
-      setViewH(vv.height);
-      // Scroll to bottom after keyboard animation settles
+    const update = () => {
+      setVpState({
+        top:    vv ? vv.offsetTop  : 0,
+        height: vv ? vv.height     : window.innerHeight,
+      });
       setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     };
-    vv.addEventListener("resize", onResize);
-    vv.addEventListener("scroll", onResize);
+    if (vv) {
+      vv.addEventListener("resize", update);
+      vv.addEventListener("scroll", update);
+    } else {
+      window.addEventListener("resize", update);
+    }
     return () => {
-      vv.removeEventListener("resize", onResize);
-      vv.removeEventListener("scroll", onResize);
+      if (vv) {
+        vv.removeEventListener("resize", update);
+        vv.removeEventListener("scroll", update);
+      } else {
+        window.removeEventListener("resize", update);
+      }
     };
   }, []);
 
@@ -1000,13 +1010,16 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
       position: "fixed",
-      top: 0, left: 0, right: 0,
-      // Use measured visual viewport height — auto-adjusts when keyboard opens
-      height: `${viewH}px`,
+      // Use visualViewport offsetTop+height so chat sits exactly over the
+      // visible area on ALL mobile browsers (Safari, Chrome Android, Samsung)
+      top:    vpState.top,
+      left:   0,
+      right:  0,
+      height: vpState.height,
       background: "white",
       display: "flex",
       flexDirection: "column",
-      zIndex: 300,
+      zIndex: 9999,
       overflow: "hidden",
     }}>
       <style>{`
