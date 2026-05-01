@@ -16,6 +16,7 @@
 //      supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import LandingPage from "./LandingPage.jsx";
 
@@ -2562,14 +2563,15 @@ export default function LoopGenApp() {
   // ════════════════════════════
   //  CHAT
   // ════════════════════════════
-  if (screen === "chat") return (
+  if (screen === "chat") return createPortal(
     <ChatScreen
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
       onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
       onBack={pop}
-    />
+    />,
+    document.body
   );
 
     // ════════════════════════════
