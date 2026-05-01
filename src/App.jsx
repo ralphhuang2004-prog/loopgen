@@ -15,7 +15,8 @@
 //   6. Deploy supabase/functions/loopgen-ai-desc
 //      supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, flushSync } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import LandingPage from "./LandingPage.jsx";
 
@@ -938,41 +939,64 @@ function HomeTicker() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  CHAT SCREEN — controlled: messages live in parent store
-//  props: sellerName, listingTitle, messages[], onSend(msg), onBack
+//  CHAT SCREEN
+//  Strategy: no fixed height tricks. Use a wrapper that injects
+//  a <meta viewport> update + CSS that works on every mobile browser.
 // ═══════════════════════════════════════════════════════
 function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
-  // viewH tracks the visual viewport height so the chat shrinks correctly
-  // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
-  const [viewH, setViewH] = useState(
-    () => window.visualViewport?.height || window.innerHeight
-  );
-  const endRef = useRef(null);
-  const inputRef = useRef(null);
+  const endRef    = useRef(null);
+  const inputRef  = useRef(null);
+  const wrapRef   = useRef(null);
 
-  // Visual Viewport API: fires when keyboard opens/closes or browser chrome resizes
+  // ── Viewport fix: injected meta + CSS ───────────────
+  // This runs once on mount. It patches the <meta name="viewport"> to add
+  // interactive-widget=resizes-content (Chrome Android ≥108) which makes the
+  // browser shrink the layout viewport when the keyboard opens so our flexbox
+  // just works. On iOS Safari we use the visualViewport API as a fallback.
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return; // desktop fallback — 100dvh handles it
-    const onResize = () => {
-      setViewH(vv.height);
-      // Scroll to bottom after keyboard animation settles
-      setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    // 1. Patch meta viewport
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      document.head.appendChild(meta);
+    }
+    const original = meta.content;
+    meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, interactive-widget=resizes-content';
+
+    // 2. Lock body scroll while chat is open
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    // 3. Visual Viewport fallback for iOS Safari
+    const applyHeight = () => {
+      const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      if (wrapRef.current) wrapRef.current.style.height = h + 'px';
     };
-    vv.addEventListener("resize", onResize);
-    vv.addEventListener("scroll", onResize);
+    applyHeight();
+    window.visualViewport?.addEventListener('resize', applyHeight);
+    window.visualViewport?.addEventListener('scroll', applyHeight);
+    window.addEventListener('resize', applyHeight);
+
     return () => {
-      vv.removeEventListener("resize", onResize);
-      vv.removeEventListener("scroll", onResize);
+      // Restore everything on unmount
+      meta.content = original;
+      document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overflow = '';
+      window.visualViewport?.removeEventListener('resize', applyHeight);
+      window.visualViewport?.removeEventListener('scroll', applyHeight);
+      window.removeEventListener('resize', applyHeight);
     };
   }, []);
 
-  // Scroll to bottom whenever messages change
+  // ── Scroll to bottom when messages change ───────────
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }, [messages]);
 
+  // ── Send ────────────────────────────────────────────
   const send = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -983,171 +1007,165 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     });
     setText("");
-    setTimeout(() => inputRef.current?.focus(), 50);
+    setTimeout(() => inputRef.current?.focus(), 30);
   };
 
   const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
   const initial = (sellerName || "S")[0].toUpperCase();
 
   return (
-    <div style={{
-      fontFamily: "'Plus Jakarta Sans',sans-serif",
-      position: "fixed",
-      top: 0, left: 0, right: 0,
-      // Use measured visual viewport height — auto-adjusts when keyboard opens
-      height: `${viewH}px`,
-      background: "white",
-      display: "flex",
-      flexDirection: "column",
-      zIndex: 300,
-      overflow: "hidden",
-    }}>
+    <div
+      ref={wrapRef}
+      style={{
+        fontFamily: "'Plus Jakarta Sans',sans-serif",
+        position: "fixed",
+        top: 0, left: 0, right: 0,
+        // height set imperatively by visualViewport listener
+        // 100dvh is the correct fallback now we are portaled to document.body
+        height: "100dvh",
+        background: "white",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 300,
+        overflow: "hidden",
+        // Prevent rubber-band scroll on iOS from moving the whole chat
+        overscrollBehavior: "none",
+        WebkitOverflowScrolling: "auto",
+      }}
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow: hidden; -webkit-font-smoothing: antialiased; }
-        .lg-chat-input {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+        .lg-wrap { display: flex; flex-direction: column; overflow: hidden; }
+        .lg-msgs {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+        }
+        .lg-input-bar {
+          flex-shrink: 0;
+          background: white;
+          border-top: 1px solid #f0f1f3;
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          padding: 10px 12px;
+          /* iOS safe area — only applies when no keyboard */
+          padding-bottom: max(env(safe-area-inset-bottom, 0px), 10px);
+        }
+        .lg-input {
+          flex: 1;
+          min-width: 0;
+          background: #f3f4f6;
+          border-radius: 24px;
+          padding: 13px 18px;
+          border: 2px solid transparent;
           font-size: 16px !important;
-          -webkit-user-select: text !important;
-          user-select: text !important;
-          touch-action: manipulation;
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          color: #111;
+          line-height: normal;
           -webkit-appearance: none;
           appearance: none;
-          border: none;
           outline: none;
+          -webkit-user-select: text;
+          user-select: text;
+          touch-action: manipulation;
+          transition: border-color .15s, background .15s;
         }
-        .lg-chat-input:focus { outline: none; border: none; }
-        .lg-send-btn { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-        .lg-messages { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+        .lg-input:focus {
+          outline: none;
+          border-color: #1c7c45;
+          background: #f0fdf4;
+        }
+        .lg-send {
+          width: 48px; height: 48px;
+          border-radius: 50%;
+          border: none;
+          flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
+          transition: background .15s;
+        }
       `}</style>
 
       {/* ── Header ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12,
-        padding: "14px 16px 12px",
-        paddingTop: "max(env(safe-area-inset-top, 14px), 14px)",
+        padding: "12px 16px",
+        paddingTop: "max(env(safe-area-inset-top, 12px), 12px)",
         borderBottom: "1px solid #f0f1f3",
         background: "white", flexShrink: 0,
-        boxShadow: "0 1px 8px rgba(0,0,0,0.05)",
+        boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
       }}>
-        <div
-          onClick={onBack}
-          style={{ cursor: "pointer", padding: "6px 10px 6px 2px", WebkitTapHighlightColor: "transparent" }}
-        >
+        <div onClick={onBack} style={{ cursor:"pointer", padding:"6px 10px 6px 2px", WebkitTapHighlightColor:"transparent" }}>
           <IcoBack />
         </div>
         <div style={{
-          width: 42, height: 42, borderRadius: "50%",
-          background: "linear-gradient(135deg,#1c7c45,#22c55e)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: 800, fontSize: 17, flexShrink: 0,
+          width:42, height:42, borderRadius:"50%",
+          background:"linear-gradient(135deg,#1c7c45,#22c55e)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          color:"white", fontWeight:800, fontSize:17, flexShrink:0,
         }}>
           {initial}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontWeight: 700, fontSize: 15, color: "#111",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:700, fontSize:15, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {sellerName || "Seller"}
           </div>
           {listingTitle && (
-            <div style={{
-              fontSize: 11, color: "#9ca3af",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>
+            <div style={{ fontSize:11, color:"#9ca3af", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               Re: {listingTitle}
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Message list ── */}
-      <div className="lg-messages" style={{
-        flex: 1,
-        padding: "16px 16px 8px",
-        background: "#f8f9fa",
-        display: "flex", flexDirection: "column", gap: 10,
-        minHeight: 0,
-      }}>
+      {/* ── Messages ── */}
+      <div className="lg-msgs" style={{ padding:"16px 16px 8px", background:"#f8f9fa", display:"flex", flexDirection:"column", gap:10 }}>
         {messages.length === 0 ? (
-          <div style={{
-            flex: 1, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            padding: "60px 20px", color: "#9ca3af", textAlign: "center",
-          }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>👋</div>
-            <div style={{ fontWeight: 700, color: "#374151", fontSize: 15, marginBottom: 6 }}>
-              Start the conversation
-            </div>
-            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-              Say hi to {sellerName || "the seller"} — messages are private between you two.
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"60px 20px", color:"#9ca3af", textAlign:"center" }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>👋</div>
+            <div style={{ fontWeight:700, color:"#374151", fontSize:15, marginBottom:6 }}>Start the conversation</div>
+            <div style={{ fontSize:13, lineHeight:1.6 }}>Say hi to {sellerName || "the seller"} — messages are private between you two.</div>
+          </div>
+        ) : messages.map(m => (
+          <div key={m.id} style={{ display:"flex", justifyContent:m.from_me?"flex-end":"flex-start", alignItems:"flex-end", gap:8 }}>
+            {!m.from_me && (
+              <div style={{ width:28, height:28, borderRadius:"50%", background:"linear-gradient(135deg,#1c7c45,#22c55e)", display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontWeight:800, fontSize:11, flexShrink:0 }}>
+                {initial}
+              </div>
+            )}
+            <div style={{
+              maxWidth:"75%", padding:"11px 15px", fontSize:15, fontWeight:500, lineHeight:1.5,
+              borderRadius: m.from_me ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
+              background: m.from_me ? "#1c7c45" : "white",
+              color: m.from_me ? "white" : "#111",
+              boxShadow: m.from_me ? "0 2px 8px rgba(28,124,69,0.25)" : "0 1px 4px rgba(0,0,0,0.08)",
+              wordBreak:"break-word",
+            }}>
+              {m.content}
+              {m.time && <div style={{ fontSize:10, marginTop:4, opacity:0.65, textAlign:m.from_me?"right":"left" }}>{m.time}</div>}
             </div>
           </div>
-        ) : (
-          messages.map((m) => (
-            <div key={m.id} style={{
-              display: "flex",
-              justifyContent: m.from_me ? "flex-end" : "flex-start",
-              alignItems: "flex-end", gap: 8,
-            }}>
-              {!m.from_me && (
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%",
-                  background: "linear-gradient(135deg,#1c7c45,#22c55e)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "white", fontWeight: 800, fontSize: 11, flexShrink: 0,
-                }}>
-                  {initial}
-                </div>
-              )}
-              <div style={{
-                maxWidth: "75%",
-                padding: "11px 15px",
-                fontSize: 15, fontWeight: 500, lineHeight: 1.5,
-                borderRadius: m.from_me ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
-                background: m.from_me ? "#1c7c45" : "white",
-                color: m.from_me ? "white" : "#111",
-                boxShadow: m.from_me ? "0 2px 8px rgba(28,124,69,0.25)" : "0 1px 4px rgba(0,0,0,0.08)",
-                wordBreak: "break-word",
-              }}>
-                {m.content}
-                {m.time && (
-                  <div style={{
-                    fontSize: 10, marginTop: 4, opacity: 0.65,
-                    textAlign: m.from_me ? "right" : "left",
-                  }}>
-                    {m.time}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-        <div ref={endRef} style={{ height: 4 }} />
+        ))}
+        <div ref={endRef} style={{ height:4 }} />
       </div>
 
       {/* ── Input bar ── */}
-      <div style={{
-        background: "white",
-        borderTop: "1px solid #f0f1f3",
-        padding: "10px 12px",
-        display: "flex", gap: 10, alignItems: "center",
-        flexShrink: 0,
-        position: "relative",
-        zIndex: 1,
-      }}>
+      <div className="lg-input-bar">
         <input
           ref={inputRef}
-          className="lg-chat-input"
+          className="lg-input"
           type="text"
+          inputMode="text"
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKey}
@@ -1157,36 +1175,12 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
           autoCapitalize="sentences"
           spellCheck={true}
           enterKeyHint="send"
-          style={{
-            flex: 1,
-            background: "#f3f4f6",
-            borderRadius: 24,
-            padding: "13px 18px",
-            border: "2px solid transparent",
-            fontSize: 16,
-            color: "#111",
-            fontFamily: "inherit",
-            lineHeight: "normal",
-            minWidth: 0,
-            transition: "border-color 0.15s, background 0.15s",
-          }}
-          onFocus={e => { e.target.style.borderColor = "#1c7c45"; e.target.style.background = "#f0fdf4"; }}
-          onBlur={e => { e.target.style.borderColor = "transparent"; e.target.style.background = "#f3f4f6"; }}
         />
         <button
-          className="lg-send-btn"
+          className="lg-send"
           onClick={send}
           disabled={!text.trim()}
-          style={{
-            width: 48, height: 48, borderRadius: "50%",
-            background: text.trim() ? "#1c7c45" : "#e5e7eb",
-            border: "none",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: text.trim() ? "pointer" : "default",
-            flexShrink: 0,
-            transition: "background 0.15s",
-            boxShadow: text.trim() ? "0 4px 12px rgba(28,124,69,0.35)" : "none",
-          }}
+          style={{ background: text.trim() ? "#1c7c45" : "#e5e7eb", boxShadow: text.trim() ? "0 4px 12px rgba(28,124,69,0.35)" : "none" }}
         >
           <IcoSend />
         </button>
@@ -1194,7 +1188,6 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════
 //  MAIN APP
 // ═══════════════════════════════════════════════════════
@@ -1217,12 +1210,11 @@ export default function LoopGenApp() {
   const [convo,     setConvo]   = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
-  // chatContext: drives ChatScreen — includes messages directly to avoid async race
-  // { id, sellerName, listingTitle }
+  // chatContext: drives ChatScreen — { id, sellerName, listingTitle }
   const [chatContext, setChatContext] = useState(null);
-  // localChatStore: source of truth, keyed by chat id (survives navigation)
-  // We use a ref so reads are always synchronous, and trigger re-renders via chatContext
-  const localChatStore = useRef({});
+  // localChatStore: keyed by chat id, survives navigation
+  // useState so React always re-renders ChatScreen with fresh messages
+  const [localChatStore, setLocalChatStore] = useState({});
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
 
@@ -1557,49 +1549,41 @@ export default function LoopGenApp() {
   };
 
   // ── Chat ──────────────────────────────────────────────
-  // Stable key for a conversation — MUST be identical everywhere
-  // chatKey: ALWAYS keyed by listing id + seller username — never by conv/message id
-  // item can be: a listing object (has .id = listing id)
-  //              a conversation object (has .listing_id, .seller_username)
+  // chatKey: keyed by listing id + seller — never by conversation id
   const chatKey = (item) => {
     const seller = (item.seller_username || item.other_user || "seller").trim();
-    // Prefer explicit listing_id (conv objects), then id only if it looks like a listing id
-    // (not a UUID from conversations table)
     const listingId = item.listing_id || item.id || item.title || "item";
     return `chat_${seller}_${listingId}`.replace(/\s+/g, "_").toLowerCase();
   };
 
-  // addMessageToStore: synchronously mutates the ref, then forces a re-render
-  // by updating chatContext (which ChatScreen reads messages from via the ref)
+  // addMessageToStore: append a sent message — useState triggers re-render automatically
   const addMessageToStore = (key, msg) => {
-    const store = localChatStore.current;
-    store[key] = [...(store[key] || []), msg];
-    // Force ChatScreen to re-render with new messages
-    setChatContext(ctx => ctx ? { ...ctx } : ctx);
+    setLocalChatStore(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), msg],
+    }));
   };
 
-  // openChat: single entry point — always synchronous, no async state race
+  // openChat: flushSync batches store + context into ONE synchronous paint
+  // so ChatScreen always gets correct messages on its very first render (mobile safe)
   const openChat = (item, seedMessages = []) => {
     const key = chatKey(item);
-    const store = localChatStore.current;
-    const existing = store[key] || [];
-
-    if (seedMessages.length > 0) {
-      // Append seeds that aren't already stored (dedup by id)
-      const existingIds = new Set(existing.map(m => m.id));
-      const toAdd = seedMessages.filter(m => !existingIds.has(m.id));
-      if (toAdd.length > 0) {
-        store[key] = [...existing, ...toAdd];
-      }
-    } else if (!store[key]) {
-      // First time opening this convo with no seeds — initialise empty
-      store[key] = [];
-    }
-    // Set context and navigate — single synchronous update, no race
-    setChatContext({
-      id: key,
-      sellerName: item.seller_username || item.other_user || "Seller",
-      listingTitle: item.title || item.listing_title || "Item",
+    flushSync(() => {
+      setLocalChatStore(prev => {
+        const existing = prev[key] || [];
+        if (seedMessages.length === 0) {
+          return key in prev ? prev : { ...prev, [key]: [] };
+        }
+        const existingIds = new Set(existing.map(m => m.id));
+        const toAdd = seedMessages.filter(m => !existingIds.has(m.id));
+        if (toAdd.length === 0) return prev;
+        return { ...prev, [key]: [...existing, ...toAdd] };
+      });
+      setChatContext({
+        id: key,
+        sellerName: item.seller_username || item.other_user || "Seller",
+        listingTitle: item.title || item.listing_title || "Item",
+      });
     });
     push("chat");
   };
@@ -2560,16 +2544,19 @@ export default function LoopGenApp() {
   );
 
   // ════════════════════════════
-  //  CHAT
+  //  CHAT — rendered via Portal directly onto document.body
+  //  This escapes the Phone mock's overflow:hidden/position:relative
+  //  so position:fixed works correctly on ALL mobile browsers
   // ════════════════════════════
-  if (screen === "chat") return (
+  if (screen === "chat") return createPortal(
     <ChatScreen
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
-      messages={localChatStore.current[chatContext?.id] || []}
+      messages={localChatStore[chatContext?.id] || []}
       onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
       onBack={pop}
-    />
+    />,
+    document.body
   );
 
     // ════════════════════════════
