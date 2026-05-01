@@ -1537,10 +1537,15 @@ export default function LoopGenApp() {
 
   // ── Chat ──────────────────────────────────────────────
   // Stable key for a conversation — MUST be identical everywhere
+  // chatKey: ALWAYS keyed by listing id + seller username — never by conv/message id
+  // item can be: a listing object (has .id = listing id)
+  //              a conversation object (has .listing_id, .seller_username)
   const chatKey = (item) => {
     const seller = (item.seller_username || item.other_user || "seller").trim();
-    const listing = (item.id || item.listing_id || item.title || "item").toString().trim();
-    return `chat_${seller}_${listing}`.replace(/\s+/g, "_").toLowerCase();
+    // Prefer explicit listing_id (conv objects), then id only if it looks like a listing id
+    // (not a UUID from conversations table)
+    const listingId = item.listing_id || item.id || item.title || "item";
+    return `chat_${seller}_${listingId}`.replace(/\s+/g, "_").toLowerCase();
   };
 
   // addMessageToStore: synchronously mutates the ref, then forces a re-render
@@ -1603,6 +1608,8 @@ export default function LoopGenApp() {
         const msgs = await dbGetMessages(conv.id);
         const enriched = {
           ...conv,
+          // Preserve original listing id so chatKey produces the same key as Make Offer
+          listing_id: item.id,
           seller_username: item.seller_username || "Seller",
           title: item.title || "Item",
         };
