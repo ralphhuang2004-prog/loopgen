@@ -16,7 +16,6 @@
 //      supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import LandingPage from "./LandingPage.jsx";
 
@@ -465,9 +464,27 @@ function Phone({ children }) {
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
+
+        /* ── Mobile: fill the real screen, no mock frame ── */
+        @media (max-width: 500px) {
+          .lg-phone-outer {
+            background: white !important;
+            padding: 0 !important;
+            align-items: stretch !important;
+            min-height: 100dvh !important;
+          }
+          .lg-phone-inner {
+            width: 100% !important;
+            height: 100dvh !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+          }
+        }
       `}</style>
-      <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
-        {children}
+      <div className="lg-phone-outer" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#dde1e7",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",padding:20,width:"100%"}}>
+        <div className="lg-phone-inner" style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -944,38 +961,28 @@ function HomeTicker() {
 // ═══════════════════════════════════════════════════════
 function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
-  // Track visual viewport size AND offset — needed for mobile Safari where
-  // the visual viewport shifts when URL bar shows/hides
-  const [vpState, setVpState] = useState(() => ({
-    top:    window.visualViewport?.offsetTop  ?? 0,
-    height: window.visualViewport?.height     ?? window.innerHeight,
-  }));
+  // viewH tracks the visual viewport height so the chat shrinks correctly
+  // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
+  const [viewH, setViewH] = useState(
+    () => window.visualViewport?.height || window.innerHeight
+  );
   const endRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Visual Viewport API — fires on keyboard open/close and browser chrome resize
+  // Visual Viewport API: fires when keyboard opens/closes or browser chrome resizes
   useEffect(() => {
     const vv = window.visualViewport;
-    const update = () => {
-      setVpState({
-        top:    vv ? vv.offsetTop  : 0,
-        height: vv ? vv.height     : window.innerHeight,
-      });
+    if (!vv) return; // desktop fallback — 100dvh handles it
+    const onResize = () => {
+      setViewH(vv.height);
+      // Scroll to bottom after keyboard animation settles
       setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     };
-    if (vv) {
-      vv.addEventListener("resize", update);
-      vv.addEventListener("scroll", update);
-    } else {
-      window.addEventListener("resize", update);
-    }
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
     return () => {
-      if (vv) {
-        vv.removeEventListener("resize", update);
-        vv.removeEventListener("scroll", update);
-      } else {
-        window.removeEventListener("resize", update);
-      }
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
     };
   }, []);
 
@@ -1010,12 +1017,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
       position: "fixed",
-      // Use visualViewport offsetTop+height so chat sits exactly over the
-      // visible area on ALL mobile browsers (Safari, Chrome Android, Samsung)
-      top:    vpState.top,
-      left:   0,
-      right:  0,
-      height: vpState.height,
+      top: 0, left: 0, right: 0, bottom: 0,
       background: "white",
       display: "flex",
       flexDirection: "column",
@@ -2576,15 +2578,14 @@ export default function LoopGenApp() {
   // ════════════════════════════
   //  CHAT
   // ════════════════════════════
-  if (screen === "chat") return createPortal(
+  if (screen === "chat") return (
     <ChatScreen
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
       onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
       onBack={pop}
-    />,
-    document.body
+    />
   );
 
     // ════════════════════════════
