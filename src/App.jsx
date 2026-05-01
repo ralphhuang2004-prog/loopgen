@@ -1196,11 +1196,12 @@ export default function LoopGenApp() {
   const [convo,     setConvo]   = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
-  // chatContext drives the new ChatScreen component
-  const [chatContext, setChatContext] = useState(null); // { id, sellerName, listingTitle }
-  // localChatStore: persists messages across navigations, keyed by chat id
-  // { [chatId]: [ { id, from_me, content, time } ] }
-  const [localChatStore, setLocalChatStore] = useState({});
+  // chatContext: drives ChatScreen — includes messages directly to avoid async race
+  // { id, sellerName, listingTitle }
+  const [chatContext, setChatContext] = useState(null);
+  // localChatStore: source of truth, keyed by chat id (survives navigation)
+  // We use a ref so reads are always synchronous, and trigger re-renders via chatContext
+  const localChatStore = useRef({});
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
 
@@ -1535,28 +1536,40 @@ export default function LoopGenApp() {
   };
 
   // ── Chat ──────────────────────────────────────────────
-  // Derive a stable key for a conversation so history persists across navigations
+  // Stable key for a conversation — MUST be identical everywhere
   const chatKey = (item) => {
-    const seller = item.seller_username || item.other_user || "seller";
-    const listing = item.id || item.listing_id || item.title || "item";
+    const seller = (item.seller_username || item.other_user || "seller").trim();
+    const listing = (item.id || item.listing_id || item.title || "item").toString().trim();
     return `chat_${seller}_${listing}`.replace(/\s+/g, "_").toLowerCase();
   };
 
-  // openChat: single entry point — merges seed messages into store without duplicates
+  // addMessageToStore: synchronously mutates the ref, then forces a re-render
+  // by updating chatContext (which ChatScreen reads messages from via the ref)
+  const addMessageToStore = (key, msg) => {
+    const store = localChatStore.current;
+    store[key] = [...(store[key] || []), msg];
+    // Force ChatScreen to re-render with new messages
+    setChatContext(ctx => ctx ? { ...ctx } : ctx);
+  };
+
+  // openChat: single entry point — always synchronous, no async state race
   const openChat = (item, seedMessages = []) => {
     const key = chatKey(item);
-    setLocalChatStore(store => {
-      const existing = store[key] || [];
-      if (seedMessages.length === 0) {
-        // No seeds — preserve whatever history exists (including empty)
-        return store[key] !== undefined ? store : { ...store, [key]: [] };
-      }
-      // Append any seed messages whose id isn't already in the store
+    const store = localChatStore.current;
+    const existing = store[key] || [];
+
+    if (seedMessages.length > 0) {
+      // Append seeds that aren't already stored (dedup by id)
       const existingIds = new Set(existing.map(m => m.id));
       const toAdd = seedMessages.filter(m => !existingIds.has(m.id));
-      if (toAdd.length === 0) return store; // nothing new
-      return { ...store, [key]: [...existing, ...toAdd] };
-    });
+      if (toAdd.length > 0) {
+        store[key] = [...existing, ...toAdd];
+      }
+    } else if (!store[key]) {
+      // First time opening this convo with no seeds — initialise empty
+      store[key] = [];
+    }
+    // Set context and navigate — single synchronous update, no race
     setChatContext({
       id: key,
       sellerName: item.seller_username || item.other_user || "Seller",
@@ -1565,15 +1578,7 @@ export default function LoopGenApp() {
     push("chat");
   };
 
-  // addMessageToStore: called by ChatScreen when user sends a message
-  const addMessageToStore = (key, msg) => {
-    setLocalChatStore(store => ({
-      ...store,
-      [key]: [...(store[key] || []), msg],
-    }));
-  };
-
-  // Legacy: used by the chats list screen
+  // openConvo: used by the chats list screen
   const openConvo = async (c) => {
     let msgs = c.messages || [];
     if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
@@ -1586,7 +1591,7 @@ export default function LoopGenApp() {
   };
 
   const openSellerChat = async (item) => {
-    // Always open chat — no auth gate for demo/guest mode
+    // No auth gate — works for guests and logged-in users
     if (!supabase || !user) {
       openChat(item, []);
       return;
@@ -2533,7 +2538,7 @@ export default function LoopGenApp() {
     <ChatScreen
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
-      messages={localChatStore[chatContext?.id] || []}
+      messages={localChatStore.current[chatContext?.id] || []}
       onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
       onBack={pop}
     />
