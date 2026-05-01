@@ -943,8 +943,30 @@ function HomeTicker() {
 // ═══════════════════════════════════════════════════════
 function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
+  // viewH tracks the visual viewport height so the chat shrinks correctly
+  // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
+  const [viewH, setViewH] = useState(
+    () => window.visualViewport?.height || window.innerHeight
+  );
   const endRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Visual Viewport API: fires when keyboard opens/closes or browser chrome resizes
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return; // desktop fallback — 100dvh handles it
+    const onResize = () => {
+      setViewH(vv.height);
+      // Scroll to bottom after keyboard animation settles
+      setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    };
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
+  }, []);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -978,7 +1000,8 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
       fontFamily: "'Plus Jakarta Sans',sans-serif",
       position: "fixed",
       top: 0, left: 0, right: 0,
-      height: "100dvh",
+      // Use measured visual viewport height — auto-adjusts when keyboard opens
+      height: `${viewH}px`,
       background: "white",
       display: "flex",
       flexDirection: "column",
@@ -1115,11 +1138,9 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
       <div style={{
         background: "white",
         borderTop: "1px solid #f0f1f3",
-        padding: "10px 12px 10px",
-        paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 10px, 10px)",
+        padding: "10px 12px",
         display: "flex", gap: 10, alignItems: "center",
         flexShrink: 0,
-        /* Never let this be obscured */
         position: "relative",
         zIndex: 1,
       }}>
