@@ -252,6 +252,7 @@ async function dbGetConversations(userId) {
 }
 
 async function dbGetMessages(conversationId) {
+  // Always fetch from network — never use cached data for messages
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("messages")
@@ -1045,10 +1046,6 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
         .lg-messages { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
       `}</style>
 
-      {/* Debug marker */}
-      <div style={{background:"#1c7c45",color:"white",fontSize:10,textAlign:"center",padding:"2px 0",letterSpacing:1,flexShrink:0}}>
-        ✅ CHAT UI FIX ACTIVE
-      </div>
       {/* ── Header ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12,
@@ -1288,15 +1285,19 @@ export default function LoopGenApp() {
       return { ...f, tags: merged };
     });
   }, [sell.title, sell.category, sell.condition]); // eslint-disable-line react-hooks/exhaustive-deps
-    // ── APP VERSION CHECK ────────────────────────────────────────────────────
+  // ── APP VERSION CHECK — clears stale cache on new deploy ────────────────
   useEffect(() => {
     const stored = localStorage.getItem("app_version");
     if (stored !== APP_VERSION) {
-      console.log("[LoopGen] New version:", APP_VERSION, "clearing caches");
+      console.log("[LoopGen] New version:", APP_VERSION, "clearing old cache");
       if ("caches" in window) {
         caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
       }
+      const session = localStorage.getItem("sb-wknlvmsgjnsiamcbntek-auth-token");
+      localStorage.clear();
+      if (session) localStorage.setItem("sb-wknlvmsgjnsiamcbntek-auth-token", session);
       localStorage.setItem("app_version", APP_VERSION);
+      console.log("[LoopGen] Cache cleared, version set:", APP_VERSION);
     }
   }, []);
 
@@ -1631,102 +1632,61 @@ export default function LoopGenApp() {
     // Set context and navigate — single synchronous update, no race
     setChatContext({
       id: key,
+      convId: item.convId || (item.id && !item.id.startsWith("chat_") ? item.id : null),
       sellerName: item.seller_username || item.other_user || "Seller",
       listingTitle: item.title || item.listing_title || "Item",
     });
     push("chat");
   };
 
-  // openConvo: used by the chats list screen
+  // openConvo: used by the chats list screen — always fetches fresh from Supabase
   const openConvo = async (c) => {
-    let msgs = c.messages || [];
+    // Show chat immediately with empty/cached messages, then load fresh
+    openChat({ ...c, convId: c.id }, []);
     if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
       try {
         const fetched = await dbGetMessages(c.id);
-        msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
-      } catch (e) { console.error("openConvo:", e); }
+        const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+        const key = chatKey(c);
+        const store = localChatStore.current;
+        store[key] = msgs;
+        setChatContext(ctx => ctx ? { ...ctx, convId: c.id } : ctx);
+      } catch (e) { console.error("openConvo fetch error:", e); }
     }
-    openChat(c, msgs);
   };
 
   const openSellerChat = async (item) => {
-    if (!supabase || !user) { openChat(item, []); return; }
+    // No auth gate — works for guests and logged-in users
+    if (!supabase || !user) {
+      openChat(item, []);
+      return;
+    }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
-
-    // Navigate to chat immediately — show loading state
-    const tempItem = { ...item, seller_username: item.seller_username || "Seller", title: item.title || "Item" };
-    openChat(tempItem, []); // opens chat screen instantly
-
     try {
-      console.log("[LoopGen] Opening chat:", { listing: item.id, seller: item.seller_id, buyer: user.id });
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (!conv) { showToast("Couldn't open chat. Please try again."); return; }
-
-      console.log("[LoopGen] Conversation:", conv.id);
-
-      // Always fetch fresh messages from Supabase — never use cached data
-      const msgs = await dbGetMessages(conv.id);
-      const enriched = {
-        ...conv,
-        listing_id: item.id,
-        seller_username: item.seller_username || "Seller",
-        title: item.title || "Item",
-      };
-      setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
-
-      // Update the store with real messages from DB
-      const key = chatKey(enriched);
-      localChatStore.current[key] = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
-      setChatContext({ id: key, sellerName: enriched.seller_username, listingTitle: enriched.title });
-    } catch (e) {
-      console.error("[LoopGen] openSellerChat error:", e.message, e.code);
-      showToast("Chat error: " + (e.message || "Please try again."));
-    }
-  };
-
-  const sendMsg = async () => {
-    if (!msgText.trim()) return;
-    const text = msgText.trim();
-    setMsgText("");
-    // Always save to Supabase when possible — never cache-only
-    if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
-      const optId = `opt_${Date.now()}`;
-      // Optimistic add
-      addMessageToStore(chatKey(convo), {
-        id: optId, from_me: true, content: text,
-        time: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}),
-        _pending: true,
-      });
-      try {
-        const saved = await dbSendMessage(convo.id, user.id, text);
-        if (saved) {
-          // Replace optimistic with real saved message
-          const store = localChatStore.current;
-          const key = chatKey(convo);
-          store[key] = (store[key] || []).map(m =>
-            m.id === optId ? { ...saved, from_me: true } : m
-          );
-          setChatContext(ctx => ctx ? { ...ctx } : ctx);
-        }
-      } catch (e) {
-        console.error("[LoopGen] sendMsg failed:", e);
-        // Mark as failed
-        const store = localChatStore.current;
-        const key = chatKey(convo);
-        store[key] = (store[key] || []).map(m =>
-          m.id === optId ? { ...m, _failed: true, _pending: false } : m
-        );
-        setChatContext(ctx => ctx ? { ...ctx } : ctx);
-        showToast("Message couldn't send. Try again.");
+      if (conv) {
+        const msgs = await dbGetMessages(conv.id);
+        const enriched = {
+          ...conv,
+          convId: conv.id, // real Supabase conversation UUID for message persistence
+          listing_id: item.id,
+          seller_username: item.seller_username || "Seller",
+          title: item.title || "Item",
+        };
+        setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+        openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
+      } else {
+        openChat(item, []);
       }
-    } else {
-      // Offline/guest — add locally only
-      addMessageToStore(chatKey(convo), {
-        id: `msg_${Date.now()}`, from_me: true, content: text,
-        time: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}),
-      });
+    } catch (e) {
+      console.error("openSellerChat:", e);
+      openChat(item, []);
     }
   };
+
+  // sendMsg is now handled inside ChatScreen via onSend → addMessageToStore
+  // This legacy function kept for any remaining references but should not be called
+  const sendMsg = async () => { console.warn("[LoopGen] Legacy sendMsg called"); };
 
   // ── Derived data ──────────────────────────────────────
   const filtered = listings.filter(l => {
@@ -2636,7 +2596,19 @@ export default function LoopGenApp() {
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
-      onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
+      onSend={async (msg) => {
+        // 1. Show immediately in local store
+        addMessageToStore(chatContext?.id, msg);
+        // 2. Persist to Supabase if we have a real conversation
+        if (supabase && user && chatContext?.convId) {
+          try {
+            await dbSendMessage(chatContext.convId, user.id, msg.content);
+          } catch (e) {
+            console.error("[LoopGen] Message save failed:", e);
+            showToast("Message couldn't save — check connection");
+          }
+        }
+      }}
       onBack={pop}
     />
   );
