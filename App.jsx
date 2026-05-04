@@ -29,6 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
+const APP_VERSION = "2.1.0";
 
 // ── LoopGen Logo component — use everywhere branding is needed ────────────────
 // height: desired display height in px. Width scales automatically (ratio ~1.61:1).
@@ -1044,6 +1045,10 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
         .lg-messages { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
       `}</style>
 
+      {/* Debug marker */}
+      <div style={{background:"#1c7c45",color:"white",fontSize:10,textAlign:"center",padding:"2px 0",letterSpacing:1,flexShrink:0}}>
+        ✅ CHAT UI FIX ACTIVE
+      </div>
       {/* ── Header ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12,
@@ -1283,6 +1288,18 @@ export default function LoopGenApp() {
       return { ...f, tags: merged };
     });
   }, [sell.title, sell.category, sell.condition]); // eslint-disable-line react-hooks/exhaustive-deps
+    // ── APP VERSION CHECK ────────────────────────────────────────────────────
+  useEffect(() => {
+    const stored = localStorage.getItem("app_version");
+    if (stored !== APP_VERSION) {
+      console.log("[LoopGen] New version:", APP_VERSION, "clearing caches");
+      if ("caches" in window) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+      }
+      localStorage.setItem("app_version", APP_VERSION);
+    }
+  }, []);
+
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1633,45 +1650,81 @@ export default function LoopGenApp() {
   };
 
   const openSellerChat = async (item) => {
-    // No auth gate — works for guests and logged-in users
-    if (!supabase || !user) {
-      openChat(item, []);
-      return;
-    }
+    if (!supabase || !user) { openChat(item, []); return; }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
+
+    // Navigate to chat immediately — show loading state
+    const tempItem = { ...item, seller_username: item.seller_username || "Seller", title: item.title || "Item" };
+    openChat(tempItem, []); // opens chat screen instantly
+
     try {
+      console.log("[LoopGen] Opening chat:", { listing: item.id, seller: item.seller_id, buyer: user.id });
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (conv) {
-        const msgs = await dbGetMessages(conv.id);
-        const enriched = {
-          ...conv,
-          // Preserve original listing id so chatKey produces the same key as Make Offer
-          listing_id: item.id,
-          seller_username: item.seller_username || "Seller",
-          title: item.title || "Item",
-        };
-        setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
-        openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
-      } else {
-        openChat(item, []);
-      }
+      if (!conv) { showToast("Couldn't open chat. Please try again."); return; }
+
+      console.log("[LoopGen] Conversation:", conv.id);
+
+      // Always fetch fresh messages from Supabase — never use cached data
+      const msgs = await dbGetMessages(conv.id);
+      const enriched = {
+        ...conv,
+        listing_id: item.id,
+        seller_username: item.seller_username || "Seller",
+        title: item.title || "Item",
+      };
+      setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+
+      // Update the store with real messages from DB
+      const key = chatKey(enriched);
+      localChatStore.current[key] = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+      setChatContext({ id: key, sellerName: enriched.seller_username, listingTitle: enriched.title });
     } catch (e) {
-      console.error("openSellerChat:", e);
-      openChat(item, []);
+      console.error("[LoopGen] openSellerChat error:", e.message, e.code);
+      showToast("Chat error: " + (e.message || "Please try again."));
     }
   };
 
   const sendMsg = async () => {
     if (!msgText.trim()) return;
-    const text = msgText;
+    const text = msgText.trim();
     setMsgText("");
-    const time = new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
-    setChatMsgs(m => [...m, optimistic]);
-    setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    // Always save to Supabase when possible — never cache-only
     if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
-      try { await dbSendMessage(convo.id, user.id, text); }
-      catch (e) { showToast("Send failed"); }
+      const optId = `opt_${Date.now()}`;
+      // Optimistic add
+      addMessageToStore(chatKey(convo), {
+        id: optId, from_me: true, content: text,
+        time: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}),
+        _pending: true,
+      });
+      try {
+        const saved = await dbSendMessage(convo.id, user.id, text);
+        if (saved) {
+          // Replace optimistic with real saved message
+          const store = localChatStore.current;
+          const key = chatKey(convo);
+          store[key] = (store[key] || []).map(m =>
+            m.id === optId ? { ...saved, from_me: true } : m
+          );
+          setChatContext(ctx => ctx ? { ...ctx } : ctx);
+        }
+      } catch (e) {
+        console.error("[LoopGen] sendMsg failed:", e);
+        // Mark as failed
+        const store = localChatStore.current;
+        const key = chatKey(convo);
+        store[key] = (store[key] || []).map(m =>
+          m.id === optId ? { ...m, _failed: true, _pending: false } : m
+        );
+        setChatContext(ctx => ctx ? { ...ctx } : ctx);
+        showToast("Message couldn't send. Try again.");
+      }
+    } else {
+      // Offline/guest — add locally only
+      addMessageToStore(chatKey(convo), {
+        id: `msg_${Date.now()}`, from_me: true, content: text,
+        time: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}),
+      });
     }
   };
 

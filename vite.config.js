@@ -8,8 +8,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Changing filename forces all clients to download new SW immediately
-      filename: 'sw-v3.js',
+      filename: 'sw-v4.js',
+      injectRegister: 'auto',
       includeAssets: ['favicon.ico', 'loopgen-logo.png', 'icons/*.png'],
       manifest: {
         name: 'LoopGen',
@@ -29,24 +29,34 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // skipWaiting + clients.claim = new SW activates immediately
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          // Supabase API — always NetworkFirst, never cache
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: 'NetworkOnly',
+            options: { cacheName: 'supabase-nocache' },
+          },
+          // App pages — NetworkFirst (fresh content, fallback to cache)
+          {
+            urlPattern: /^\/$/,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 86400 },
-              networkTimeoutSeconds: 10,
+              cacheName: 'pages-cache',
+              networkTimeoutSeconds: 5,
             },
           },
+          // Static assets — CacheFirst (images, fonts)
           {
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|woff|woff2)$/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'image-cache',
+              cacheName: 'static-assets',
               expiration: { maxEntries: 150, maxAgeSeconds: 2592000 },
             },
           },
