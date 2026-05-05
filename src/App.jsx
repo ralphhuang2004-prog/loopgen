@@ -1474,7 +1474,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
     if (!trimmed || sendLock.current) return;
     sendLock.current = true;
     setSending(true);
-    // Pass content only — parent's sendMessage() owns optimistic ID + DB insert
+    // Pass content only — parent sendMessage() owns optimistic ID, DB insert, and dedup
     onSend({ content: trimmed }).finally(() => {
       sendLock.current = false;
       setSending(false);
@@ -1612,7 +1612,8 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
                 color: m.status === "failed" ? "#991b1b" : m.from_me ? "white" : "#111",
                 boxShadow: m.from_me ? "0 2px 8px rgba(28,124,69,0.25)" : "0 1px 4px rgba(0,0,0,0.08)",
                 wordBreak: "break-word",
-                opacity: m.status === "sending" ? 0.6 : 1,
+                opacity: m.status === "sending" ? 0.55 : 1,
+                transition: "opacity 0.2s",
               }}>
                 {m.content}
                 <div style={{
@@ -1621,8 +1622,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
                   display: "flex", justifyContent: m.from_me ? "flex-end" : "flex-start",
                   alignItems: "center", gap: 4,
                 }}>
-                  {m.status === "sending" && <span>⏳</span>}
-                  {m.status === "failed" && <span>⚠️ Failed</span>}
+                  {m.status === "failed" && <span title="Failed to send">⚠️</span>}
                   {m.time && <span>{m.time}</span>}
                 </div>
               </div>
@@ -1836,8 +1836,35 @@ export default function LoopGenApp() {
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // (legacy per-convo realtimeSub removed — global inbox subscription handles all incoming messages)
-  // (old global realtime sub with stale [user,screen,chatContext] deps removed — see chat engine below)
+  // ── Global realtime: receive incoming messages ───────────────────────────────
+  // Deps: [user] ONLY — never [screen, chatContext].
+  // Previous bug: [user, screen, chatContext] caused unsubscribe/resubscribe on
+  // every send, creating a gap window where the other user's messages were dropped.
+  // Refs (screenRef, chatCtxRef, userRef) let the callback read current values safely.
+  useEffect(() => {
+    if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
+    globalRealtimeSub.current = supabase
+      .channel(`inbox:${user.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" },
+        payload => {
+          const msg = payload.new;
+          if (!msg?.conversation_id) return;
+          const me = userRef.current;
+          if (msg.sender_id === me?.id) return; // own messages handled by sendMessage
+          const key = chatKey(msg.conversation_id);
+          mergeIntoStore(key, [normMsg({ ...msg, from_me: false }, me?.id)]);
+          setUnreadTotal(n => n + 1);
+          const isViewing = screenRef.current === "chat" &&
+            chatCtxRef.current?.convId === msg.conversation_id;
+          if (!isViewing) {
+            showToast("💬 New message received");
+            loadConversations();
+          }
+          // mergeIntoStore already called setChatContext — no extra trigger needed
+        })
+      .subscribe();
+    return () => { globalRealtimeSub.current?.unsubscribe(); };
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear unread badge when user opens Messages tab
   useEffect(() => {
@@ -2121,176 +2148,125 @@ export default function LoopGenApp() {
     setAiLoading(false);
   };
 
-  // ── CHAT ENGINE ──────────────────────────────────────
-  // Single source of truth for ALL message operations.
-  // Every path (text input, offer button, realtime, poll) goes through these
-  // three primitives only: chatKey, mergeIntoStore, sendMessage.
+  // ═══════════════════════════════════════════════════════════════
+  //  UNIFIED CHAT ENGINE
+  //  Single pipeline for ALL messages — text and offer identical.
+  //  Three primitives: chatKey  →  mergeIntoStore  →  sendMessage
+  //  Nothing else reads or writes localChatStore directly.
+  // ═══════════════════════════════════════════════════════════════
 
-  // 1. Key — always conv_${uuid}. Never derived from listing/names.
+  // 1. chatKey — canonical store key, always conv_${uuid}
   const chatKey = (convId) => convId ? `conv_${convId}` : null;
 
-  // 2. mergeIntoStore — the ONLY place that writes to localChatStore.
-  //    - Deduplicates by id (Map wins = latest copy kept)
-  //    - Sorts by created_at so order is always chronological
-  //    - Replaces temp IDs: if incoming has real uuid and existing has matching
-  //      tempId, the temp is evicted (handled via id replacement in sendMessage)
-  //    - NEVER wipes the store; always unions existing + incoming
+  // 2. normMsg — normalise any raw DB row or local draft into display shape
+  const normMsg = (m, myId) => ({
+    ...m,
+    from_me: m.from_me !== undefined ? m.from_me : (m.sender_id === myId),
+    time: m.time || (m.created_at
+      ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
+  });
+
+  // 3. mergeIntoStore — THE ONLY writer to localChatStore.
+  //    Union by id (Map), sort chronologically, then trigger re-render.
+  //    Never wipes existing messages — always unions.
   const mergeIntoStore = (key, incoming) => {
     if (!key || !incoming?.length) return;
     const store = localChatStore.current;
     const existing = store[key] || [];
     const map = new Map();
     existing.forEach(m => map.set(String(m.id), m));
-    incoming.forEach(m => map.set(String(m.id), m));
-    // Sort: messages with created_at first, then optimistic (no created_at) at end
+    incoming.forEach(m => map.set(String(m.id), m)); // incoming wins on conflict (confirmed > optimistic)
     store[key] = Array.from(map.values()).sort((a, b) => {
       if (!a.created_at && !b.created_at) return 0;
-      if (!a.created_at) return 1;
+      if (!a.created_at) return 1;  // optimistic (no created_at) goes to end
       if (!b.created_at) return -1;
       return new Date(a.created_at) - new Date(b.created_at);
     });
     setChatContext(ctx => ctx ? { ...ctx } : ctx);
   };
 
-  // 3. normMsg — convert any raw DB row OR local draft into the single display shape
-  const normMsg = (m, myId) => ({
-    ...m,
-    from_me: m.from_me !== undefined ? m.from_me : m.sender_id === myId,
-    time: m.time || (m.created_at
-      ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
-  });
-
-  // 4. sendMessage — unified send pipeline for BOTH text input and offer button.
-  //    Steps: optimistic add → DB insert → replace temp with confirmed → on fail mark failed.
+  // 4. sendMessage — unified send for text AND offer.
+  //    Optimistic add → DB insert → replace temp with real id → on fail mark failed.
   const sendMessage = async ({ convId, content, type = "text" }) => {
     if (!convId || !content?.trim()) return;
     const key = chatKey(convId);
     const myId = user?.id;
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const now = new Date().toISOString();
 
-    // Step 1 — optimistic message visible immediately
-    const optimistic = normMsg({
+    // Step 1: show immediately (optimistic)
+    mergeIntoStore(key, [normMsg({
       id: tempId,
       sender_id: myId,
       conversation_id: convId,
       content: content.trim(),
       type,
-      created_at: now,
+      created_at: new Date().toISOString(),
       status: "sending",
       from_me: true,
-    }, myId);
-    mergeIntoStore(key, [optimistic]);
+    }, myId)]);
 
-    if (!supabase || !myId) return; // guest / no auth — local only
+    if (!supabase || !myId) return; // guest — local only
 
-    // Step 2 — persist to DB
+    // Step 2: persist to DB
     try {
       const saved = await dbSendMessage(convId, myId, content.trim());
-      if (!saved) throw new Error("No data returned from insert");
-      // Step 3 — replace temp with confirmed record (same merge fn handles dedup)
+      if (!saved) throw new Error("No data returned");
+      // Step 3: evict temp, merge confirmed record
       const store = localChatStore.current;
-      // Remove the temp entry first so the real uuid takes its place
       if (store[key]) store[key] = store[key].filter(m => m.id !== tempId);
       mergeIntoStore(key, [normMsg({ ...saved, from_me: true, type, status: "sent" }, myId)]);
     } catch (e) {
-      console.error("[sendMessage] DB failed:", e.message);
-      // Mark as failed — keep visible so user knows, don't silently delete
+      console.error("[sendMessage] failed:", e.message);
+      // Mark failed — stay visible so user knows, never silently delete
       const store = localChatStore.current;
-      if (store[key]) {
-        store[key] = store[key].map(m =>
-          m.id === tempId ? { ...m, status: "failed" } : m
-        );
-      }
+      if (store[key]) store[key] = store[key].map(m =>
+        m.id === tempId ? { ...m, status: "failed" } : m
+      );
       setChatContext(ctx => ctx ? { ...ctx } : ctx);
-      showToast("Message failed to send — tap to retry");
+      showToast("Message failed — please try again");
     }
   };
 
-  // ── Refs so realtime callback never needs to re-subscribe for screen/context changes ──
-  const screenRef = useRef(screen);
-  const chatContextRef = useRef(chatContext);
-  const userRef = useRef(user);
-  useEffect(() => { screenRef.current = screen; }, [screen]);
-  useEffect(() => { chatContextRef.current = chatContext; }, [chatContext]);
-  useEffect(() => { userRef.current = user; }, [user]);
+  // ── Refs so realtime callback reads latest values without re-subscribing ─────
+  const screenRef    = useRef(screen);
+  const chatCtxRef   = useRef(chatContext);
+  const userRef      = useRef(user);
+  useEffect(() => { screenRef.current    = screen;      }, [screen]);
+  useEffect(() => { chatCtxRef.current   = chatContext; }, [chatContext]);
+  useEffect(() => { userRef.current      = user;        }, [user]);
 
-  // ── Global realtime: receive incoming messages from other users ──────────────
-  // Deps: [user] ONLY — never re-subscribe on screen/chatContext change
-  // (previous bug: tearing down on every send created a gap where messages were lost)
-  useEffect(() => {
-    if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
-    globalRealtimeSub.current = supabase
-      .channel(`inbox:${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" },
-        payload => {
-          const msg = payload.new;
-          if (!msg?.conversation_id) return;
-          const me = userRef.current;
-          if (msg.sender_id === me?.id) return; // own message already in store via sendMessage
-          const key = chatKey(msg.conversation_id);
-          mergeIntoStore(key, [normMsg({ ...msg, from_me: false }, me?.id)]);
-          setUnreadTotal(n => n + 1);
-          const viewing = screenRef.current === "chat" &&
-            chatContextRef.current?.convId === msg.conversation_id;
-          if (!viewing) {
-            showToast("💬 New message received");
-            loadConversations();
-          }
-          // mergeIntoStore already called setChatContext — no extra trigger needed
-        })
-      .subscribe();
-    return () => { globalRealtimeSub.current?.unsubscribe(); };
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── openChat — navigate to chat screen for a known convId ───────────────────
+  // ── openChat — navigate to chat for a known convId ───────────────────────────
   const openChat = (convId, meta) => {
     const key = chatKey(convId);
     if (!key) { console.warn("[openChat] missing convId"); return; }
-    // Ensure bucket exists (mergeIntoStore won't create empty buckets)
     if (!localChatStore.current[key]) localChatStore.current[key] = [];
-    setChatContext({
-      id: key,
-      convId,
-      sellerName: meta.sellerName || "LoopGen User",
-      listingTitle: meta.listingTitle || "Item",
-    });
+    setChatContext({ id: key, convId, sellerName: meta.sellerName || "LoopGen User", listingTitle: meta.listingTitle || "Item" });
     push("chat");
   };
 
-  // ── openConvo — tap a conversation row in the inbox list ────────────────────
+  // ── openConvo — tap a row in the inbox list ──────────────────────────────────
   const openConvo = async (c) => {
     const key = chatKey(c.id);
     if (!localChatStore.current[key]) localChatStore.current[key] = [];
-    setChatContext({
-      id: key,
-      convId: c.id,
-      sellerName: c.other_user || "LoopGen User",
-      listingTitle: c.listing_title || "Item",
-    });
+    setChatContext({ id: key, convId: c.id, sellerName: c.other_user || "LoopGen User", listingTitle: c.listing_title || "Item" });
     push("chat");
     if (!supabase || !user || !c.id) return;
     const myId = user.id;
     try {
       const fetched = await dbGetMessages(c.id);
-      if (!fetched.length) return; // keep local store intact — don't wipe optimistic msgs
+      if (!fetched.length) return; // keep local optimistic messages — never wipe on empty
       mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
     } catch (e) { console.error("[openConvo] fetch error:", e); }
   };
 
-  // ── openSellerChat — "Message Seller" button on listing detail ──────────────
+  // ── openSellerChat — "Message Seller" / "Make Offer" entry point ─────────────
   const openSellerChat = async (item) => {
     if (!supabase || !user) {
       // Guest — local only, no persistence
       const localKey = `local_listing_${item.id}`;
       if (!localChatStore.current[localKey]) localChatStore.current[localKey] = [];
-      setChatContext({
-        id: localKey,
-        convId: null,
-        sellerName: item.seller_username || "LoopGen User",
-        listingTitle: item.title || "Item",
-      });
+      setChatContext({ id: localKey, convId: null, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
       push("chat");
       return;
     }
@@ -2300,27 +2276,21 @@ export default function LoopGenApp() {
       if (!conv) throw new Error("Could not create conversation");
       const key = chatKey(conv.id);
       if (!localChatStore.current[key]) localChatStore.current[key] = [];
-      // Load existing history from DB
       const myId = user.id;
       const fetched = await dbGetMessages(conv.id);
       if (fetched.length) mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
       setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [{
-        ...conv,
-        other_user: item.seller_username || "LoopGen User",
-        listing_title: item.title || "Item",
-        last_message: "", last_time: "", unread: 0,
+        ...conv, other_user: item.seller_username || "LoopGen User",
+        listing_title: item.title || "Item", last_message: "", last_time: "", unread: 0,
       }, ...cs]);
-      openChat(conv.id, {
-        sellerName: item.seller_username || "LoopGen User",
-        listingTitle: item.title || "Item",
-      });
+      openChat(conv.id, { sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
     } catch (e) {
       console.error("[openSellerChat]:", e);
       showToast("Couldn't open chat — " + e.message);
     }
   };
 
-  // Legacy stub — never called, kept to avoid ref errors
+  // Legacy stub — never called
   const sendMsg = async () => { console.warn("[LoopGen] Legacy sendMsg called"); };
 
   // ── Derived data ──────────────────────────────────────
@@ -2924,7 +2894,7 @@ export default function LoopGenApp() {
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
-            // Persist offer record to offers table (silent if table missing)
+            // Save offer record (silent if table missing)
             if (user) {
               try {
                 await dbSaveOffer({
@@ -2945,10 +2915,9 @@ export default function LoopGenApp() {
 
             if (supabase && user && item.seller_id) {
               try {
-                // Ensure conversation exists first
+                // Ensure conversation exists
                 const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
                 if (!conv) throw new Error("Could not create conversation");
-                // Register in convo list if new
                 setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [{
                   ...conv, other_user: item.seller_username || "LoopGen User",
                   listing_title: item.title || "Item", last_message: offerContent,
@@ -2959,7 +2928,7 @@ export default function LoopGenApp() {
                   sellerName: item.seller_username || "LoopGen User",
                   listingTitle: item.title || "Item",
                 });
-                // Send offer message through the SAME pipeline as normal text
+                // Send via the SAME pipeline as normal text — ensures receiver sees it
                 await sendMessage({ convId: conv.id, content: offerContent, type: "offer" });
                 return;
               } catch (e) {
@@ -2967,18 +2936,12 @@ export default function LoopGenApp() {
                 showToast("Offer sent but chat failed to open");
               }
             }
-            // Fallback: guest or no seller_id
+            // Fallback: guest or no seller_id — show locally only
             const localKey = `local_listing_${item.id}`;
             if (!localChatStore.current[localKey]) localChatStore.current[localKey] = [];
-            setChatContext({
-              id: localKey,
-              convId: null,
-              sellerName: item.seller_username || "LoopGen User",
-              listingTitle: item.title || "Item",
-            });
+            setChatContext({ id: localKey, convId: null, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
             push("chat");
-            // Still show the offer message locally for guests
-            mergeIntoStore(localKey, [{
+            mergeIntoStore(localKey, [normMsg({
               id: `temp_offer_${Date.now()}`,
               sender_id: user?.id || "guest",
               content: offerContent,
@@ -2986,8 +2949,7 @@ export default function LoopGenApp() {
               created_at: new Date().toISOString(),
               from_me: true,
               status: "sent",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            }]);
+            }, user?.id)]);
           }}
         />
         <ReportModal
@@ -3399,7 +3361,7 @@ export default function LoopGenApp() {
       onPollMessages={async () => {
         if (!supabase || !user || !chatContext?.convId) return;
         const myId = user.id;
-        const key = chatContext.id;
+        const key  = chatContext.id;
         try {
           const fetched = await dbGetMessages(chatContext.convId);
           if (!fetched.length) return; // never wipe optimistic messages on empty response
@@ -3407,12 +3369,8 @@ export default function LoopGenApp() {
         } catch (e) { console.error("[poll]:", e); }
       }}
       onSend={async (msg) => {
-        // ALL text messages go through sendMessage — same as offer button
-        await sendMessage({
-          convId: chatContext?.convId,
-          content: msg.content,
-          type: "text",
-        });
+        // ALL text input goes through sendMessage — identical to offer pipeline
+        await sendMessage({ convId: chatContext?.convId, content: msg.content, type: "text" });
       }}
       onBack={pop}
     />
