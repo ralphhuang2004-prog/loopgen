@@ -2069,6 +2069,13 @@ export default function LoopGenApp() {
   // ════════════════════════════
   //  SPLASH  (LandingPage component)
   // ════════════════════════════
+  // Auto-redirect: if session is ready and user is logged in, skip splash/auth and go straight to home
+  useEffect(() => {
+    if (sessionReady && user && (screen === "splash" || screen === "auth")) {
+      setScreen("home");
+    }
+  }, [sessionReady, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (screen === "splash") return (
     <Phone>
       <LandingPage
@@ -2083,9 +2090,6 @@ export default function LoopGenApp() {
 
   //  AUTH
   // ════════════════════════════
-  // Guard: if already logged in and somehow on auth screen, go home
-  if (screen === "auth" && user && !authLoading) { nav("home"); return null; }
-
   if (screen === "auth") return (
     <Phone>
       <StatusBar/>
