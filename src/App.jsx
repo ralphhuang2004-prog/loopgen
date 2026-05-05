@@ -241,27 +241,44 @@ async function dbGetConversations(userId) {
     .from("conversations")
     .select(`
       *,
-      buyer:buyer_id(id, profiles(username, avatar_url)),
-      seller:seller_id(id, profiles(username, avatar_url)),
       listing:listing_id(title),
-      messages(content, created_at, sender_id)
+      messages(content, created_at, sender_id, id)
     `)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
-  if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
-  return (data || []).map(c => {
-    // Determine which participant is the "other" person
+  if (error) { console.error("getConversations:", error); return []; }
+  if (!data || data.length === 0) return [];
+
+  // Collect all other-participant IDs to batch-fetch profiles
+  const otherIds = data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean);
+  const uniqueIds = [...new Set(otherIds)];
+  let profileMap = {};
+  if (uniqueIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username, display_name, first_name, avatar_url")
+      .in("id", uniqueIds);
+    (profiles || []).forEach(p => {
+      profileMap[p.id] = p.display_name || p.first_name || p.username || null;
+    });
+  }
+
+  return data.map(c => {
     const isBuyer = c.buyer_id === userId;
-    const otherProfile = isBuyer ? c.seller?.profiles : c.buyer?.profiles;
-    const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    const otherId = isBuyer ? c.seller_id : c.buyer_id;
+    const otherName = profileMap[otherId] || (isBuyer ? "LoopGen User" : "Buyer");
+    const msgs = c.messages || [];
+    const sorted = [...msgs].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const lastMsg = sorted[0];
+    const unread = msgs.filter(m => m.sender_id !== userId).length; // simplified unread
     return {
       ...c,
-      other_user: otherProfile?.username || (isBuyer ? "LoopGen User" : "Buyer"),
-      other_avatar: otherProfile?.avatar_url || null,
+      other_user: otherName,
+      other_avatar: null,
       listing_title: c.listing?.title || "Item",
       last_message: lastMsg?.content || "",
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
-      unread: 0,
+      unread,
       online: false,
     };
   });
@@ -521,7 +538,7 @@ function StatusBar() {
   );
 }
 
-function BottomNav({ active, onNav }) {
+function BottomNav({ active, onNav, unreadCount=0 }) {
   const tabs = [
     {id:"home",    label:"Home",     icon: a => <IcoHome a={a}/>},
     {id:"explore", label:"Search",   icon: a => <IcoExplore a={a}/>},
@@ -540,7 +557,18 @@ function BottomNav({ active, onNav }) {
                 </div>
                 <span style={{fontSize:10,fontWeight:700,color:GREEN,letterSpacing:0.1}}>Sell</span>
               </div>
-            : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
+            : <div style={{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>
+                  {t.icon(active===t.id)}
+                  {/* Unread badge on Messages tab */}
+                  {t.id==="chats" && unreadCount > 0 && (
+                    <div style={{position:"absolute",top:2,right:4,minWidth:16,height:16,borderRadius:8,background:"#ef4444",color:"white",fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",border:"2px solid white",lineHeight:1}}>
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </div>
+                  )}
+                </div>
+                <span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span>
+              </div>
           }
         </div>
       ))}
@@ -1537,18 +1565,16 @@ export default function LoopGenApp() {
   // ── Data state ───────────────────────────────────────
   const [listings,  setListings]= useState(HAS_SUPABASE ? [] : [...DEMO_VINTAGE, ...DEMO_LISTINGS]);
   const [convos,    setConvos]  = useState(HAS_SUPABASE ? [] : DEMO_CONVOS);
+  const [unreadTotal, setUnreadTotal] = useState(0); // global unread badge
   const [detail,    setDetail]  = useState(null);
   const [convo,     setConvo]   = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
-  // chatContext: drives ChatScreen — includes messages directly to avoid async race
-  // { id, sellerName, listingTitle }
   const [chatContext, setChatContext] = useState(null);
-  // localChatStore: source of truth, keyed by chat id (survives navigation)
-  // We use a ref so reads are always synchronous, and trigger re-renders via chatContext
   const localChatStore = useRef({});
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
+  const globalRealtimeSub = useRef(null);
 
   // ── Sell state ───────────────────────────────────────
   const [sellStep,  setSellStep]= useState(1);
@@ -1675,6 +1701,35 @@ export default function LoopGenApp() {
     return () => { realtimeSub.current?.unsubscribe(); };
   }, [convo, user]);
 
+  // ── Global realtime: notify seller of new messages/offers ────────────────────
+  useEffect(() => {
+    if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
+    globalRealtimeSub.current = supabase
+      .channel(`inbox:${user.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" },
+        payload => {
+          const msg = payload.new;
+          // Only care about messages sent by someone else
+          if (msg.sender_id === user.id) return;
+          // Increment unread badge
+          setUnreadTotal(n => n + 1);
+          // Show toast notification if not currently in that chat
+          const currentConvId = chatContext?.convId;
+          if (screen !== "chat" || currentConvId !== msg.conversation_id) {
+            showToast("💬 New message received");
+            // Refresh conversation list to show latest
+            loadConversations();
+          }
+        })
+      .subscribe();
+    return () => { globalRealtimeSub.current?.unsubscribe(); };
+  }, [user, screen, chatContext]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear unread badge when user opens Messages tab
+  useEffect(() => {
+    if (screen === "chats") setUnreadTotal(0);
+  }, [screen]);
+
   // ── Data loaders ─────────────────────────────────────
   async function loadListings({ force = false } = {}) {
     // ── Demo mode: data is synchronous, never show skeletons ──────────────
@@ -1722,6 +1777,9 @@ export default function LoopGenApp() {
     if (!user) return;
     const data = await dbGetConversations(user.id);
     setConvos(data);
+    // Seed unread badge from conversation data
+    const total = data.reduce((sum, c) => sum + (c.unread || 0), 0);
+    setUnreadTotal(total);
   }
 
   async function loadProfileData() {
@@ -2361,7 +2419,7 @@ export default function LoopGenApp() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav}/>
+      <BottomNav active="home" onNav={nav} unreadCount={unreadTotal}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -2427,7 +2485,7 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="explore" onNav={nav}/>
+      <BottomNav active="explore" onNav={nav} unreadCount={unreadTotal}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3042,7 +3100,7 @@ export default function LoopGenApp() {
           </>
         )}
       </div>
-      <BottomNav active="sell" onNav={nav}/>
+      <BottomNav active="sell" onNav={nav} unreadCount={unreadTotal}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3099,7 +3157,7 @@ export default function LoopGenApp() {
           ))}
         </div>
       )}
-      <BottomNav active="chats" onNav={nav}/>
+      <BottomNav active="chats" onNav={nav} unreadCount={unreadTotal}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3207,7 +3265,7 @@ export default function LoopGenApp() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -3281,7 +3339,7 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -3328,7 +3386,7 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3436,7 +3494,7 @@ export default function LoopGenApp() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
