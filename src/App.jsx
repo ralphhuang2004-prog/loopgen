@@ -2667,22 +2667,66 @@ export default function LoopGenApp() {
           <>
             {/* Photo upload — REAL */}
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handlePhotoSelect} style={{display:"none"}}/>
-            <div onClick={() => fileInputRef.current?.click()}
-              style={{background:"#f9fafb",borderRadius:20,height:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"2px dashed #e5e7eb",marginBottom:16,position:"relative",overflow:"hidden"}}>
-              {sellImages.length > 0
-                ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>
-                : <>
-                    <div style={{width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",marginBottom:10}}><IcoCamera/></div>
-                    <div style={{fontWeight:600,color:"#374151",fontSize:14}}>{uploadingImg?"Uploading…":"Add photos"}</div>
-                    <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>Tap to upload · Up to 5</div>
-                  </>
-              }
-              {sellImages.length > 0 && (
-                <div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.6)",color:"white",fontSize:11,fontWeight:700,padding:"4px 9px",borderRadius:20}}>
-                  {sellImages.length} photo{sellImages.length>1?"s":""}
+
+            {sellImages.length === 0 ? (
+              /* Empty state — full tap target */
+              <div onClick={() => fileInputRef.current?.click()}
+                style={{background:"#f9fafb",borderRadius:20,height:160,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"2px dashed #e5e7eb",marginBottom:12}}>
+                <div style={{width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",marginBottom:10}}><IcoCamera/></div>
+                <div style={{fontWeight:600,color:"#374151",fontSize:14}}>{uploadingImg?"Uploading…":"Add photos"}</div>
+                <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>Tap to upload · Up to 5</div>
+              </div>
+            ) : (
+              /* Photo strip — shows all photos with remove buttons */
+              <div style={{marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#374151"}}>
+                    Photos <span style={{color:"#9ca3af",fontWeight:500}}>({sellImages.length}/5)</span>
+                  </span>
+                  {sellImages.length < 5 && (
+                    <button onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImg}
+                      style={{fontSize:12,fontWeight:700,color:GREEN,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit",opacity:uploadingImg?0.5:1}}>
+                      {uploadingImg ? "Uploading…" : "+ Add more"}
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
+                <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4,scrollbarWidth:"none"}}>
+                  {sellImages.map((src, i) => (
+                    <div key={src + i} style={{position:"relative",flexShrink:0,width:100,height:100}}>
+                      <img src={src} alt={`photo ${i+1}`}
+                        style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:14,display:"block",border:"2px solid #e5e7eb"}}/>
+                      {/* Remove button */}
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          const updated = sellImages.filter((_, idx) => idx !== i);
+                          setSellImages(updated);
+                          setSell(f => ({...f, image_urls: f.image_urls.filter((_, idx) => idx !== i)}));
+                        }}
+                        style={{position:"absolute",top:-8,right:-8,width:24,height:24,borderRadius:"50%",
+                          background:"#ef4444",border:"2px solid white",color:"white",
+                          fontSize:13,fontWeight:900,lineHeight:1,cursor:"pointer",
+                          display:"flex",alignItems:"center",justifyContent:"center",
+                          boxShadow:"0 2px 6px rgba(0,0,0,0.2)",padding:0,fontFamily:"inherit"}}>
+                        ✕
+                      </button>
+                      {/* First photo label */}
+                      {i === 0 && (
+                        <div style={{position:"absolute",bottom:5,left:0,right:0,textAlign:"center",
+                          fontSize:9,fontWeight:700,color:"white",
+                          textShadow:"0 1px 3px rgba(0,0,0,0.7)",letterSpacing:"0.04em"}}>
+                          COVER
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{fontSize:11,color:"#9ca3af",marginTop:6}}>
+                  First photo is the cover · Tap ✕ to remove
+                </div>
+              </div>
+            )}
             <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
             <FSel value={sell.category} onChange={v=>{
