@@ -1696,14 +1696,21 @@ export default function LoopGenApp() {
   }
 
   async function loadProfile(uid) {
+    const email = supabase ? (await supabase.auth.getUser()).data.user?.email : "";
+    const emailUsername = email?.split("@")[0] || "user";
     const p = await dbGetProfile(uid);
-    if (p) setProfile(p);
-    else {
+    if (p) {
+      // Backfill username from email prefix if missing
+      if (!p.username && !p.display_name && !p.first_name) {
+        await dbUpsertProfile(uid, { username: emailUsername });
+        setProfile({ ...p, username: emailUsername });
+      } else {
+        setProfile(p);
+      }
+    } else {
       // Auto-create profile on first login
-      const email = supabase ? (await supabase.auth.getUser()).data.user?.email : "";
-      const username = email?.split("@")[0] || "user";
-      await dbUpsertProfile(uid, { username, avatar_url: null });
-      setProfile({ id: uid, username });
+      await dbUpsertProfile(uid, { username: emailUsername, avatar_url: null });
+      setProfile({ id: uid, username: emailUsername });
     }
   }
 
@@ -1888,6 +1895,7 @@ export default function LoopGenApp() {
     if (!user) { showToast("Please sign in to post a listing"); return; }
     setLoading(true);
     try {
+      const sellerName = profile?.display_name || profile?.first_name || profile?.username || user.email?.split("@")[0] || "user";
       const listing = {
         title: sell.title,
         price: priceVal,
@@ -1899,6 +1907,7 @@ export default function LoopGenApp() {
         image_urls: sell.image_urls,
         tags: sell.tags || [],
         seller_id: user?.id,
+        seller_username: sellerName,
       };
       if (user && supabase) {
         await dbCreateListing(listing, user.id);
@@ -2038,7 +2047,7 @@ export default function LoopGenApp() {
   });
 
   const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles"];
-  const currentUser = user ? (profile?.username || user.email?.split("@")[0] || "You") : "Guest";
+  const currentUser = user ? (profile?.username || profile?.display_name || user.email?.split("@")[0] || "You") : "Guest";
   const isGuest = !user;
 
   // ════════════════════════════
