@@ -556,8 +556,9 @@ function GreenBtn({ children, onClick, mt=16, disabled=false, style={} }) {
   );
 }
 
-function FInp({ placeholder, value="", onChange=()=>{}, type="text", readOnly=false }) {
+function FInp({ placeholder, value="", onChange=()=>{}, type="text", readOnly=false, autoComplete="off" }) {
   return <input type={type} placeholder={placeholder} value={value} onChange={e=>onChange(e.target.value)} readOnly={readOnly}
+    autoComplete={autoComplete}
     style={{width:"100%",border:"1.5px solid #e5e7eb",borderRadius:14,padding:"14px",fontSize:14,outline:"none",marginBottom:12,color:"#374151",background:readOnly?"#f9fafb":"white"}}/>;
 }
 
@@ -2073,8 +2074,8 @@ export default function LoopGenApp() {
       <LandingPage
         onBrowse={() => nav("home")}
         onSell={() => nav("sell")}
-        onSignIn={() => { setAuthMode("login"); push("auth"); }}
-        onRegister={() => { setAuthMode("register"); push("auth"); }}
+        onSignIn={() => { setAuthMode("login"); setAuthForm({email:"",password:"",username:""}); setAuthError(""); push("auth"); }}
+        onRegister={() => { setAuthMode("register"); setAuthForm({email:"",password:"",username:""}); setAuthError(""); push("auth"); }}
         demoMode={!HAS_SUPABASE}
       />
     </Phone>
@@ -2102,9 +2103,9 @@ export default function LoopGenApp() {
           </div>
         )}
 
-        {authMode==="register" && <FInp placeholder="Username" value={authForm.username} onChange={v=>setAuthForm(f=>({...f,username:v}))}/>}
-        <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))}/>
-        <FInp placeholder="Password" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))}/>
+        {authMode==="register" && <FInp placeholder="Username" value={authForm.username} onChange={v=>setAuthForm(f=>({...f,username:v}))} autoComplete="username"/>}
+        <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))} autoComplete={authMode==="login" ? "email" : "new-email"}/>
+        <FInp placeholder="Password" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))} autoComplete={authMode==="login" ? "current-password" : "new-password"}/>
 
         {authMode==="register" && (
           <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:16,cursor:"pointer"}}>
