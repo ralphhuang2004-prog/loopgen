@@ -1992,16 +1992,26 @@ export default function LoopGenApp() {
 
   // openConvo: used by the chats list screen — always fetches fresh from Supabase
   const openConvo = async (c) => {
-    // Show chat immediately with empty/cached messages, then load fresh
-    openChat({ ...c, convId: c.id }, []);
+    // Use the real conversation UUID as the store key for reliability
+    const key = `conv_${c.id}`;
+    const store = localChatStore.current;
+
+    // Show chat immediately (may be empty while loading)
+    setChatContext({
+      id: key,
+      convId: c.id,
+      sellerName: c.other_user || c.seller_username || "LoopGen User",
+      listingTitle: c.listing_title || c.title || "Item",
+    });
+    push("chat");
+
+    // Load messages from Supabase in background
     if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
       try {
         const fetched = await dbGetMessages(c.id);
         const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
-        const key = chatKey(c);
-        const store = localChatStore.current;
         store[key] = msgs;
-        setChatContext(ctx => ctx ? { ...ctx, convId: c.id } : ctx);
+        setChatContext(ctx => ctx ? { ...ctx } : ctx);
       } catch (e) { console.error("openConvo fetch error:", e); }
     }
   };
@@ -2633,7 +2643,7 @@ export default function LoopGenApp() {
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
-            // Persist to Supabase — silent fallback if table missing
+            // Persist offer record
             if (user) {
               try {
                 await dbSaveOffer({
@@ -2642,22 +2652,45 @@ export default function LoopGenApp() {
                   seller_id:  offerModal.item.seller_id || null,
                   price:      offerPrice,
                 });
-              } catch { /* table may not exist yet — local state handles it */ }
+              } catch { /* table may not exist yet */ }
             }
-            // Always update local state regardless of DB outcome
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
             const price = offerPrice;
             setOfferModal(null);
             showToast(`Offer of $${price} sent!`);
-            // Open chat — openChat uses chatKey(item) consistently
-            // and appends the offer message into the store before opening
+
+            const offerContent = `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`;
             const offerMsg = {
               id: `offer_${Date.now()}`,
               from_me: true,
-              content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
+              content: offerContent,
               time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             };
+
+            // ── Get or create a real Supabase conversation, then persist the message ──
+            if (supabase && user && item.seller_id) {
+              try {
+                const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
+                if (conv) {
+                  // Persist offer message to Supabase immediately
+                  await dbSendMessage(conv.id, user.id, offerContent);
+                  const enriched = {
+                    ...conv,
+                    convId: conv.id,
+                    listing_id: item.id,
+                    seller_username: item.seller_username || "LoopGen User",
+                    title: item.title || "Item",
+                  };
+                  setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+                  openChat(enriched, [offerMsg]);
+                  return;
+                }
+              } catch (e) {
+                console.error("offer chat error:", e);
+              }
+            }
+            // Fallback: local-only (guest or no seller_id)
             openChat(item, [offerMsg]);
           }}
         />
