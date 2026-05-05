@@ -238,23 +238,44 @@ async function dbToggleSave(listingId, userId, isSaved) {
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
 
-  // Plain select — no joins, no ordering (table has no timestamp columns)
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("id, buyer_id, seller_id, listing_id")
-    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
+  // RLS-safe: query buyer side and seller side separately, then merge
+  // This avoids the .or() which can fail under certain RLS policies
+  const [buyerRes, sellerRes] = await Promise.all([
+    supabase.from("conversations").select("id, buyer_id, seller_id, listing_id").eq("buyer_id", userId),
+    supabase.from("conversations").select("id, buyer_id, seller_id, listing_id").eq("seller_id", userId),
+  ]);
 
-  console.log("[convos] query result:", { count: data?.length, error: error?.message });
-  if (error) { console.error("[convos] failed:", error.message); return []; }
-  if (!data || data.length === 0) { console.log("[convos] none found"); return []; }
+  console.log("[convos] buyer query:", { data: buyerRes.data?.length, error: buyerRes.error?.message });
+  console.log("[convos] seller query:", { data: sellerRes.data?.length, error: sellerRes.error?.message });
 
-  // Fetch messages for each conversation separately
+  // Merge and deduplicate by id
+  const seen = new Set();
+  const data = [...(buyerRes.data || []), ...(sellerRes.data || [])].filter(c => {
+    if (seen.has(c.id)) return false;
+    seen.add(c.id); return true;
+  });
+
+  console.log("[convos] merged total:", data.length);
+  if (!data.length) return [];
+
+  // Fetch last message per conversation
   const msgResults = await Promise.all(
-    data.map(c => supabase.from("messages").select("id, content, created_at, sender_id")
-      .eq("conversation_id", c.id).order("created_at", { ascending: false }).limit(1))
+    data.map(c => supabase.from("messages")
+      .select("id, content, created_at, sender_id")
+      .eq("conversation_id", c.id)
+      .order("created_at", { ascending: false })
+      .limit(1))
   );
 
-  // Batch-fetch profiles for other participants
+  // Fetch unread count per conversation (messages not sent by current user)
+  const unreadResults = await Promise.all(
+    data.map(c => supabase.from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", c.id)
+      .neq("sender_id", userId))
+  );
+
+  // Batch-fetch other participant profiles
   const otherIds = [...new Set(
     data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean)
   )];
@@ -265,6 +286,7 @@ async function dbGetConversations(userId) {
     (profiles || []).forEach(p => {
       profileMap[p.id] = p.display_name || p.first_name || p.username || null;
     });
+    console.log("[convos] profiles:", profileMap);
   }
 
   // Batch-fetch listing titles
@@ -281,18 +303,27 @@ async function dbGetConversations(userId) {
     const otherId = isBuyer ? c.seller_id : c.buyer_id;
     const otherName = profileMap[otherId] || (isBuyer ? "LoopGen User" : "Buyer");
     const lastMsg = msgResults[i]?.data?.[0] || null;
-    console.log("[convos] row:", { id: c.id, otherName, lastMsg: lastMsg?.content });
+    const unread = unreadResults[i]?.count || 0;
+    console.log("[convos] row:", { id: c.id, otherName, lastMsg: lastMsg?.content, unread });
     return {
       ...c,
       other_user: otherName,
       listing_title: listingMap[c.listing_id] || "Item",
       last_message: lastMsg?.content || "",
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
-      unread: 0,
+      unread,
       online: false,
     };
   });
-  console.log("[convos] loaded:", result.length);
+
+  // Sort by most recent message
+  result.sort((a, b) => {
+    const ta = a.last_time ? new Date(msgResults[data.findIndex(c=>c.id===a.id)]?.data?.[0]?.created_at || 0) : new Date(0);
+    const tb = b.last_time ? new Date(msgResults[data.findIndex(c=>c.id===b.id)]?.data?.[0]?.created_at || 0) : new Date(0);
+    return tb - ta;
+  });
+
+  console.log("[convos] loaded:", result.length, "convos");
   return result;
 }
 
@@ -1305,17 +1336,24 @@ function HomeTicker() {
 
 // ═══════════════════════════════════════════════════════
 //  CHAT SCREEN — controlled: messages live in parent store
-//  props: sellerName, listingTitle, messages[], onSend(msg), onBack
+//  props: sellerName, listingTitle, messages[], onSend(msg), onBack, onPollMessages
 // ═══════════════════════════════════════════════════════
-function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
+function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPollMessages, convId, userId }) {
   const [text, setText] = useState("");
-  // viewH tracks the visual viewport height so the chat shrinks correctly
-  // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
   const [viewH, setViewH] = useState(
     () => window.visualViewport?.height || window.innerHeight
   );
   const endRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Polling fallback — fires every 4s to catch messages when realtime fails
+  useEffect(() => {
+    if (!onPollMessages || !convId) return;
+    // Poll immediately on mount to load any existing messages
+    onPollMessages();
+    const interval = setInterval(onPollMessages, 4000);
+    return () => clearInterval(interval);
+  }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Visual Viewport API: fires when keyboard opens/closes or browser chrome resizes
   useEffect(() => {
@@ -2072,13 +2110,12 @@ export default function LoopGenApp() {
     push("chat");
   };
 
-  // openConvo: used by the chats list screen — always fetches fresh from Supabase
+  // openConvo: used by the chats list screen — loads messages then opens chat
   const openConvo = async (c) => {
-    // Use the real conversation UUID as the store key for reliability
     const key = `conv_${c.id}`;
     const store = localChatStore.current;
 
-    // Show chat immediately (may be empty while loading)
+    // Set context immediately so screen shows
     setChatContext({
       id: key,
       convId: c.id,
@@ -2087,11 +2124,12 @@ export default function LoopGenApp() {
     });
     push("chat");
 
-    // Load messages from Supabase in background
-    if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
+    // Load messages eagerly — polling in ChatScreen will keep them fresh
+    if (supabase && user && c.id) {
       try {
         const fetched = await dbGetMessages(c.id);
         const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+        console.log("[openConvo] loaded", msgs.length, "messages for conv", c.id);
         store[key] = msgs;
         setChatContext(ctx => ctx ? { ...ctx } : ctx);
       } catch (e) { console.error("openConvo fetch error:", e); }
@@ -3187,10 +3225,28 @@ export default function LoopGenApp() {
       sellerName={chatContext?.sellerName || "LoopGen User"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
+      convId={chatContext?.convId}
+      userId={user?.id}
+      onPollMessages={async () => {
+        // Polling fallback — called every 4s by ChatScreen when realtime isn't reliable
+        if (!supabase || !user || !chatContext?.convId) return;
+        try {
+          const fetched = await dbGetMessages(chatContext.convId);
+          const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+          const key = chatContext.id;
+          const store = localChatStore.current;
+          const existing = store[key] || [];
+          // Only update if there are new messages (avoid unnecessary re-renders)
+          if (msgs.length !== existing.length) {
+            store[key] = msgs;
+            setChatContext(ctx => ctx ? { ...ctx } : ctx);
+          }
+        } catch (e) { console.error("[poll] messages:", e); }
+      }}
       onSend={async (msg) => {
         // 1. Show immediately in local store
         addMessageToStore(chatContext?.id, msg);
-        // 2. Persist to Supabase if we have a real conversation
+        // 2. Persist to Supabase
         if (supabase && user && chatContext?.convId) {
           try {
             await dbSendMessage(chatContext.convId, user.id, msg.content);
@@ -3198,6 +3254,8 @@ export default function LoopGenApp() {
             console.error("[LoopGen] Message save failed:", e);
             showToast("Message couldn't save — check connection");
           }
+        } else if (!chatContext?.convId) {
+          console.warn("[LoopGen] No convId — message not persisted");
         }
       }}
       onBack={pop}
