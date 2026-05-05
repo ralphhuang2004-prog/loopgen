@@ -1606,6 +1606,8 @@ export default function LoopGenApp() {
     }
   }, []);
 
+  const authInProgress = useRef(false);
+
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1619,6 +1621,8 @@ export default function LoopGenApp() {
       setSessionReady(true);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Don't interfere while handleAuth is actively running — it manages state itself
+      if (authInProgress.current) return;
       if (session?.user) {
         setUser(session.user);
         loadProfile(session.user.id, session.user);
@@ -1744,24 +1748,24 @@ export default function LoopGenApp() {
   // ── Auth ─────────────────────────────────────────────
   async function handleAuth() {
     if (!supabase) { showToast("Connect Supabase to enable auth"); nav("home"); return; }
-    // P2: enforce terms acceptance server-side, not just via disabled button
     if (authMode === "register" && !agreeTerms) {
       setAuthError("You must agree to the Terms of Service and Privacy Policy to register.");
       return;
     }
+    authInProgress.current = true;
     setAuthLoading(true); setAuthError("");
     try {
       if (authMode === "register") {
         const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         if (data.user && data.session) {
-          // Email confirmation OFF — user is fully signed in immediately
           await dbUpsertProfile(data.user.id, { username: authForm.username || authForm.email.split("@")[0] });
           setUser(data.user);
+          await loadProfile(data.user.id, data.user);
+          setSessionReady(true);
           showToast("🎉 Account created! Welcome to LoopGen.");
           nav("home");
         } else if (data.user && !data.session) {
-          // Email confirmation ON — user created but needs to verify email
           setAuthError("✅ Account created! Check your email to confirm before signing in.");
         } else {
           setAuthError("Something went wrong. Please try again.");
@@ -1771,6 +1775,7 @@ export default function LoopGenApp() {
         if (error) throw error;
         setUser(data.user);
         await loadProfile(data.user.id, data.user);
+        setSessionReady(true);
         showToast("👋 Welcome back!");
         nav("home");
       }
@@ -1778,6 +1783,7 @@ export default function LoopGenApp() {
       setAuthError(e.message || "Authentication failed");
     }
     setAuthLoading(false);
+    authInProgress.current = false;
   }
 
   async function handleSignOut() {
@@ -2076,6 +2082,9 @@ export default function LoopGenApp() {
 
   //  AUTH
   // ════════════════════════════
+  // Guard: if already logged in and somehow on auth screen, go home
+  if (screen === "auth" && user && !authLoading) { nav("home"); return null; }
+
   if (screen === "auth") return (
     <Phone>
       <StatusBar/>
