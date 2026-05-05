@@ -181,7 +181,7 @@ async function dbGetListings(userId) {
   const sellerIds = [...new Set(rawListings.map(l => l.seller_id).filter(Boolean))];
   let profileMap = {};
   if (sellerIds.length > 0) {
-    const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", sellerIds);
+    const { data: profiles } = await supabase.from("profiles").select("id, username, display_name, first_name, avatar_url").in("id", sellerIds);
     (profiles || []).forEach(p => { profileMap[p.id] = p; });
   }
   let savedSet = new Set();
@@ -189,13 +189,29 @@ async function dbGetListings(userId) {
     const { data: saved } = await supabase.from("saved_items").select("listing_id").eq("user_id", userId).in("listing_id", rawListings.map(l => l.id));
     (saved || []).forEach(s => savedSet.add(s.listing_id));
   }
-  return rawListings.map(l => ({
-    ...l,
-    seller_username: profileMap[l.seller_id]?.username || "LoopGen User",
-    seller_avatar: profileMap[l.seller_id]?.avatar_url || null,
-    is_saved: savedSet.has(l.id),
-    image_urls: l.image_urls || [], tags: l.tags || [], time: timeSince(l.created_at),
-  }));
+  return rawListings.map(l => {
+    const prof = profileMap[l.seller_id];
+    const sellerName = prof
+      ? (prof.display_name || prof.first_name || prof.username || null)
+      : null;
+    // Deduplicate tags and remove conflicting "Free" tag if price > 0
+    let tags = [...new Set(l.tags || [])];
+    if (Number(l.price) > 0) tags = tags.filter(t => t !== "Free");
+    // Backfill location: if only a 4-digit postcode, try to resolve it
+    let location = l.location || "";
+    if (/^\d{4}$/.test(location.trim())) {
+      const found = lookupPostcode(location.trim());
+      if (found.length > 0) location = formatLocation(found[0].suburb, found[0].state, location.trim());
+    }
+    return {
+      ...l,
+      location,
+      seller_username: sellerName || l.seller_username || "LoopGen User",
+      seller_avatar: prof?.avatar_url || null,
+      is_saved: savedSet.has(l.id),
+      image_urls: l.image_urls || [], tags, time: timeSince(l.created_at),
+    };
+  });
 }
 
 async function dbCreateListing(listing, userId) {
@@ -240,7 +256,7 @@ async function dbGetConversations(userId) {
     const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
     return {
       ...c,
-      other_user: otherProfile?.username || (isBuyer ? "Seller" : "Buyer"),
+      other_user: otherProfile?.username || (isBuyer ? "LoopGen User" : "Buyer"),
       other_avatar: otherProfile?.avatar_url || null,
       listing_title: c.listing?.title || "Item",
       last_message: lastMsg?.content || "",
@@ -773,6 +789,290 @@ const TAG_COLORS = {
   "Books":           { bg:"#fff7ed", text:"#9a3412", border:"#fed7aa" },
 };
 
+// ═══════════════════════════════════════════════════════
+//  AUSTRALIA POSTCODE → SUBURB MAPPING
+// ═══════════════════════════════════════════════════════
+// Representative dataset covering major AU postcodes.
+// Keys are 4-digit strings; values are arrays of {suburb, state}.
+const AU_POSTCODES = {
+  // NSW
+  "2000":[ {suburb:"Sydney",state:"NSW"},{suburb:"Haymarket",state:"NSW"},{suburb:"The Rocks",state:"NSW"} ],
+  "2010":[ {suburb:"Darlinghurst",state:"NSW"},{suburb:"Surry Hills",state:"NSW"} ],
+  "2020":[ {suburb:"Mascot",state:"NSW"} ],
+  "2021":[ {suburb:"Paddington",state:"NSW"},{suburb:"Centennial Park",state:"NSW"} ],
+  "2025":[ {suburb:"Woollahra",state:"NSW"} ],
+  "2026":[ {suburb:"Bondi Beach",state:"NSW"},{suburb:"Bondi",state:"NSW"} ],
+  "2030":[ {suburb:"Vaucluse",state:"NSW"},{suburb:"Watsons Bay",state:"NSW"} ],
+  "2033":[ {suburb:"Coogee",state:"NSW"} ],
+  "2040":[ {suburb:"Leichhardt",state:"NSW"} ],
+  "2042":[ {suburb:"Newtown",state:"NSW"} ],
+  "2044":[ {suburb:"St Peters",state:"NSW"} ],
+  "2048":[ {suburb:"Glebe",state:"NSW"} ],
+  "2050":[ {suburb:"Camperdown",state:"NSW"} ],
+  "2060":[ {suburb:"North Sydney",state:"NSW"} ],
+  "2065":[ {suburb:"Crows Nest",state:"NSW"},{suburb:"St Leonards",state:"NSW"} ],
+  "2070":[ {suburb:"Lindfield",state:"NSW"} ],
+  "2088":[ {suburb:"Mosman",state:"NSW"} ],
+  "2090":[ {suburb:"Cremorne",state:"NSW"} ],
+  "2095":[ {suburb:"Manly",state:"NSW"} ],
+  "2113":[ {suburb:"Ryde",state:"NSW"} ],
+  "2150":[ {suburb:"Parramatta",state:"NSW"} ],
+  "2170":[ {suburb:"Liverpool",state:"NSW"} ],
+  "2200":[ {suburb:"Bankstown",state:"NSW"} ],
+  "2204":[ {suburb:"Marrickville",state:"NSW"} ],
+  "2205":[ {suburb:"Arncliffe",state:"NSW"} ],
+  "2208":[ {suburb:"Hurstville",state:"NSW"} ],
+  "2220":[ {suburb:"Hurstville",state:"NSW"} ],
+  "2230":[ {suburb:"Cronulla",state:"NSW"} ],
+  // VIC
+  "3000":[ {suburb:"Melbourne",state:"VIC"},{suburb:"Melbourne CBD",state:"VIC"} ],
+  "3002":[ {suburb:"East Melbourne",state:"VIC"} ],
+  "3004":[ {suburb:"St Kilda Road",state:"VIC"} ],
+  "3006":[ {suburb:"Southbank",state:"VIC"},{suburb:"South Melbourne",state:"VIC"} ],
+  "3008":[ {suburb:"Docklands",state:"VIC"} ],
+  "3010":[ {suburb:"Carlton",state:"VIC"} ],
+  "3011":[ {suburb:"Footscray",state:"VIC"} ],
+  "3031":[ {suburb:"Flemington",state:"VIC"} ],
+  "3051":[ {suburb:"North Melbourne",state:"VIC"} ],
+  "3053":[ {suburb:"Carlton",state:"VIC"} ],
+  "3054":[ {suburb:"Carlton North",state:"VIC"} ],
+  "3056":[ {suburb:"Brunswick",state:"VIC"} ],
+  "3057":[ {suburb:"Brunswick East",state:"VIC"} ],
+  "3065":[ {suburb:"Fitzroy",state:"VIC"} ],
+  "3066":[ {suburb:"Collingwood",state:"VIC"} ],
+  "3067":[ {suburb:"Abbotsford",state:"VIC"} ],
+  "3068":[ {suburb:"Clifton Hill",state:"VIC"} ],
+  "3070":[ {suburb:"Northcote",state:"VIC"} ],
+  "3078":[ {suburb:"Richmond",state:"VIC"} ],
+  "3101":[ {suburb:"Kew",state:"VIC"} ],
+  "3121":[ {suburb:"Richmond",state:"VIC"} ],
+  "3122":[ {suburb:"Hawthorn",state:"VIC"} ],
+  "3124":[ {suburb:"Camberwell",state:"VIC"} ],
+  "3126":[ {suburb:"Canterbury",state:"VIC"} ],
+  "3127":[ {suburb:"Box Hill South",state:"VIC"} ],
+  "3128":[ {suburb:"Box Hill",state:"VIC"} ],
+  "3130":[ {suburb:"Blackburn",state:"VIC"} ],
+  "3141":[ {suburb:"South Yarra",state:"VIC"} ],
+  "3142":[ {suburb:"Hawksburn",state:"VIC"} ],
+  "3143":[ {suburb:"Armadale",state:"VIC"} ],
+  "3144":[ {suburb:"Malvern",state:"VIC"} ],
+  "3145":[ {suburb:"Malvern East",state:"VIC"} ],
+  "3161":[ {suburb:"Windsor",state:"VIC"} ],
+  "3162":[ {suburb:"Caulfield",state:"VIC"} ],
+  "3163":[ {suburb:"Caulfield South",state:"VIC"} ],
+  "3168":[ {suburb:"Clayton",state:"VIC"} ],
+  "3175":[ {suburb:"Dandenong",state:"VIC"} ],
+  "3181":[ {suburb:"Prahran",state:"VIC"} ],
+  "3182":[ {suburb:"St Kilda",state:"VIC"} ],
+  "3183":[ {suburb:"St Kilda East",state:"VIC"} ],
+  "3187":[ {suburb:"Brighton East",state:"VIC"} ],
+  "3188":[ {suburb:"Hampton",state:"VIC"} ],
+  "3189":[ {suburb:"Moorabbin",state:"VIC"} ],
+  "3192":[ {suburb:"Cheltenham",state:"VIC"} ],
+  "3204":[ {suburb:"Bentleigh",state:"VIC"} ],
+  // QLD
+  "4000":[ {suburb:"Brisbane",state:"QLD"},{suburb:"Brisbane City",state:"QLD"} ],
+  "4005":[ {suburb:"New Farm",state:"QLD"} ],
+  "4006":[ {suburb:"Bowen Hills",state:"QLD"},{suburb:"Fortitude Valley",state:"QLD"} ],
+  "4007":[ {suburb:"Ascot",state:"QLD"} ],
+  "4010":[ {suburb:"Hamilton",state:"QLD"} ],
+  "4011":[ {suburb:"Clayfield",state:"QLD"} ],
+  "4020":[ {suburb:"Redcliffe",state:"QLD"} ],
+  "4030":[ {suburb:"Lutwyche",state:"QLD"} ],
+  "4051":[ {suburb:"Enoggera",state:"QLD"} ],
+  "4059":[ {suburb:"Paddington",state:"QLD"} ],
+  "4066":[ {suburb:"Toowong",state:"QLD"} ],
+  "4101":[ {suburb:"South Brisbane",state:"QLD"} ],
+  "4102":[ {suburb:"Woolloongabba",state:"QLD"} ],
+  "4170":[ {suburb:"Cannon Hill",state:"QLD"} ],
+  "4172":[ {suburb:"Murarrie",state:"QLD"} ],
+  "4300":[ {suburb:"Springfield",state:"QLD"} ],
+  "4500":[ {suburb:"Strathpine",state:"QLD"} ],
+  "4006":[ {suburb:"Fortitude Valley",state:"QLD"},{suburb:"Newstead",state:"QLD"} ],
+  "4013":[ {suburb:"Newstead",state:"QLD"} ],
+  // WA
+  "6000":[ {suburb:"Perth",state:"WA"},{suburb:"Perth CBD",state:"WA"} ],
+  "6003":[ {suburb:"Northbridge",state:"WA"} ],
+  "6005":[ {suburb:"West Perth",state:"WA"} ],
+  "6007":[ {suburb:"Leederville",state:"WA"} ],
+  "6008":[ {suburb:"Subiaco",state:"WA"} ],
+  "6009":[ {suburb:"Nedlands",state:"WA"} ],
+  "6010":[ {suburb:"Claremont",state:"WA"} ],
+  "6012":[ {suburb:"Mosman Park",state:"WA"} ],
+  "6014":[ {suburb:"Joondanna",state:"WA"} ],
+  "6060":[ {suburb:"Nollamara",state:"WA"} ],
+  "6100":[ {suburb:"East Victoria Park",state:"WA"} ],
+  "6106":[ {suburb:"Welshpool",state:"WA"} ],
+  "6160":[ {suburb:"Fremantle",state:"WA"} ],
+  "6163":[ {suburb:"Hamilton Hill",state:"WA"} ],
+  // SA
+  "5000":[ {suburb:"Adelaide",state:"SA"},{suburb:"Adelaide CBD",state:"SA"} ],
+  "5006":[ {suburb:"North Adelaide",state:"SA"} ],
+  "5007":[ {suburb:"Welland",state:"SA"} ],
+  "5031":[ {suburb:"Mile End",state:"SA"} ],
+  "5034":[ {suburb:"Unley",state:"SA"} ],
+  "5041":[ {suburb:"Pasadena",state:"SA"} ],
+  "5062":[ {suburb:"Springfield",state:"SA"} ],
+  "5065":[ {suburb:"Toorak Gardens",state:"SA"} ],
+  // ACT
+  "2600":[ {suburb:"Canberra",state:"ACT"},{suburb:"Yarralumla",state:"ACT"} ],
+  "2601":[ {suburb:"Braddon",state:"ACT"},{suburb:"Civic",state:"ACT"} ],
+  "2602":[ {suburb:"Ainslie",state:"ACT"} ],
+  "2605":[ {suburb:"Curtin",state:"ACT"} ],
+  "2609":[ {suburb:"Fyshwick",state:"ACT"} ],
+  "2614":[ {suburb:"Belconnen",state:"ACT"} ],
+  // TAS
+  "7000":[ {suburb:"Hobart",state:"TAS"},{suburb:"Hobart CBD",state:"TAS"} ],
+  "7004":[ {suburb:"Battery Point",state:"TAS"} ],
+  "7005":[ {suburb:"Sandy Bay",state:"TAS"} ],
+  // NT
+  "0800":[ {suburb:"Darwin",state:"NT"},{suburb:"Darwin CBD",state:"NT"} ],
+  "0810":[ {suburb:"Casuarina",state:"NT"} ],
+};
+
+function lookupPostcode(pc) {
+  if (!pc || pc.length !== 4) return [];
+  return AU_POSTCODES[pc] || [];
+}
+
+function formatLocation(suburb, state, postcode) {
+  if (!suburb) return postcode || "";
+  return `${suburb} ${state} ${postcode}`;
+}
+
+// ── PostcodeInput component ────────────────────────────────────────────────────
+function PostcodeInput({ value, onChange, onError }) {
+  // value is the raw location string: "Suburb STATE 1234" or "1234"
+  // We split it to derive internal state
+  const parseValue = (v) => {
+    if (!v) return { postcode: "", suburb: "", state: "" };
+    // format: "Suburb STATE NNNN"
+    const m = v.match(/^(.+)\s([A-Z]{2,3})\s(\d{4})$/);
+    if (m) return { suburb: m[1], state: m[2], postcode: m[3] };
+    // plain postcode
+    if (/^\d{4}$/.test(v.trim())) return { postcode: v.trim(), suburb: "", state: "" };
+    return { postcode: "", suburb: "", state: "" };
+  };
+
+  const parsed = parseValue(value);
+  const [pc, setPc] = useState(parsed.postcode);
+  const [suburb, setSuburb] = useState(parsed.suburb);
+  const [state, setState] = useState(parsed.state);
+  const [options, setOptions] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [pcError, setPcError] = useState("");
+
+  const handlePcChange = (v) => {
+    const digits = v.replace(/\D/g, "").slice(0, 4);
+    setPc(digits);
+    setPcError("");
+    if (digits.length === 4) {
+      const found = lookupPostcode(digits);
+      if (found.length === 0) {
+        setPcError("Invalid postcode — please check and try again");
+        setOptions([]);
+        setShowDropdown(false);
+        if (onError) onError("Invalid postcode — please check and try again");
+      } else if (found.length === 1) {
+        // Auto-select single match
+        setSuburb(found[0].suburb);
+        setState(found[0].state);
+        setShowDropdown(false);
+        onChange(formatLocation(found[0].suburb, found[0].state, digits));
+        if (onError) onError("");
+      } else {
+        setOptions(found);
+        setShowDropdown(true);
+        setSuburb("");
+        setState("");
+        if (onError) onError("");
+      }
+    } else {
+      setOptions([]);
+      setShowDropdown(false);
+      setSuburb("");
+      setState("");
+      onChange(digits);
+    }
+  };
+
+  const selectSuburb = (opt) => {
+    setSuburb(opt.suburb);
+    setState(opt.state);
+    setShowDropdown(false);
+    setPcError("");
+    onChange(formatLocation(opt.suburb, opt.state, pc));
+    if (onError) onError("");
+  };
+
+  return (
+    <div style={{ marginBottom: 12, position: "relative" }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Postcode *"
+            value={pc}
+            onChange={e => handlePcChange(e.target.value)}
+            style={{
+              width: "100%", border: `1.5px solid ${pcError ? "#ef4444" : "#e5e7eb"}`,
+              borderRadius: 14, padding: "14px", fontSize: 14, outline: "none",
+              color: "#374151", background: "white"
+            }}
+          />
+          {pcError && (
+            <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4, fontWeight: 600 }}>
+              ⚠️ {pcError}
+            </div>
+          )}
+        </div>
+        {suburb && (
+          <div style={{
+            flex: 2, border: "1.5px solid #e5e7eb", borderRadius: 14,
+            padding: "14px", fontSize: 14, color: "#374151",
+            background: "#f0fdf4", display: "flex", alignItems: "center", gap: 6
+          }}>
+            <span>📍</span>
+            <span style={{ fontWeight: 600 }}>{suburb}</span>
+            <span style={{ color: "#6b7280" }}>{state}</span>
+          </div>
+        )}
+      </div>
+      {showDropdown && options.length > 1 && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0,
+          background: "white", border: "1.5px solid #e5e7eb", borderRadius: 14,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 50, overflow: "hidden", marginTop: 4
+        }}>
+          <div style={{ padding: "10px 14px 6px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Select your suburb
+          </div>
+          {options.map((opt, i) => (
+            <div key={i} onClick={() => selectSuburb(opt)}
+              style={{
+                padding: "12px 14px", cursor: "pointer", fontSize: 14, fontWeight: 600,
+                color: "#374151", borderTop: i > 0 ? "1px solid #f3f4f6" : "none",
+                display: "flex", justifyContent: "space-between", alignItems: "center"
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "#f0fdf4"}
+              onMouseLeave={e => e.currentTarget.style.background = "white"}
+            >
+              <span>{opt.suburb}</span>
+              <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{opt.state} {pc}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {showDropdown && !suburb && !pcError && (
+        <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4, fontWeight: 600 }}>
+          ⚠️ Please select your suburb from the list above
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VintageTag({ label }) {
   const c = TAG_COLORS[label] || { bg:"#f3f4f6", text:"#374151", border:"#e5e7eb" };
   return (
@@ -816,7 +1116,9 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
           )}
         </div>
         <div style={{padding:"11px 12px 13px"}}>
-          <div style={{fontWeight:900,fontSize:17,color:"#111",letterSpacing:"-0.3px"}}>${item.price}</div>
+          <div style={{fontWeight:900,fontSize:17,color:"#111",letterSpacing:"-0.3px"}}>
+            {Number(item.price) === 0 ? <span style={{color:GREEN}}>FREE</span> : `$${item.price}`}
+          </div>
           <div style={{fontSize:13,fontWeight:600,color:"#1a1a1a",marginTop:3,
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
           <div style={{fontSize:11,color:"#aaa",marginTop:3,
@@ -843,7 +1145,9 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
       <div style={{padding:"13px 14px",flex:1,minWidth:0,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{fontWeight:900,fontSize:18,color:"#111",letterSpacing:"-0.3px"}}>${item.price}</div>
+            <div style={{fontWeight:900,fontSize:18,color:"#111",letterSpacing:"-0.3px"}}>
+              {Number(item.price) === 0 ? <span style={{color:GREEN}}>FREE</span> : `$${item.price}`}
+            </div>
             <div onClick={e => onSave(item.id, e)} style={{fontSize:18,cursor:"pointer",flexShrink:0}}>{item.is_saved?"❤️":"🤍"}</div>
           </div>
           <div style={{fontSize:14,fontWeight:600,color:"#1a1a1a",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
@@ -1074,7 +1378,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
             fontWeight: 700, fontSize: 15, color: "#111",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            {sellerName || "Seller"}
+            {sellerName || "LoopGen User"}
           </div>
           {listingTitle && (
             <div style={{
@@ -1540,14 +1844,27 @@ export default function LoopGenApp() {
   }
 
   async function handleList() {
-    if (!sell.title || !sell.price || !sell.category || !sell.condition) {
+    if (!sell.title || !sell.category || !sell.condition) {
       showToast("Please fill all required fields"); return;
     }
+    // Price validation
+    const isFreeCategory = sell.category === "Free Stuff";
+    const priceVal = isFreeCategory ? 0 : parseFloat(sell.price);
+    if (!isFreeCategory && (isNaN(priceVal) || priceVal < 0)) {
+      showToast("Please enter a valid price"); return;
+    }
+    // Location / suburb validation
+    const loc = sell.location || "";
+    const hasSuburb = /^.+\s[A-Z]{2,3}\s\d{4}$/.test(loc.trim());
+    if (!loc) { showToast("Please enter your postcode"); return; }
+    if (!hasSuburb) { showToast("Please select a suburb from the dropdown"); return; }
+    // Seller must exist (logged in)
+    if (!user) { showToast("Please sign in to post a listing"); return; }
     setLoading(true);
     try {
       const listing = {
         title: sell.title,
-        price: parseFloat(sell.price),
+        price: priceVal,
         category: sell.category,
         sub: sell.sub,
         condition: sell.condition,
@@ -1563,7 +1880,7 @@ export default function LoopGenApp() {
         await loadListings();
       } else {
         // Demo mode — add locally
-        const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
+        const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: currentUser, time: "Just now", is_saved: false };
         setListings(ls => [newItem, ...ls]);
         showToast("🎉 Listed! (Demo mode)");
       }
@@ -1633,7 +1950,7 @@ export default function LoopGenApp() {
     setChatContext({
       id: key,
       convId: item.convId || (item.id && !item.id.startsWith("chat_") ? item.id : null),
-      sellerName: item.seller_username || item.other_user || "Seller",
+      sellerName: item.seller_username || item.other_user || "LoopGen User",
       listingTitle: item.title || item.listing_title || "Item",
     });
     push("chat");
@@ -1670,7 +1987,7 @@ export default function LoopGenApp() {
           ...conv,
           convId: conv.id, // real Supabase conversation UUID for message persistence
           listing_id: item.id,
-          seller_username: item.seller_username || "Seller",
+          seller_username: item.seller_username || "LoopGen User",
           title: item.title || "Item",
         };
         setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
@@ -2062,7 +2379,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "detail" && detail) {
     const img = detail.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
-    const demoSeller = DEMO_SELLERS[detail.seller_username];
     return (
       <Phone>
         <div style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
@@ -2094,7 +2410,9 @@ export default function LoopGenApp() {
             {/* Price + Title */}
             <div style={{marginBottom:4}}>
               <div style={{fontSize:32,fontWeight:900,color:"#0f0f0f",letterSpacing:"-1px",lineHeight:1}}>
-                ${detail.price}
+                {Number(detail.price) === 0
+                  ? <span style={{color:GREEN}}>FREE</span>
+                  : `$${detail.price}`}
               </div>
               <div style={{fontSize:18,fontWeight:700,color:"#1a1a1a",marginTop:6,lineHeight:1.25}}>
                 {detail.title}
@@ -2133,23 +2451,25 @@ export default function LoopGenApp() {
 
             {/* Seller card */}
             {(() => {
+              const demoSeller = DEMO_SELLERS[detail.seller_username];
+              const sellerDisplayName = detail.seller_username || detail.seller_display_name || "LoopGen User";
               return (
                 <div style={{background:"white",borderRadius:20,padding:"16px",marginTop:14,
                   boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
                   <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12}}>
-                    Seller
+                    About the Seller
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
                     <div style={{width:46,height:46,borderRadius:50,
                       background:`linear-gradient(135deg,${GREEN},#22c55e)`,
                       display:"flex",alignItems:"center",justifyContent:"center",
                       color:"white",fontWeight:900,fontSize:18,flexShrink:0}}>
-                      {(detail.seller_username||"U")[0].toUpperCase()}
+                      {sellerDisplayName[0].toUpperCase()}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:7}}>
                         <span style={{fontWeight:800,fontSize:15,color:"#0f0f0f"}}>
-                          {detail.seller_username || "Seller"}
+                          {sellerDisplayName}
                         </span>
                         <span style={{background:"rgba(26,107,58,0.09)",color:GREEN,
                           fontSize:9,fontWeight:800,padding:"2px 7px",
@@ -2240,16 +2560,26 @@ export default function LoopGenApp() {
               border:`2px solid ${GREEN}`,background:"white",
               color:GREEN,fontWeight:700,fontSize:13,cursor:"pointer",
               fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            💬 Message Seller
+            {detail.seller_id && user?.id === detail.seller_id ? "📋 My Listing" : "💬 Message Seller"}
           </button>
-          <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
-            style={{flex:1,padding:"14px 8px",borderRadius:16,
-              border:"none",background:GREEN,color:"white",
-              fontWeight:700,fontSize:13,cursor:"pointer",
-              boxShadow:`0 6px 18px ${GREEN}44`,
-              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            {offerSent[detail.id] ? `Offer: $${offerSent[detail.id]}` : "Make Offer"}
-          </button>
+          {detail.seller_id && user?.id === detail.seller_id ? (
+            <button disabled
+              style={{flex:1,padding:"14px 8px",borderRadius:16,
+                border:"none",background:"#e5e7eb",color:"#9ca3af",
+                fontWeight:700,fontSize:13,cursor:"not-allowed",
+                fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Your Listing
+            </button>
+          ) : (
+            <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
+              style={{flex:1,padding:"14px 8px",borderRadius:16,
+                border:"none",background:GREEN,color:"white",
+                fontWeight:700,fontSize:13,cursor:"pointer",
+                boxShadow:`0 6px 18px ${GREEN}44`,
+                fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              {offerSent[detail.id] ? `Offer: $${offerSent[detail.id]}` : "Make Offer"}
+            </button>
+          )}
         </div>
         <Toast msg={toast}/>
         <OfferModal
@@ -2258,6 +2588,9 @@ export default function LoopGenApp() {
           setOfferPrice={setOfferPrice}
           onClose={() => setOfferModal(null)}
           onSubmit={async () => {
+            if (offerModal?.item?.seller_id && user?.id === offerModal.item.seller_id) {
+              showToast("You can't make an offer on your own listing"); setOfferModal(null); return;
+            }
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
@@ -2352,7 +2685,9 @@ export default function LoopGenApp() {
             </div>
             <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
-            <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
+            <FSel value={sell.category} onChange={v=>{
+              setSell(f=>({...f,category:v,sub:"", price: v==="Free Stuff" ? "0" : f.price}));
+            }} ph="Category *"
               opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Baby & Kids","Free Stuff"]}/>
             {sell.category === "Vintage & Collectibles" && (
               <FSel value={sell.sub} onChange={v=>setSell(f=>({...f,sub:v}))} ph="Subcategory"
@@ -2465,7 +2800,19 @@ export default function LoopGenApp() {
             })()}
             <GreenBtn onClick={()=>{
               if (!sell.title.trim()) { showToast("Please add a title"); return; }
-              if (!sell.price || parseFloat(sell.price) <= 0) { showToast("Please add a valid price"); return; }
+              const priceVal = parseFloat(sell.price);
+              const isFreeCategory = sell.category === "Free Stuff";
+              if (!sell.price && !isFreeCategory) { showToast("Please add a price"); return; }
+              if (!isFreeCategory && (isNaN(priceVal) || priceVal < 0)) { showToast("Please add a valid price"); return; }
+              if (isFreeCategory && priceVal > 0) {
+                showToast("Items in 'Free Stuff' must have a price of $0");
+                setSell(f => ({...f, price: "0"}));
+                return;
+              }
+              if (!isFreeCategory && priceVal === 0) {
+                showToast("For free items, please use the 'Free Stuff' category");
+                return;
+              }
               if (!sell.category) { showToast("Please select a category"); return; }
               if (!sell.condition) { showToast("Please select a condition"); return; }
               if (sellImages.length === 0) { showToast("Please add at least 1 photo"); return; }
@@ -2494,10 +2841,24 @@ export default function LoopGenApp() {
                 {aiLoading?"⏳ Generating…":"✨ Generate with AI"}
               </button>
             )}
-            <FInp placeholder="📍 Location (suburb or postcode)" value={sell.location} onChange={v=>setSell(f=>({...f,location:v}))}/>
+            <div style={{marginBottom:4}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6}}>Location (postcode) *</div>
+              <PostcodeInput
+                value={sell.location}
+                onChange={v => setSell(f => ({...f, location: v}))}
+                onError={e => {}}
+              />
+            </div>
             <div style={{display:"flex",gap:10,marginTop:4}}>
               <button onClick={()=>setSellStep(1)} style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Back</button>
-              <GreenBtn onClick={()=>setSellStep(3)} mt={0} style={{flex:2}}>Preview →</GreenBtn>
+              <GreenBtn onClick={()=>{
+                // Validate location has suburb resolved
+                const loc = sell.location || "";
+                const hasSuburb = /^.+\s[A-Z]{2,3}\s\d{4}$/.test(loc.trim());
+                if (!loc) { showToast("Please enter your postcode"); return; }
+                if (!hasSuburb) { showToast("Please select your suburb from the dropdown"); return; }
+                setSellStep(3);
+              }} mt={0} style={{flex:2}}>Preview →</GreenBtn>
             </div>
           </>
         )}
@@ -2509,7 +2870,11 @@ export default function LoopGenApp() {
                 : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>📦</div>
               }
               <div style={{padding:16}}>
-                <div style={{fontWeight:800,fontSize:22,color:"#111"}}>{sell.price?`$${sell.price}`:"$—"}</div>
+                <div style={{fontWeight:800,fontSize:22,color:"#111"}}>
+                  {(!sell.price || sell.price === "0" || Number(sell.price) === 0)
+                    ? <span style={{color:GREEN}}>FREE</span>
+                    : `$${sell.price}`}
+                </div>
                 <div style={{fontSize:16,fontWeight:600,color:"#374151"}}>{sell.title||"Untitled"}</div>
                 <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>{sell.category}{sell.condition?` · ${sell.condition}`:""}</div>
                 {sell.location && <div style={{fontSize:12,color:"#6b7280",marginTop:3}}>📍 {sell.location}</div>}
@@ -2593,7 +2958,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "chat") return (
     <ChatScreen
-      sellerName={chatContext?.sellerName || "Seller"}
+      sellerName={chatContext?.sellerName || "LoopGen User"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
       onSend={async (msg) => {
