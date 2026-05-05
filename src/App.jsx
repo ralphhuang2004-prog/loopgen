@@ -1676,20 +1676,24 @@ export default function LoopGenApp() {
     if (screen === "home" || screen === "explore") {
       loadListings();
     }
-    if (screen === "chats" && user) {
-      loadConversations();
+    if (screen === "chats") {
+      if (user) loadConversations();
     }
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
     }
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When a real user logs in/out, force-refresh listings with their saved state
+  // Also reload conversations whenever user logs in/changes
   useEffect(() => {
-    if (!HAS_SUPABASE) return; // demo mode never needs this
+    if (!HAS_SUPABASE) return;
     listingsLoaded.current = false;
     if (screen === "home" || screen === "explore") {
       loadListings({ force: true });
+    }
+    // Always refresh conversations on login so inbox is current
+    if (user) {
+      loadConversations();
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1784,10 +1788,11 @@ export default function LoopGenApp() {
   }
 
   async function loadConversations() {
-    if (!user) return;
+    if (!user) { console.log("[convos] skip — no user"); return; }
+    console.log("[convos] loading for user:", user.id);
     const data = await dbGetConversations(user.id);
+    console.log("[convos] loaded:", data.length, "conversations");
     setConvos(data);
-    // Seed unread badge from conversation data
     const total = data.reduce((sum, c) => sum + (c.unread || 0), 0);
     setUnreadTotal(total);
   }
