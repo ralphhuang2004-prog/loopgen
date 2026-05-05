@@ -237,41 +237,45 @@ async function dbToggleSave(listingId, userId, isSaved) {
 
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
+
+  // Query without joins — no FK relationships defined in schema
   const { data, error } = await supabase
     .from("conversations")
-    .select(`*, listing:listing_id(title), messages(content, created_at, sender_id, id)`)
+    .select("*, messages(id, content, created_at, sender_id)")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-    .order("updated_at", { ascending: false });
-  console.log("[convos] raw query result:", { data, error, userId });
-  if (error) {
-    // updated_at may not exist — retry without ordering
-    console.warn("[convos] retrying without order:", error.message);
-    const { data: data2, error: error2 } = await supabase
-      .from("conversations")
-      .select(`*, listing:listing_id(title), messages(content, created_at, sender_id, id)`)
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
-    console.log("[convos] retry result:", { data: data2, error: error2 });
-    if (error2) return [];
-    return buildConvos(data2 || [], userId);
-  }
-  return buildConvos(data || [], userId);
-}
+    .order("created_at", { ascending: false });
 
-async function buildConvos(data, userId) {
-  if (!data.length) return [];
-  const otherIds = data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean);
-  const uniqueIds = [...new Set(otherIds)];
+  console.log("[convos] query result:", { count: data?.length, error: error?.message });
+  if (error) { console.error("[convos] failed:", error); return []; }
+  if (!data || data.length === 0) return [];
+
+  // Batch-fetch profiles for all other participants
+  const otherIds = [...new Set(
+    data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean)
+  )];
   let profileMap = {};
-  if (uniqueIds.length > 0) {
-    const { data: profiles, error: pe } = await supabase
+  if (otherIds.length > 0) {
+    const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, username, display_name, first_name, avatar_url")
-      .in("id", uniqueIds);
-    console.log("[convos] profiles lookup:", { profiles, pe, uniqueIds });
+      .select("id, username, display_name, first_name")
+      .in("id", otherIds);
     (profiles || []).forEach(p => {
       profileMap[p.id] = p.display_name || p.first_name || p.username || null;
     });
+    console.log("[convos] profiles:", profileMap);
   }
+
+  // Batch-fetch listing titles separately
+  const listingIds = [...new Set(data.map(c => c.listing_id).filter(Boolean))];
+  let listingMap = {};
+  if (listingIds.length > 0) {
+    const { data: listings } = await supabase
+      .from("listings")
+      .select("id, title")
+      .in("id", listingIds);
+    (listings || []).forEach(l => { listingMap[l.id] = l.title; });
+  }
+
   return data.map(c => {
     const isBuyer = c.buyer_id === userId;
     const otherId = isBuyer ? c.seller_id : c.buyer_id;
@@ -280,12 +284,11 @@ async function buildConvos(data, userId) {
     const sorted = [...msgs].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     const lastMsg = sorted[0];
     const unread = msgs.filter(m => m.sender_id !== userId).length;
-    console.log("[convos] mapped:", { id: c.id, otherId, otherName, msgCount: msgs.length, isBuyer });
+    console.log("[convos] row:", { id: c.id, otherName, msgCount: msgs.length, listing: listingMap[c.listing_id] });
     return {
       ...c,
       other_user: otherName,
-      other_avatar: null,
-      listing_title: c.listing?.title || "Item",
+      listing_title: listingMap[c.listing_id] || "Item",
       last_message: lastMsg?.content || "",
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
       unread,
@@ -293,6 +296,8 @@ async function buildConvos(data, userId) {
     };
   });
 }
+
+async function buildConvos() {} // kept as no-op to avoid reference errors
 
 async function dbGetMessages(conversationId) {
   if (!supabase) return [];
@@ -314,8 +319,6 @@ async function dbSendMessage(conversationId, senderId, content) {
     .select()
     .single();
   if (error) throw error;
-  await supabase.from("conversations").update({ updated_at: new Date().toISOString() })
-    .eq("id", conversationId);
   return data;
 }
 
