@@ -242,8 +242,7 @@ async function dbGetConversations(userId) {
   const { data, error } = await supabase
     .from("conversations")
     .select("*, messages(id, content, created_at, sender_id)")
-    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-    .order("created_at", { ascending: false });
+    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
 
   console.log("[convos] query result:", { count: data?.length, error: error?.message });
   if (error) { console.error("[convos] failed:", error); return []; }
