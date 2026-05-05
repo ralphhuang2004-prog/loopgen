@@ -2717,44 +2717,51 @@ export default function LoopGenApp() {
                     </button>
                   )}
                 </div>
-                <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4,scrollbarWidth:"none"}}>
+                <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:12,paddingTop:10,scrollbarWidth:"none"}}>
                   {sellImages.map((src, i) => {
                     const isUploading = uploadingImg && src.startsWith("blob:");
                     return (
-                    <div key={src + i} style={{position:"relative",flexShrink:0,width:100,height:100}}>
+                    <div key={src + i} style={{position:"relative",flexShrink:0,width:110,height:110,overflow:"visible"}}>
                       <img src={src} alt={`photo ${i+1}`}
-                        style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:14,display:"block",
+                        style={{width:110,height:110,objectFit:"cover",borderRadius:14,display:"block",
                           border:`2px solid ${isUploading ? "#fbbf24" : "#e5e7eb"}`,
                           opacity: isUploading ? 0.7 : 1}}/>
                       {/* Uploading spinner overlay */}
                       {isUploading && (
                         <div style={{position:"absolute",inset:0,borderRadius:14,background:"rgba(0,0,0,0.35)",
-                          display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          display:"flex",alignItems:"center",justifyContent:"center",zIndex:1}}>
                           <div style={{width:22,height:22,border:"3px solid rgba(255,255,255,0.4)",
                             borderTop:"3px solid white",borderRadius:"50%",
                             animation:"loopgen-spin 0.7s linear infinite"}}/>
                         </div>
                       )}
-                      {/* Remove button — always visible */}
+                      {/* Remove button — positioned inside tile bounds so it's never clipped */}
                       <button
-                        onClick={e => {
+                        onPointerDown={e => {
                           e.stopPropagation();
+                          e.preventDefault();
                           const updated = sellImages.filter((_, idx) => idx !== i);
                           setSellImages(updated);
                           setSell(f => ({...f, image_urls: f.image_urls.filter((_, idx) => idx !== i)}));
                         }}
-                        style={{position:"absolute",top:-8,right:-8,width:24,height:24,borderRadius:"50%",
-                          background:"#ef4444",border:"2px solid white",color:"white",
-                          fontSize:13,fontWeight:900,lineHeight:1,cursor:"pointer",
-                          display:"flex",alignItems:"center",justifyContent:"center",
-                          boxShadow:"0 2px 6px rgba(0,0,0,0.2)",padding:0,fontFamily:"inherit"}}>
+                        style={{
+                          position:"absolute", top:6, right:6,
+                          width:28, height:28, borderRadius:"50%",
+                          background:"rgba(0,0,0,0.65)", border:"2px solid white", color:"white",
+                          fontSize:14, fontWeight:900, lineHeight:1, cursor:"pointer",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          boxShadow:"0 2px 8px rgba(0,0,0,0.35)", padding:0,
+                          fontFamily:"inherit", zIndex:10,
+                          WebkitTapHighlightColor:"transparent",
+                          touchAction:"manipulation",
+                        }}>
                         ✕
                       </button>
-                      {/* Cover label on first photo */}
+                      {/* Cover label */}
                       {i === 0 && !isUploading && (
-                        <div style={{position:"absolute",bottom:5,left:0,right:0,textAlign:"center",
-                          fontSize:9,fontWeight:700,color:"white",
-                          textShadow:"0 1px 3px rgba(0,0,0,0.7)",letterSpacing:"0.04em"}}>
+                        <div style={{position:"absolute",bottom:6,left:0,right:0,textAlign:"center",
+                          fontSize:9,fontWeight:700,color:"white",zIndex:2,
+                          textShadow:"0 1px 3px rgba(0,0,0,0.8)",letterSpacing:"0.04em"}}>
                           COVER
                         </div>
                       )}
