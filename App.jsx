@@ -239,30 +239,39 @@ async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
   const { data, error } = await supabase
     .from("conversations")
-    .select(`
-      *,
-      listing:listing_id(title),
-      messages(content, created_at, sender_id, id)
-    `)
+    .select(`*, listing:listing_id(title), messages(content, created_at, sender_id, id)`)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
-  if (error) { console.error("getConversations:", error); return []; }
-  if (!data || data.length === 0) return [];
+  console.log("[convos] raw query result:", { data, error, userId });
+  if (error) {
+    // updated_at may not exist — retry without ordering
+    console.warn("[convos] retrying without order:", error.message);
+    const { data: data2, error: error2 } = await supabase
+      .from("conversations")
+      .select(`*, listing:listing_id(title), messages(content, created_at, sender_id, id)`)
+      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
+    console.log("[convos] retry result:", { data: data2, error: error2 });
+    if (error2) return [];
+    return buildConvos(data2 || [], userId);
+  }
+  return buildConvos(data || [], userId);
+}
 
-  // Collect all other-participant IDs to batch-fetch profiles
+async function buildConvos(data, userId) {
+  if (!data.length) return [];
   const otherIds = data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean);
   const uniqueIds = [...new Set(otherIds)];
   let profileMap = {};
   if (uniqueIds.length > 0) {
-    const { data: profiles } = await supabase
+    const { data: profiles, error: pe } = await supabase
       .from("profiles")
       .select("id, username, display_name, first_name, avatar_url")
       .in("id", uniqueIds);
+    console.log("[convos] profiles lookup:", { profiles, pe, uniqueIds });
     (profiles || []).forEach(p => {
       profileMap[p.id] = p.display_name || p.first_name || p.username || null;
     });
   }
-
   return data.map(c => {
     const isBuyer = c.buyer_id === userId;
     const otherId = isBuyer ? c.seller_id : c.buyer_id;
@@ -270,7 +279,8 @@ async function dbGetConversations(userId) {
     const msgs = c.messages || [];
     const sorted = [...msgs].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     const lastMsg = sorted[0];
-    const unread = msgs.filter(m => m.sender_id !== userId).length; // simplified unread
+    const unread = msgs.filter(m => m.sender_id !== userId).length;
+    console.log("[convos] mapped:", { id: c.id, otherId, otherName, msgCount: msgs.length, isBuyer });
     return {
       ...c,
       other_user: otherName,
@@ -285,13 +295,13 @@ async function dbGetConversations(userId) {
 }
 
 async function dbGetMessages(conversationId) {
-  // Always fetch from network — never use cached data for messages
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
+  console.log("[messages] load:", { conversationId, count: data?.length, error });
   if (error) { console.error("getMessages:", error); return []; }
   return data || [];
 }
