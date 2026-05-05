@@ -345,7 +345,7 @@ async function dbGetUserListings(userId) {
 async function dbMarkAsSold(listingId) {
   if (!supabase) return;
   const { error } = await supabase.from("listings")
-    .update({ status: "sold", updated_at: new Date().toISOString() })
+    .update({ status: "sold" })
     .eq("id", listingId);
   if (error) throw error;
 }
@@ -353,7 +353,7 @@ async function dbMarkAsSold(listingId) {
 async function dbDeleteListing(listingId) {
   if (!supabase) return;
   const { error } = await supabase.from("listings")
-    .update({ status: "deleted", updated_at: new Date().toISOString() })
+    .update({ status: "deleted" })
     .eq("id", listingId);
   if (error) throw error;
 }
