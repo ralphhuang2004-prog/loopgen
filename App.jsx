@@ -1855,15 +1855,17 @@ export default function LoopGenApp() {
     return () => { realtimeSub.current?.unsubscribe(); };
   }, [convo, user]);
 
-  // ── Refs so the global realtime callback always reads latest values ──────────
+  // ── Refs so realtime callbacks always read latest values without re-subscribing ──
   const screenRef = useRef(screen);
   const chatContextRef = useRef(chatContext);
+  const userRef = useRef(user);
   useEffect(() => { screenRef.current = screen; }, [screen]);
   useEffect(() => { chatContextRef.current = chatContext; }, [chatContext]);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   // ── Global realtime: notify of new messages and update store ────────────────────
-  // NOTE: only re-subscribe when user changes (not on every screen/chatContext change)
-  // to avoid missing messages during the brief re-subscription gap.
+  // Only re-subscribe when user changes — NOT on every screen/chatContext change,
+  // which previously caused a reconnection gap where messages were silently dropped.
   useEffect(() => {
     if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
     globalRealtimeSub.current = supabase
@@ -1872,23 +1874,24 @@ export default function LoopGenApp() {
         payload => {
           const msg = payload.new;
           if (!msg?.conversation_id) return;
-          if (msg.sender_id === user.id) return; // own message — already in store
-          // Update the correct store bucket for this conversation
+          const currentUser = userRef.current;
+          if (msg.sender_id === currentUser?.id) return; // own message — already in store
+          // Attach display time from created_at
+          const displayTime = msg.created_at
+            ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           const key = chatKey(msg.conversation_id);
           const store = localChatStore.current;
           const existing = store[key] || [];
           if (!existing.find(m => String(m.id) === String(msg.id))) {
-            store[key] = [...existing, { ...msg, from_me: false }];
+            store[key] = [...existing, { ...msg, from_me: false, time: displayTime }];
           }
-          // Increment unread badge
           setUnreadTotal(n => n + 1);
-          // Use refs so we never need to re-subscribe just to read these values
           const isViewingThisConv = screenRef.current === "chat" && chatContextRef.current?.convId === msg.conversation_id;
           if (!isViewingThisConv) {
             showToast("💬 New message received");
             loadConversations();
           } else {
-            // Force re-render of chat screen with new message
             setChatContext(ctx => ctx ? { ...ctx } : ctx);
           }
         })
@@ -2234,10 +2237,17 @@ export default function LoopGenApp() {
     push("chat");
     // Load messages from DB — polling will keep them fresh after
     if (supabase && user && c.id) {
+      const myId = user.id; // capture once — never stale inside async
       try {
         const fetched = await dbGetMessages(c.id);
         if (fetched.length > 0) {
-          const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+          const msgs = fetched.map(m => ({
+            ...m,
+            from_me: m.sender_id === myId,
+            time: m.created_at
+              ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : m.time || "",
+          }));
           // Merge: preserve any optimistic messages not yet in DB
           const dbIds = new Set(msgs.map(m => String(m.id)));
           const existing = store[key] || [];
@@ -2281,8 +2291,15 @@ export default function LoopGenApp() {
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
       if (!conv) throw new Error("Could not create conversation");
       // Load existing messages from DB
+      const myId = user.id;
       const fetched = await dbGetMessages(conv.id);
-      const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+      const msgs = fetched.map(m => ({
+        ...m,
+        from_me: m.sender_id === myId,
+        time: m.created_at
+          ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : m.time || "",
+      }));
       // Seed store with DB messages + any pending offer messages not yet in DB
       const key = chatKey(conv.id);
       const store = localChatStore.current;
@@ -2951,7 +2968,7 @@ export default function LoopGenApp() {
                   // Persist offer message to Supabase immediately
                   const saved = await dbSendMessage(conv.id, user.id, offerContent);
                   const confirmedMsg = saved
-                    ? { ...saved, from_me: true }
+                    ? { ...saved, from_me: true, time: saved.created_at ? new Date(saved.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : offerMsg.time }
                     : { ...offerMsg };
                   // Update pending ref with confirmed DB id so dedup works
                   if (saved) pendingOfferMsgs.current[item.id] = confirmedMsg;
@@ -3402,10 +3419,17 @@ export default function LoopGenApp() {
       userId={user?.id}
       onPollMessages={async () => {
         if (!supabase || !user || !chatContext?.convId) return;
+        const myId = user.id; // capture before any await
         try {
           const fetched = await dbGetMessages(chatContext.convId);
           if (!fetched.length) return; // DB empty — never wipe local optimistic messages
-          const dbMsgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+          const dbMsgs = fetched.map(m => ({
+            ...m,
+            from_me: m.sender_id === myId,
+            time: m.created_at
+              ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : m.time || "",
+          }));
           const key = chatContext.id;
           const store = localChatStore.current;
           const existing = store[key] || [];
@@ -3438,8 +3462,11 @@ export default function LoopGenApp() {
             // Replace temp optimistic ID with confirmed DB UUID
             const key = chatContext.id;
             const store = localChatStore.current;
+            const confirmedTime = saved.created_at
+              ? new Date(saved.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : msg.time;
             store[key] = (store[key] || []).map(m =>
-              m.id === msg.id ? { ...saved, from_me: true } : m
+              m.id === msg.id ? { ...saved, from_me: true, time: confirmedTime } : m
             );
             setChatContext(ctx => ctx ? { ...ctx } : ctx);
           }
