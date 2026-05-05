@@ -1721,6 +1721,7 @@ export default function LoopGenApp() {
   const [chatMsgs,  setChatMsgs]= useState([]);
   const [chatContext, setChatContext] = useState(null);
   const localChatStore = useRef({});
+  const pendingOfferMsgs = useRef({}); // { [listingId]: offerMsg } — ensures offer appears in chat
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
   const globalRealtimeSub = useRef(null);
@@ -2242,9 +2243,29 @@ export default function LoopGenApp() {
   };
 
   const openSellerChat = async (item) => {
+    // Collect any pending offer messages for this listing so they always appear
+    const pendingOffer = pendingOfferMsgs.current[item.id];
+    const seedFromOffer = pendingOffer ? [pendingOffer] : [];
+
     if (!supabase || !user) {
       // Guest — open local-only chat, no persistence
-      openChat(null, { sellerName: item.seller_username, listingTitle: item.title }, []);
+      // Reuse existing local store for this listing if one exists
+      const localKey = `local_listing_${item.id}`;
+      const store = localChatStore.current;
+      if (!store[localKey]) store[localKey] = [];
+      // Merge any pending offer messages that aren't already in the store
+      if (seedFromOffer.length > 0) {
+        const existingIds = new Set(store[localKey].map(m => String(m.id)));
+        const toAdd = seedFromOffer.filter(m => !existingIds.has(String(m.id)));
+        if (toAdd.length > 0) store[localKey] = [...store[localKey], ...toAdd];
+      }
+      setChatContext({
+        id: localKey,
+        convId: null,
+        sellerName: item.seller_username || "LoopGen User",
+        listingTitle: item.title || "Item",
+      });
+      push("chat");
       return;
     }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
@@ -2254,15 +2275,17 @@ export default function LoopGenApp() {
       // Load existing messages from DB
       const fetched = await dbGetMessages(conv.id);
       const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
-      // Seed store with DB messages (polling takes over from here)
+      // Seed store with DB messages + any pending offer messages not yet in DB
       const key = chatKey(conv.id);
       const store = localChatStore.current;
-      if (msgs.length > 0 || !store[key]) {
-        const existing = store[key] || [];
-        const dbIds = new Set(msgs.map(m => String(m.id)));
-        const optimistic = existing.filter(m => !dbIds.has(String(m.id)));
-        store[key] = [...msgs, ...optimistic];
-      }
+      const existing = store[key] || [];
+      const dbIds = new Set(msgs.map(m => String(m.id)));
+      // Keep local optimistic messages not confirmed by DB yet
+      const optimistic = existing.filter(m => !dbIds.has(String(m.id)));
+      // Also include pending offer if not already in DB or optimistic list
+      const optimisticIds = new Set(optimistic.map(m => String(m.id)));
+      const offerToAdd = seedFromOffer.filter(m => !dbIds.has(String(m.id)) && !optimisticIds.has(String(m.id)));
+      store[key] = [...msgs, ...optimistic, ...offerToAdd];
       setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [{
         ...conv,
         other_user: item.seller_username || "LoopGen User",
@@ -2909,6 +2932,9 @@ export default function LoopGenApp() {
               time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             };
 
+            // ── Store offer message so it's always seeded into any chat for this listing ──
+            pendingOfferMsgs.current[item.id] = offerMsg;
+
             // ── Get or create a real Supabase conversation, then persist the message ──
             if (supabase && user && item.seller_id) {
               try {
@@ -2918,7 +2944,9 @@ export default function LoopGenApp() {
                   const saved = await dbSendMessage(conv.id, user.id, offerContent);
                   const confirmedMsg = saved
                     ? { ...saved, from_me: true }
-                    : { ...offerMsg, id: `offer_${Date.now()}` };
+                    : { ...offerMsg };
+                  // Update pending ref with confirmed DB id so dedup works
+                  if (saved) pendingOfferMsgs.current[item.id] = confirmedMsg;
                   // Seed into store before opening
                   const key = chatKey(conv.id);
                   const store = localChatStore.current;
@@ -2942,8 +2970,20 @@ export default function LoopGenApp() {
                 showToast("Offer sent but chat failed to open");
               }
             }
-            // Fallback: guest or no seller_id
-            openChat(null, { sellerName: item.seller_username, listingTitle: item.title }, [offerMsg]);
+            // Fallback: guest or no seller_id — use a stable key per listing
+            const localKey = `local_listing_${item.id}`;
+            const store = localChatStore.current;
+            if (!store[localKey]) store[localKey] = [];
+            if (!store[localKey].find(m => String(m.id) === String(offerMsg.id))) {
+              store[localKey] = [...store[localKey], offerMsg];
+            }
+            setChatContext({
+              id: localKey,
+              convId: null,
+              sellerName: item.seller_username || "LoopGen User",
+              listingTitle: item.title || "Item",
+            });
+            push("chat");
           }}
         />
         <ReportModal
