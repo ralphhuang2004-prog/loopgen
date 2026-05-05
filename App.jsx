@@ -238,65 +238,65 @@ async function dbToggleSave(listingId, userId, isSaved) {
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
 
-  // Query without joins — no FK relationships defined in schema
+  // Plain select — no joins, no ordering (table has no timestamp columns)
   const { data, error } = await supabase
     .from("conversations")
-    .select("*, messages(id, content, created_at, sender_id)")
+    .select("id, buyer_id, seller_id, listing_id")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
 
   console.log("[convos] query result:", { count: data?.length, error: error?.message });
-  if (error) { console.error("[convos] failed:", error); return []; }
-  if (!data || data.length === 0) return [];
+  if (error) { console.error("[convos] failed:", error.message); return []; }
+  if (!data || data.length === 0) { console.log("[convos] none found"); return []; }
 
-  // Batch-fetch profiles for all other participants
+  // Fetch messages for each conversation separately
+  const msgResults = await Promise.all(
+    data.map(c => supabase.from("messages").select("id, content, created_at, sender_id")
+      .eq("conversation_id", c.id).order("created_at", { ascending: false }).limit(1))
+  );
+
+  // Batch-fetch profiles for other participants
   const otherIds = [...new Set(
     data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean)
   )];
   let profileMap = {};
   if (otherIds.length > 0) {
     const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, first_name")
-      .in("id", otherIds);
+      .from("profiles").select("id, username, display_name, first_name").in("id", otherIds);
     (profiles || []).forEach(p => {
       profileMap[p.id] = p.display_name || p.first_name || p.username || null;
     });
-    console.log("[convos] profiles:", profileMap);
   }
 
-  // Batch-fetch listing titles separately
+  // Batch-fetch listing titles
   const listingIds = [...new Set(data.map(c => c.listing_id).filter(Boolean))];
   let listingMap = {};
   if (listingIds.length > 0) {
     const { data: listings } = await supabase
-      .from("listings")
-      .select("id, title")
-      .in("id", listingIds);
+      .from("listings").select("id, title").in("id", listingIds);
     (listings || []).forEach(l => { listingMap[l.id] = l.title; });
   }
 
-  return data.map(c => {
+  const result = data.map((c, i) => {
     const isBuyer = c.buyer_id === userId;
     const otherId = isBuyer ? c.seller_id : c.buyer_id;
     const otherName = profileMap[otherId] || (isBuyer ? "LoopGen User" : "Buyer");
-    const msgs = c.messages || [];
-    const sorted = [...msgs].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-    const lastMsg = sorted[0];
-    const unread = msgs.filter(m => m.sender_id !== userId).length;
-    console.log("[convos] row:", { id: c.id, otherName, msgCount: msgs.length, listing: listingMap[c.listing_id] });
+    const lastMsg = msgResults[i]?.data?.[0] || null;
+    console.log("[convos] row:", { id: c.id, otherName, lastMsg: lastMsg?.content });
     return {
       ...c,
       other_user: otherName,
       listing_title: listingMap[c.listing_id] || "Item",
       last_message: lastMsg?.content || "",
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
-      unread,
+      unread: 0,
       online: false,
     };
   });
+  console.log("[convos] loaded:", result.length);
+  return result;
 }
 
-async function buildConvos() {} // kept as no-op to avoid reference errors
+async function buildConvos() {}
 
 async function dbGetMessages(conversationId) {
   if (!supabase) return [];
