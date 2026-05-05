@@ -43,6 +43,11 @@
 //   CREATE POLICY "msg_sender_insert" ON messages FOR INSERT
 //     WITH CHECK (sender_id = auth.uid());
 //
+//   -- ⚠️  FIX FOR "message failed" error — run this if messages fail to send:
+//   --  receiver_id may be NOT NULL in your schema, causing INSERT to fail
+//   --  when the conversations SELECT is blocked by RLS. Make it nullable:
+//   ALTER TABLE messages ALTER COLUMN receiver_id DROP NOT NULL;
+//
 //   -- Indexes for performance
 //   CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at);
 //   CREATE INDEX IF NOT EXISTS idx_conversations_buyer ON conversations(buyer_id);
@@ -391,7 +396,8 @@ async function dbSendMessage(conversationId, senderId, content, receiverId = nul
     console.error("[dbSendMessage] BLOCKED — no senderId");
     throw new Error("Cannot send message: not authenticated");
   }
-  // Resolve receiver_id only when not already provided — avoids an extra RLS-gated SELECT
+
+  // Resolve receiver_id — try from passed param first, then look up from DB
   let resolvedReceiverId = receiverId;
   if (!resolvedReceiverId) {
     try {
@@ -403,8 +409,10 @@ async function dbSendMessage(conversationId, senderId, content, receiverId = nul
       if (conv) {
         resolvedReceiverId = conv.buyer_id === senderId ? conv.seller_id : conv.buyer_id;
       }
-    } catch { /* receiver lookup is best-effort — message still sends without it */ }
+    } catch { /* best-effort — proceed without receiver_id if lookup fails */ }
   }
+
+  // Attempt 1: send with receiver_id
   const payload = {
     conversation_id: conversationId,
     sender_id: senderId,
@@ -416,12 +424,32 @@ async function dbSendMessage(conversationId, senderId, content, receiverId = nul
     .insert(payload)
     .select("id, conversation_id, sender_id, receiver_id, content, created_at")
     .single();
-  if (error) {
-    console.error("[dbSendMessage] FAILED:", error.message, "code:", error.code);
-    throw error;
+
+  if (!error) {
+    console.log("[dbSendMessage] OK — id:", data.id, "conv:", conversationId);
+    return data;
   }
-  console.log("[dbSendMessage] OK — id:", data.id, "conv:", conversationId, "receiver:", resolvedReceiverId);
-  return data;
+
+  // If failed with receiver_id present, retry WITHOUT it
+  // (handles NOT NULL constraint on receiver_id when value was null,
+  //  or schema that doesn't have receiver_id column at all)
+  if (resolvedReceiverId) {
+    console.warn("[dbSendMessage] first attempt failed:", error.message, "— retrying without receiver_id");
+    const { data: data2, error: error2 } = await supabase
+      .from("messages")
+      .insert({ conversation_id: conversationId, sender_id: senderId, content })
+      .select("id, conversation_id, sender_id, receiver_id, content, created_at")
+      .single();
+    if (!error2) {
+      console.log("[dbSendMessage] OK (no receiver_id) — id:", data2.id);
+      return data2;
+    }
+    console.error("[dbSendMessage] retry also failed:", error2.message, "code:", error2.code);
+    throw new Error(error2.message || "Message failed to send");
+  }
+
+  console.error("[dbSendMessage] FAILED:", error.message, "code:", error.code);
+  throw new Error(error.message || "Message failed to send");
 }
 
 async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
@@ -1476,7 +1504,6 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
     if (!trimmed || sendLock.current) return;
     sendLock.current = true;
     setSending(true);
-    // Pass content only — parent sendMessage() owns optimistic ID, DB insert, dedup
     onSend({ content: trimmed }).finally(() => {
       sendLock.current = false;
       setSending(false);
@@ -1838,9 +1865,7 @@ export default function LoopGenApp() {
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Global realtime: receive incoming messages ───────────────────────────────
-  // Deps: [user] ONLY. Using refs means the callback always reads fresh values
-  // without needing to re-subscribe (which previously dropped messages mid-gap).
+  // ── Global realtime: receive incoming messages (user-only deps — never re-subs on send) ──
   useEffect(() => {
     if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
     globalRealtimeSub.current = supabase
@@ -1850,7 +1875,7 @@ export default function LoopGenApp() {
           const msg = payload.new;
           if (!msg?.conversation_id) return;
           const me = userRef.current;
-          if (msg.sender_id === me?.id) return; // own messages handled by sendMessage
+          if (msg.sender_id === me?.id) return;
           const key = chatKey(msg.conversation_id);
           mergeIntoStore(key, [normMsg({ ...msg, from_me: false }, me?.id)]);
           setUnreadTotal(n => n + 1);
@@ -2149,15 +2174,10 @@ export default function LoopGenApp() {
 
   // ═══════════════════════════════════════════════════════════════
   //  UNIFIED CHAT ENGINE
-  //  Single pipeline for ALL messages — text input and offer button
-  //  behave identically. Three primitives only:
-  //    chatKey  →  mergeIntoStore  →  sendMessage
   // ═══════════════════════════════════════════════════════════════
 
-  // 1. chatKey — canonical store key, always conv_${uuid}
   const chatKey = (convId) => convId ? `conv_${convId}` : null;
 
-  // 2. normMsg — normalise any DB row or local draft into display shape
   const normMsg = (m, myId) => ({
     ...m,
     from_me: m.from_me !== undefined ? m.from_me : (m.sender_id === myId),
@@ -2166,9 +2186,6 @@ export default function LoopGenApp() {
       : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
   });
 
-  // 3. mergeIntoStore — THE ONLY writer to localChatStore.
-  //    Unions by id (Map), sorts by created_at, triggers re-render.
-  //    Never wipes existing messages.
   const mergeIntoStore = (key, incoming) => {
     if (!key || !incoming?.length) return;
     const store = localChatStore.current;
@@ -2185,16 +2202,15 @@ export default function LoopGenApp() {
     setChatContext(ctx => ctx ? { ...ctx } : ctx);
   };
 
-  // 4. sendMessage — unified send for text AND offer.
-  //    Uses receiverId from chatContext so dbSendMessage skips its extra SELECT.
-  //    Optimistic add → DB insert → replace temp → on fail mark failed (never delete).
+  // sendMessage — unified pipeline for text input AND offer button.
+  // receiverId is read from chatCtxRef so dbSendMessage skips its extra SELECT.
   const sendMessage = async ({ convId, content, type = "text" }) => {
     if (!convId || !content?.trim()) return;
     const key    = chatKey(convId);
     const myId   = user?.id;
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    // Step 1 — show immediately (optimistic)
+    // Optimistic: show immediately
     mergeIntoStore(key, [normMsg({
       id: tempId,
       sender_id: myId,
@@ -2206,30 +2222,27 @@ export default function LoopGenApp() {
       from_me: true,
     }, myId)]);
 
-    if (!supabase || !myId) return; // guest — local only
+    if (!supabase || !myId) return;
 
-    // Step 2 — persist to DB, passing receiverId directly to skip extra SELECT
     const receiverId = chatCtxRef.current?.receiverId || null;
     try {
       const saved = await dbSendMessage(convId, myId, content.trim(), receiverId);
       if (!saved) throw new Error("No data returned");
-      // Step 3 — evict temp, merge confirmed record
       const store = localChatStore.current;
       if (store[key]) store[key] = store[key].filter(m => m.id !== tempId);
       mergeIntoStore(key, [normMsg({ ...saved, from_me: true, type, status: "sent" }, myId)]);
     } catch (e) {
       console.error("[sendMessage] failed:", e.message);
-      // Mark failed — stay visible so user can see it failed, never silently delete
       const store = localChatStore.current;
       if (store[key]) store[key] = store[key].map(m =>
         m.id === tempId ? { ...m, status: "failed" } : m
       );
       setChatContext(ctx => ctx ? { ...ctx } : ctx);
-      showToast("Message failed — please check connection and retry");
+      showToast(`Send failed: ${e.message}`);
     }
   };
 
-  // ── Refs so realtime callback reads latest values without re-subscribing ─────
+  // Refs so realtime callback reads latest values without re-subscribing
   const screenRef  = useRef(screen);
   const chatCtxRef = useRef(chatContext);
   const userRef    = useRef(user);
@@ -2237,14 +2250,12 @@ export default function LoopGenApp() {
   useEffect(() => { chatCtxRef.current = chatContext; }, [chatContext]);
   useEffect(() => { userRef.current    = user;        }, [user]);
 
-  // ── openChat — navigate to chat for a known convId ───────────────────────────
   const openChat = (convId, meta) => {
     const key = chatKey(convId);
     if (!key) { console.warn("[openChat] missing convId"); return; }
     if (!localChatStore.current[key]) localChatStore.current[key] = [];
     setChatContext({
-      id: key,
-      convId,
+      id: key, convId,
       receiverId: meta.receiverId || null,
       sellerName: meta.sellerName || "LoopGen User",
       listingTitle: meta.listingTitle || "Item",
@@ -2252,16 +2263,12 @@ export default function LoopGenApp() {
     push("chat");
   };
 
-  // ── openConvo — tap a row in the inbox list ──────────────────────────────────
   const openConvo = async (c) => {
     const key = chatKey(c.id);
     if (!localChatStore.current[key]) localChatStore.current[key] = [];
-    // Derive receiverId: the other participant
     const receiverId = user ? (c.buyer_id === user.id ? c.seller_id : c.buyer_id) : null;
     setChatContext({
-      id: key,
-      convId: c.id,
-      receiverId,
+      id: key, convId: c.id, receiverId,
       sellerName: c.other_user || "LoopGen User",
       listingTitle: c.listing_title || "Item",
     });
@@ -2275,7 +2282,6 @@ export default function LoopGenApp() {
     } catch (e) { console.error("[openConvo] fetch error:", e); }
   };
 
-  // ── openSellerChat — "Message Seller" button on listing detail ───────────────
   const openSellerChat = async (item) => {
     if (!supabase || !user) {
       const localKey = `local_listing_${item.id}`;
@@ -2291,7 +2297,6 @@ export default function LoopGenApp() {
       const key = chatKey(conv.id);
       if (!localChatStore.current[key]) localChatStore.current[key] = [];
       const myId = user.id;
-      // receiverId is the other participant — known from conv without extra SELECT
       const receiverId = conv.buyer_id === myId ? conv.seller_id : conv.buyer_id;
       const fetched = await dbGetMessages(conv.id);
       if (fetched.length) mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
@@ -2299,18 +2304,13 @@ export default function LoopGenApp() {
         ...conv, other_user: item.seller_username || "LoopGen User",
         listing_title: item.title || "Item", last_message: "", last_time: "", unread: 0,
       }, ...cs]);
-      openChat(conv.id, {
-        receiverId,
-        sellerName: item.seller_username || "LoopGen User",
-        listingTitle: item.title || "Item",
-      });
+      openChat(conv.id, { receiverId, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
     } catch (e) {
       console.error("[openSellerChat]:", e);
       showToast("Couldn't open chat — " + e.message);
     }
   };
 
-  // Legacy stub
   const sendMsg = async () => { console.warn("[LoopGen] Legacy sendMsg called"); };
 
   // ── Derived data ──────────────────────────────────────
@@ -2935,18 +2935,13 @@ export default function LoopGenApp() {
               try {
                 const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
                 if (!conv) throw new Error("Could not create conversation");
-                // receiverId known from conv — no extra SELECT needed in dbSendMessage
                 const receiverId = conv.buyer_id === user.id ? conv.seller_id : conv.buyer_id;
                 setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [{
                   ...conv, other_user: item.seller_username || "LoopGen User",
                   listing_title: item.title || "Item", last_message: offerContent,
                   last_time: "Just now", unread: 0,
                 }, ...cs]);
-                openChat(conv.id, {
-                  receiverId,
-                  sellerName: item.seller_username || "LoopGen User",
-                  listingTitle: item.title || "Item",
-                });
+                openChat(conv.id, { receiverId, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
                 await sendMessage({ convId: conv.id, content: offerContent, type: "offer" });
                 return;
               } catch (e) {
@@ -2959,15 +2954,7 @@ export default function LoopGenApp() {
             if (!localChatStore.current[localKey]) localChatStore.current[localKey] = [];
             setChatContext({ id: localKey, convId: null, receiverId: null, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
             push("chat");
-            mergeIntoStore(localKey, [normMsg({
-              id: `temp_offer_${Date.now()}`,
-              sender_id: user?.id || "guest",
-              content: offerContent,
-              type: "offer",
-              created_at: new Date().toISOString(),
-              from_me: true,
-              status: "sent",
-            }, user?.id)]);
+            mergeIntoStore(localKey, [normMsg({ id: `temp_offer_${Date.now()}`, sender_id: user?.id || "guest", content: offerContent, type: "offer", created_at: new Date().toISOString(), from_me: true, status: "sent" }, user?.id)]);
           }}
         />
         <ReportModal
@@ -3382,7 +3369,7 @@ export default function LoopGenApp() {
         const key  = chatContext.id;
         try {
           const fetched = await dbGetMessages(chatContext.convId);
-          if (!fetched.length) return; // never wipe optimistic messages on empty response
+          if (!fetched.length) return;
           mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
         } catch (e) { console.error("[poll]:", e); }
       }}
