@@ -481,6 +481,7 @@ function Phone({ children }) {
         input:focus,textarea:focus,select:focus{outline:none;border-color:#1c7c45 !important;box-shadow:0 0 0 3px rgba(28,124,69,0.12);}
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes loopgen-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
 
         /* ── Mobile: fill the real screen, no mock frame ── */
@@ -1827,20 +1828,45 @@ export default function LoopGenApp() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     if (!user) { showToast("Sign in to upload photos"); return; }
-    // Validate file sizes (max 10MB each)
     const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
     if (oversized.length) { showToast(`${oversized.length} photo(s) exceed 10MB limit`); return; }
+
+    // ── Show local blob previews immediately ──────────────
+    const sliced = files.slice(0, Math.max(0, 5 - sellImages.length));
+    const blobs = sliced.map(f => URL.createObjectURL(f));
+    setSellImages(prev => [...prev, ...blobs].slice(0, 5));
+    // Placeholder in sell.image_urls so indices stay in sync
+    setSell(f => ({...f, image_urls: [...f.image_urls, ...blobs].slice(0, 5)}));
+
+    // ── Upload to Supabase in background ──────────────────
     setUploadingImg(true);
     try {
-      const urls = await Promise.all(files.slice(0,5).map(f => dbUploadImage(f, user.id)));
-      const valid = urls.filter(Boolean);
-      setSellImages(prev => [...prev, ...valid].slice(0, 5));
-      setSell(f => ({...f, image_urls:[...f.image_urls, ...valid].slice(0, 5)}));
-      showToast(`📸 ${valid.length} photo(s) uploaded`);
-    } catch (e) {
-      showToast("Upload failed — " + e.message);
+      const urls = await Promise.all(sliced.map(f => dbUploadImage(f, user.id)));
+      // Replace blob URLs with real Supabase URLs
+      setSellImages(prev => {
+        const next = [...prev];
+        blobs.forEach((blob, i) => {
+          const idx = next.indexOf(blob);
+          if (idx !== -1) next[idx] = urls[i] || blob;
+          URL.revokeObjectURL(blob);
+        });
+        return next;
+      });
+      setSell(f => {
+        const next = [...f.image_urls];
+        blobs.forEach((blob, i) => {
+          const idx = next.indexOf(blob);
+          if (idx !== -1) next[idx] = urls[i] || blob;
+        });
+        return {...f, image_urls: next};
+      });
+      showToast(`📸 ${urls.filter(Boolean).length} photo(s) uploaded`);
+    } catch (err) {
+      showToast("Upload failed — " + err.message);
     }
     setUploadingImg(false);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
   }
 
   async function handleList() {
@@ -2692,11 +2718,24 @@ export default function LoopGenApp() {
                   )}
                 </div>
                 <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4,scrollbarWidth:"none"}}>
-                  {sellImages.map((src, i) => (
+                  {sellImages.map((src, i) => {
+                    const isUploading = uploadingImg && src.startsWith("blob:");
+                    return (
                     <div key={src + i} style={{position:"relative",flexShrink:0,width:100,height:100}}>
                       <img src={src} alt={`photo ${i+1}`}
-                        style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:14,display:"block",border:"2px solid #e5e7eb"}}/>
-                      {/* Remove button */}
+                        style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:14,display:"block",
+                          border:`2px solid ${isUploading ? "#fbbf24" : "#e5e7eb"}`,
+                          opacity: isUploading ? 0.7 : 1}}/>
+                      {/* Uploading spinner overlay */}
+                      {isUploading && (
+                        <div style={{position:"absolute",inset:0,borderRadius:14,background:"rgba(0,0,0,0.35)",
+                          display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <div style={{width:22,height:22,border:"3px solid rgba(255,255,255,0.4)",
+                            borderTop:"3px solid white",borderRadius:"50%",
+                            animation:"loopgen-spin 0.7s linear infinite"}}/>
+                        </div>
+                      )}
+                      {/* Remove button — always visible */}
                       <button
                         onClick={e => {
                           e.stopPropagation();
@@ -2711,8 +2750,8 @@ export default function LoopGenApp() {
                           boxShadow:"0 2px 6px rgba(0,0,0,0.2)",padding:0,fontFamily:"inherit"}}>
                         ✕
                       </button>
-                      {/* First photo label */}
-                      {i === 0 && (
+                      {/* Cover label on first photo */}
+                      {i === 0 && !isUploading && (
                         <div style={{position:"absolute",bottom:5,left:0,right:0,textAlign:"center",
                           fontSize:9,fontWeight:700,color:"white",
                           textShadow:"0 1px 3px rgba(0,0,0,0.7)",letterSpacing:"0.04em"}}>
@@ -2720,7 +2759,8 @@ export default function LoopGenApp() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div style={{fontSize:11,color:"#9ca3af",marginTop:6}}>
                   First photo is the cover · Tap ✕ to remove
