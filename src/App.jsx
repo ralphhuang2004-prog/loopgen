@@ -1855,7 +1855,15 @@ export default function LoopGenApp() {
     return () => { realtimeSub.current?.unsubscribe(); };
   }, [convo, user]);
 
+  // ── Refs so the global realtime callback always reads latest values ──────────
+  const screenRef = useRef(screen);
+  const chatContextRef = useRef(chatContext);
+  useEffect(() => { screenRef.current = screen; }, [screen]);
+  useEffect(() => { chatContextRef.current = chatContext; }, [chatContext]);
+
   // ── Global realtime: notify of new messages and update store ────────────────────
+  // NOTE: only re-subscribe when user changes (not on every screen/chatContext change)
+  // to avoid missing messages during the brief re-subscription gap.
   useEffect(() => {
     if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
     globalRealtimeSub.current = supabase
@@ -1874,8 +1882,8 @@ export default function LoopGenApp() {
           }
           // Increment unread badge
           setUnreadTotal(n => n + 1);
-          // Show toast if not currently viewing this conversation
-          const isViewingThisConv = screen === "chat" && chatContext?.convId === msg.conversation_id;
+          // Use refs so we never need to re-subscribe just to read these values
+          const isViewingThisConv = screenRef.current === "chat" && chatContextRef.current?.convId === msg.conversation_id;
           if (!isViewingThisConv) {
             showToast("💬 New message received");
             loadConversations();
@@ -1886,7 +1894,7 @@ export default function LoopGenApp() {
         })
       .subscribe();
     return () => { globalRealtimeSub.current?.unsubscribe(); };
-  }, [user, screen, chatContext]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear unread badge when user opens Messages tab
   useEffect(() => {
