@@ -1611,7 +1611,7 @@ export default function LoopGenApp() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        loadProfile(session.user.id);
+        loadProfile(session.user.id, session.user);
       } else {
         setUser(null);
         setProfile(null);
@@ -1621,7 +1621,7 @@ export default function LoopGenApp() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
-        loadProfile(session.user.id);
+        loadProfile(session.user.id, session.user);
       } else {
         setUser(null); setProfile(null);
       }
@@ -1695,12 +1695,12 @@ export default function LoopGenApp() {
     }
   }
 
-  async function loadProfile(uid) {
-    const email = supabase ? (await supabase.auth.getUser()).data.user?.email : "";
+  async function loadProfile(uid, userObj) {
+    const email = userObj?.email || (supabase ? (await supabase.auth.getUser()).data.user?.email : "");
     const emailUsername = email?.split("@")[0] || "user";
     const p = await dbGetProfile(uid);
     if (p) {
-      // Backfill username from email prefix if missing
+      // Always backfill username if any name field is missing
       if (!p.username && !p.display_name && !p.first_name) {
         await dbUpsertProfile(uid, { username: emailUsername });
         setProfile({ ...p, username: emailUsername });
@@ -1708,7 +1708,6 @@ export default function LoopGenApp() {
         setProfile(p);
       }
     } else {
-      // Auto-create profile on first login
       await dbUpsertProfile(uid, { username: emailUsername, avatar_url: null });
       setProfile({ id: uid, username: emailUsername });
     }
@@ -1771,7 +1770,7 @@ export default function LoopGenApp() {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         setUser(data.user);
-        await loadProfile(data.user.id);
+        await loadProfile(data.user.id, data.user);
         showToast("👋 Welcome back!");
         nav("home");
       }
@@ -2487,7 +2486,12 @@ export default function LoopGenApp() {
             {/* Seller card */}
             {(() => {
               const demoSeller = DEMO_SELLERS[detail.seller_username];
-              const sellerDisplayName = detail.seller_username || detail.seller_display_name || "LoopGen User";
+              // If this is the logged-in user's listing, use their live profile — never "LoopGen User"
+              const isOwnListing = user && detail.seller_id === user.id;
+              const resolvedName = isOwnListing
+                ? (profile?.display_name || profile?.first_name || profile?.username || user.email?.split("@")[0] || "You")
+                : (detail.seller_username || detail.seller_display_name || "LoopGen User");
+              const sellerDisplayName = resolvedName;
               return (
                 <div style={{background:"white",borderRadius:20,padding:"16px",marginTop:14,
                   boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
