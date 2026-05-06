@@ -29,6 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
+const APP_VERSION = "2.1.0";
 
 // ── LoopGen Logo component — use everywhere branding is needed ────────────────
 // height: desired display height in px. Width scales automatically (ratio ~1.61:1).
@@ -251,6 +252,7 @@ async function dbGetConversations(userId) {
 }
 
 async function dbGetMessages(conversationId) {
+  // Always fetch from network — never use cached data for messages
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("messages")
@@ -464,9 +466,27 @@ function Phone({ children }) {
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
+
+        /* ── Mobile: fill the real screen, no mock frame ── */
+        @media (max-width: 500px) {
+          .lg-phone-outer {
+            background: white !important;
+            padding: 0 !important;
+            align-items: stretch !important;
+            min-height: 100dvh !important;
+          }
+          .lg-phone-inner {
+            width: 100% !important;
+            height: 100dvh !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+          }
+        }
       `}</style>
-      <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
-        {children}
+      <div className="lg-phone-outer" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#dde1e7",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",padding:20,width:"100%"}}>
+        <div className="lg-phone-inner" style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -999,13 +1019,11 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
       position: "fixed",
-      top: 0, left: 0, right: 0,
-      // Use measured visual viewport height — auto-adjusts when keyboard opens
-      height: `${viewH}px`,
+      top: 0, left: 0, right: 0, bottom: 0,
       background: "white",
       display: "flex",
       flexDirection: "column",
-      zIndex: 300,
+      zIndex: 9999,
       overflow: "hidden",
     }}>
       <style>{`
@@ -1267,6 +1285,22 @@ export default function LoopGenApp() {
       return { ...f, tags: merged };
     });
   }, [sell.title, sell.category, sell.condition]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── APP VERSION CHECK — clears stale cache on new deploy ────────────────
+  useEffect(() => {
+    const stored = localStorage.getItem("app_version");
+    if (stored !== APP_VERSION) {
+      console.log("[LoopGen] New version:", APP_VERSION, "clearing old cache");
+      if ("caches" in window) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+      }
+      const session = localStorage.getItem("sb-wknlvmsgjnsiamcbntek-auth-token");
+      localStorage.clear();
+      if (session) localStorage.setItem("sb-wknlvmsgjnsiamcbntek-auth-token", session);
+      localStorage.setItem("app_version", APP_VERSION);
+      console.log("[LoopGen] Cache cleared, version set:", APP_VERSION);
+    }
+  }, []);
+
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1598,22 +1632,27 @@ export default function LoopGenApp() {
     // Set context and navigate — single synchronous update, no race
     setChatContext({
       id: key,
+      convId: item.convId || (item.id && !item.id.startsWith("chat_") ? item.id : null),
       sellerName: item.seller_username || item.other_user || "Seller",
       listingTitle: item.title || item.listing_title || "Item",
     });
     push("chat");
   };
 
-  // openConvo: used by the chats list screen
+  // openConvo: used by the chats list screen — always fetches fresh from Supabase
   const openConvo = async (c) => {
-    let msgs = c.messages || [];
+    // Show chat immediately with empty/cached messages, then load fresh
+    openChat({ ...c, convId: c.id }, []);
     if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
       try {
         const fetched = await dbGetMessages(c.id);
-        msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
-      } catch (e) { console.error("openConvo:", e); }
+        const msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+        const key = chatKey(c);
+        const store = localChatStore.current;
+        store[key] = msgs;
+        setChatContext(ctx => ctx ? { ...ctx, convId: c.id } : ctx);
+      } catch (e) { console.error("openConvo fetch error:", e); }
     }
-    openChat(c, msgs);
   };
 
   const openSellerChat = async (item) => {
@@ -1629,7 +1668,7 @@ export default function LoopGenApp() {
         const msgs = await dbGetMessages(conv.id);
         const enriched = {
           ...conv,
-          // Preserve original listing id so chatKey produces the same key as Make Offer
+          convId: conv.id, // real Supabase conversation UUID for message persistence
           listing_id: item.id,
           seller_username: item.seller_username || "Seller",
           title: item.title || "Item",
@@ -1645,19 +1684,9 @@ export default function LoopGenApp() {
     }
   };
 
-  const sendMsg = async () => {
-    if (!msgText.trim()) return;
-    const text = msgText;
-    setMsgText("");
-    const time = new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
-    setChatMsgs(m => [...m, optimistic]);
-    setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
-    if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
-      try { await dbSendMessage(convo.id, user.id, text); }
-      catch (e) { showToast("Send failed"); }
-    }
-  };
+  // sendMsg is now handled inside ChatScreen via onSend → addMessageToStore
+  // This legacy function kept for any remaining references but should not be called
+  const sendMsg = async () => { console.warn("[LoopGen] Legacy sendMsg called"); };
 
   // ── Derived data ──────────────────────────────────────
   const filtered = listings.filter(l => {
@@ -2567,7 +2596,19 @@ export default function LoopGenApp() {
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
-      onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
+      onSend={async (msg) => {
+        // 1. Show immediately in local store
+        addMessageToStore(chatContext?.id, msg);
+        // 2. Persist to Supabase if we have a real conversation
+        if (supabase && user && chatContext?.convId) {
+          try {
+            await dbSendMessage(chatContext.convId, user.id, msg.content);
+          } catch (e) {
+            console.error("[LoopGen] Message save failed:", e);
+            showToast("Message couldn't save — check connection");
+          }
+        }
+      }}
       onBack={pop}
     />
   );
