@@ -14,45 +14,6 @@
 // OPTIONAL:
 //   6. Deploy supabase/functions/loopgen-ai-desc
 //      supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-//
-// ── REQUIRED SQL (run in Supabase SQL Editor) ────────────────────
-//
-//   -- Unique constraint to prevent duplicate conversations (also fixes race condition)
-//   ALTER TABLE conversations
-//     ADD CONSTRAINT conversations_listing_buyer_unique
-//     UNIQUE (listing_id, buyer_id);
-//
-//   -- RLS: conversations — both participants can read
-//   CREATE POLICY "conv_participants" ON conversations FOR SELECT
-//     USING (buyer_id = auth.uid() OR seller_id = auth.uid());
-//
-//   CREATE POLICY "conv_buyer_insert" ON conversations FOR INSERT
-//     WITH CHECK (buyer_id = auth.uid());
-//
-//   -- RLS: messages — sender, receiver, or conversation participant can read
-//   CREATE POLICY "msg_participants" ON messages FOR SELECT
-//     USING (
-//       sender_id = auth.uid()
-//       OR receiver_id = auth.uid()
-//       OR conversation_id IN (
-//         SELECT id FROM conversations
-//         WHERE buyer_id = auth.uid() OR seller_id = auth.uid()
-//       )
-//     );
-//
-//   CREATE POLICY "msg_sender_insert" ON messages FOR INSERT
-//     WITH CHECK (sender_id = auth.uid());
-//
-//   -- ⚠️  FIX FOR "message failed" error — run this if messages fail to send:
-//   --  receiver_id may be NOT NULL in your schema, causing INSERT to fail
-//   --  when the conversations SELECT is blocked by RLS. Make it nullable:
-//   ALTER TABLE messages ALTER COLUMN receiver_id DROP NOT NULL;
-//
-//   -- Indexes for performance
-//   CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at);
-//   CREATE INDEX IF NOT EXISTS idx_conversations_buyer ON conversations(buyer_id);
-//   CREATE INDEX IF NOT EXISTS idx_conversations_seller ON conversations(seller_id);
-// ─────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -68,7 +29,6 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.1.0";
 
 // ── LoopGen Logo component — use everywhere branding is needed ────────────────
 // height: desired display height in px. Width scales automatically (ratio ~1.61:1).
@@ -220,7 +180,7 @@ async function dbGetListings(userId) {
   const sellerIds = [...new Set(rawListings.map(l => l.seller_id).filter(Boolean))];
   let profileMap = {};
   if (sellerIds.length > 0) {
-    const { data: profiles } = await supabase.from("profiles").select("id, username, display_name, first_name, avatar_url").in("id", sellerIds);
+    const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", sellerIds);
     (profiles || []).forEach(p => { profileMap[p.id] = p; });
   }
   let savedSet = new Set();
@@ -228,29 +188,13 @@ async function dbGetListings(userId) {
     const { data: saved } = await supabase.from("saved_items").select("listing_id").eq("user_id", userId).in("listing_id", rawListings.map(l => l.id));
     (saved || []).forEach(s => savedSet.add(s.listing_id));
   }
-  return rawListings.map(l => {
-    const prof = profileMap[l.seller_id];
-    const sellerName = prof
-      ? (prof.display_name || prof.first_name || prof.username || null)
-      : null;
-    // Deduplicate tags and remove conflicting "Free" tag if price > 0
-    let tags = [...new Set(l.tags || [])];
-    if (Number(l.price) > 0) tags = tags.filter(t => t !== "Free");
-    // Backfill location: if only a 4-digit postcode, try to resolve it
-    let location = l.location || "";
-    if (/^\d{4}$/.test(location.trim())) {
-      const found = lookupPostcode(location.trim());
-      if (found.length > 0) location = formatLocation(found[0].suburb, found[0].state, location.trim());
-    }
-    return {
-      ...l,
-      location,
-      seller_username: sellerName || l.seller_username || "LoopGen User",
-      seller_avatar: prof?.avatar_url || null,
-      is_saved: savedSet.has(l.id),
-      image_urls: l.image_urls || [], tags, time: timeSince(l.created_at),
-    };
-  });
+  return rawListings.map(l => ({
+    ...l,
+    seller_username: profileMap[l.seller_id]?.username || "LoopGen User",
+    seller_avatar: profileMap[l.seller_id]?.avatar_url || null,
+    is_saved: savedSet.has(l.id),
+    image_urls: l.image_urls || [], tags: l.tags || [], time: timeSince(l.created_at),
+  }));
 }
 
 async function dbCreateListing(listing, userId) {
@@ -276,220 +220,77 @@ async function dbToggleSave(listingId, userId, isSaved) {
 
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
-
-  // RLS-safe: query buyer side and seller side separately, then merge
-  // This avoids the .or() which can fail under certain RLS policies
-  const [buyerRes, sellerRes] = await Promise.all([
-    supabase.from("conversations").select("id, buyer_id, seller_id, listing_id").eq("buyer_id", userId),
-    supabase.from("conversations").select("id, buyer_id, seller_id, listing_id").eq("seller_id", userId),
-  ]);
-
-  console.log("[convos] buyer query:", { data: buyerRes.data?.length, error: buyerRes.error?.message });
-  console.log("[convos] seller query:", { data: sellerRes.data?.length, error: sellerRes.error?.message });
-
-  // Merge and deduplicate by id
-  const seen = new Set();
-  const data = [...(buyerRes.data || []), ...(sellerRes.data || [])].filter(c => {
-    if (seen.has(c.id)) return false;
-    seen.add(c.id); return true;
-  });
-
-  console.log("[convos] merged total:", data.length);
-  if (!data.length) return [];
-
-  // Fetch last message per conversation
-  const msgResults = await Promise.all(
-    data.map(c => supabase.from("messages")
-      .select("id, content, created_at, sender_id")
-      .eq("conversation_id", c.id)
-      .order("created_at", { ascending: false })
-      .limit(1))
-  );
-
-  // Fetch unread count per conversation (messages not sent by current user)
-  const unreadResults = await Promise.all(
-    data.map(c => supabase.from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("conversation_id", c.id)
-      .neq("sender_id", userId))
-  );
-
-  // Batch-fetch other participant profiles
-  const otherIds = [...new Set(
-    data.map(c => c.buyer_id === userId ? c.seller_id : c.buyer_id).filter(Boolean)
-  )];
-  let profileMap = {};
-  if (otherIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles").select("id, username, display_name, first_name").in("id", otherIds);
-    (profiles || []).forEach(p => {
-      profileMap[p.id] = p.display_name || p.first_name || p.username || null;
-    });
-    console.log("[convos] profiles:", profileMap);
-  }
-
-  // Batch-fetch listing titles
-  const listingIds = [...new Set(data.map(c => c.listing_id).filter(Boolean))];
-  let listingMap = {};
-  if (listingIds.length > 0) {
-    const { data: listings } = await supabase
-      .from("listings").select("id, title").in("id", listingIds);
-    (listings || []).forEach(l => { listingMap[l.id] = l.title; });
-  }
-
-  const result = data.map((c, i) => {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select(`
+      *,
+      buyer:buyer_id(id, profiles(username, avatar_url)),
+      seller:seller_id(id, profiles(username, avatar_url)),
+      listing:listing_id(title),
+      messages(content, created_at, sender_id)
+    `)
+    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+    .order("updated_at", { ascending: false });
+  if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
+  return (data || []).map(c => {
+    // Determine which participant is the "other" person
     const isBuyer = c.buyer_id === userId;
-    const otherId = isBuyer ? c.seller_id : c.buyer_id;
-    const otherName = profileMap[otherId] || (isBuyer ? "LoopGen User" : "Buyer");
-    const lastMsg = msgResults[i]?.data?.[0] || null;
-    const unread = unreadResults[i]?.count || 0;
-    console.log("[convos] row:", { id: c.id, otherName, lastMsg: lastMsg?.content, unread });
+    const otherProfile = isBuyer ? c.seller?.profiles : c.buyer?.profiles;
+    const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
     return {
       ...c,
-      other_user: otherName,
-      listing_title: listingMap[c.listing_id] || "Item",
+      other_user: otherProfile?.username || (isBuyer ? "Seller" : "Buyer"),
+      other_avatar: otherProfile?.avatar_url || null,
+      listing_title: c.listing?.title || "Item",
       last_message: lastMsg?.content || "",
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
-      unread,
+      unread: 0,
       online: false,
     };
   });
-
-  // Sort by most recent message
-  result.sort((a, b) => {
-    const ta = a.last_time ? new Date(msgResults[data.findIndex(c=>c.id===a.id)]?.data?.[0]?.created_at || 0) : new Date(0);
-    const tb = b.last_time ? new Date(msgResults[data.findIndex(c=>c.id===b.id)]?.data?.[0]?.created_at || 0) : new Date(0);
-    return tb - ta;
-  });
-
-  console.log("[convos] loaded:", result.length, "convos");
-  return result;
 }
 
-async function buildConvos() {}
-
-async function dbGetMessages(conversationId, limit = 50, before = null) {
-  if (!supabase || !conversationId) return [];
-  let q = supabase
+async function dbGetMessages(conversationId) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, created_at")
+    .select("*")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
-    .limit(limit);
-  if (before) q = q.lt("created_at", before);
-  const { data, error } = await q;
-  if (error) {
-    console.error("[dbGetMessages] FAILED:", error.message, "code:", error.code, "conv:", conversationId);
-    return [];
-  }
-  console.log("[dbGetMessages] conv:", conversationId, "→", data?.length, "messages");
+    .order("created_at", { ascending: true });
+  if (error) { console.error("getMessages:", error); return []; }
   return data || [];
 }
 
-async function dbSendMessage(conversationId, senderId, content, receiverId = null) {
+async function dbSendMessage(conversationId, senderId, content) {
   if (!supabase) return null;
-  if (!conversationId) {
-    console.error("[dbSendMessage] BLOCKED — no conversationId");
-    throw new Error("Cannot send message: no conversation ID");
-  }
-  if (!senderId) {
-    console.error("[dbSendMessage] BLOCKED — no senderId");
-    throw new Error("Cannot send message: not authenticated");
-  }
-
-  // Resolve receiver_id — try from passed param first, then look up from DB
-  let resolvedReceiverId = receiverId;
-  if (!resolvedReceiverId) {
-    try {
-      const { data: conv } = await supabase
-        .from("conversations")
-        .select("buyer_id, seller_id")
-        .eq("id", conversationId)
-        .single();
-      if (conv) {
-        resolvedReceiverId = conv.buyer_id === senderId ? conv.seller_id : conv.buyer_id;
-      }
-    } catch { /* best-effort — proceed without receiver_id if lookup fails */ }
-  }
-
-  // Attempt 1: send with receiver_id
-  const payload = {
-    conversation_id: conversationId,
-    sender_id: senderId,
-    content,
-    ...(resolvedReceiverId && { receiver_id: resolvedReceiverId }),
-  };
   const { data, error } = await supabase
     .from("messages")
-    .insert(payload)
-    .select("id, conversation_id, sender_id, receiver_id, content, created_at")
+    .insert({ conversation_id: conversationId, sender_id: senderId, content })
+    .select()
     .single();
-
-  if (!error) {
-    console.log("[dbSendMessage] OK — id:", data.id, "conv:", conversationId);
-    return data;
-  }
-
-  // If failed with receiver_id present, retry WITHOUT it
-  // (handles NOT NULL constraint on receiver_id when value was null,
-  //  or schema that doesn't have receiver_id column at all)
-  if (resolvedReceiverId) {
-    console.warn("[dbSendMessage] first attempt failed:", error.message, "— retrying without receiver_id");
-    const { data: data2, error: error2 } = await supabase
-      .from("messages")
-      .insert({ conversation_id: conversationId, sender_id: senderId, content })
-      .select("id, conversation_id, sender_id, receiver_id, content, created_at")
-      .single();
-    if (!error2) {
-      console.log("[dbSendMessage] OK (no receiver_id) — id:", data2.id);
-      return data2;
-    }
-    console.error("[dbSendMessage] retry also failed:", error2.message, "code:", error2.code);
-    throw new Error(error2.message || "Message failed to send");
-  }
-
-  console.error("[dbSendMessage] FAILED:", error.message, "code:", error.code);
-  throw new Error(error.message || "Message failed to send");
+  if (error) throw error;
+  await supabase.from("conversations").update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+  return data;
 }
 
 async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
   if (!supabase) return null;
-  if (!listingId || !buyerId || !sellerId) {
-    console.error("[dbGetOrCreateConversation] missing required IDs:", { listingId, buyerId, sellerId });
-    return null;
-  }
-  // First try to find existing
-  const { data: existing, error: findError } = await supabase
+  // Check existing — use maybeSingle() so no error is thrown when no row exists
+  const { data: existing } = await supabase
     .from("conversations")
-    .select("id, buyer_id, seller_id, listing_id")
+    .select("*")
     .eq("listing_id", listingId)
     .eq("buyer_id", buyerId)
     .maybeSingle();
-  if (findError) console.warn("[getOrCreate] find error:", findError.message);
-  if (existing) { console.log("[getOrCreate] found existing:", existing.id); return existing; }
-
-  // Create new — handle race condition: if two requests race, both try to insert
+  if (existing) return existing;
+  // Create new
   const { data, error } = await supabase
     .from("conversations")
     .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
-    .select("id, buyer_id, seller_id, listing_id")
+    .select()
     .single();
-
-  if (error) {
-    // Unique constraint violation (23505) = race condition — another insert won, fetch it
-    if (error.code === "23505" || error.message?.includes("duplicate")) {
-      const { data: raceWinner } = await supabase
-        .from("conversations")
-        .select("id, buyer_id, seller_id, listing_id")
-        .eq("listing_id", listingId)
-        .eq("buyer_id", buyerId)
-        .maybeSingle();
-      if (raceWinner) { console.log("[getOrCreate] race resolved:", raceWinner.id); return raceWinner; }
-    }
-    console.error("[getOrCreate] insert failed:", error.message);
-    throw error;
-  }
-  console.log("[getOrCreate] created new conv:", data.id);
+  if (error) throw error;
   return data;
 }
 
@@ -526,7 +327,7 @@ async function dbGetUserListings(userId) {
 async function dbMarkAsSold(listingId) {
   if (!supabase) return;
   const { error } = await supabase.from("listings")
-    .update({ status: "sold" })
+    .update({ status: "sold", updated_at: new Date().toISOString() })
     .eq("id", listingId);
   if (error) throw error;
 }
@@ -534,7 +335,7 @@ async function dbMarkAsSold(listingId) {
 async function dbDeleteListing(listingId) {
   if (!supabase) return;
   const { error } = await supabase.from("listings")
-    .update({ status: "deleted" })
+    .update({ status: "deleted", updated_at: new Date().toISOString() })
     .eq("id", listingId);
   if (error) throw error;
 }
@@ -662,29 +463,10 @@ function Phone({ children }) {
         input:focus,textarea:focus,select:focus{outline:none;border-color:#1c7c45 !important;box-shadow:0 0 0 3px rgba(28,124,69,0.12);}
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes loopgen-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
-
-        /* ── Mobile: fill the real screen, no mock frame ── */
-        @media (max-width: 500px) {
-          .lg-phone-outer {
-            background: white !important;
-            padding: 0 !important;
-            align-items: stretch !important;
-            min-height: 100dvh !important;
-          }
-          .lg-phone-inner {
-            width: 100% !important;
-            height: 100dvh !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-          }
-        }
       `}</style>
-      <div className="lg-phone-outer" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#dde1e7",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",padding:20,width:"100%"}}>
-        <div className="lg-phone-inner" style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
-          {children}
-        </div>
+      <div style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
+        {children}
       </div>
     </div>
   );
@@ -702,7 +484,7 @@ function StatusBar() {
   );
 }
 
-function BottomNav({ active, onNav, unreadCount=0 }) {
+function BottomNav({ active, onNav }) {
   const tabs = [
     {id:"home",    label:"Home",     icon: a => <IcoHome a={a}/>},
     {id:"explore", label:"Search",   icon: a => <IcoExplore a={a}/>},
@@ -721,18 +503,7 @@ function BottomNav({ active, onNav, unreadCount=0 }) {
                 </div>
                 <span style={{fontSize:10,fontWeight:700,color:GREEN,letterSpacing:0.1}}>Sell</span>
               </div>
-            : <div style={{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>
-                  {t.icon(active===t.id)}
-                  {/* Unread badge on Messages tab */}
-                  {t.id==="chats" && unreadCount > 0 && (
-                    <div style={{position:"absolute",top:2,right:4,minWidth:16,height:16,borderRadius:8,background:"#ef4444",color:"white",fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",border:"2px solid white",lineHeight:1}}>
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </div>
-                  )}
-                </div>
-                <span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span>
-              </div>
+            : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
           }
         </div>
       ))}
@@ -748,9 +519,8 @@ function GreenBtn({ children, onClick, mt=16, disabled=false, style={} }) {
   );
 }
 
-function FInp({ placeholder, value="", onChange=()=>{}, type="text", readOnly=false, autoComplete="off" }) {
+function FInp({ placeholder, value="", onChange=()=>{}, type="text", readOnly=false }) {
   return <input type={type} placeholder={placeholder} value={value} onChange={e=>onChange(e.target.value)} readOnly={readOnly}
-    autoComplete={autoComplete}
     style={{width:"100%",border:"1.5px solid #e5e7eb",borderRadius:14,padding:"14px",fontSize:14,outline:"none",marginBottom:12,color:"#374151",background:readOnly?"#f9fafb":"white"}}/>;
 }
 
@@ -983,290 +753,6 @@ const TAG_COLORS = {
   "Books":           { bg:"#fff7ed", text:"#9a3412", border:"#fed7aa" },
 };
 
-// ═══════════════════════════════════════════════════════
-//  AUSTRALIA POSTCODE → SUBURB MAPPING
-// ═══════════════════════════════════════════════════════
-// Representative dataset covering major AU postcodes.
-// Keys are 4-digit strings; values are arrays of {suburb, state}.
-const AU_POSTCODES = {
-  // NSW
-  "2000":[ {suburb:"Sydney",state:"NSW"},{suburb:"Haymarket",state:"NSW"},{suburb:"The Rocks",state:"NSW"} ],
-  "2010":[ {suburb:"Darlinghurst",state:"NSW"},{suburb:"Surry Hills",state:"NSW"} ],
-  "2020":[ {suburb:"Mascot",state:"NSW"} ],
-  "2021":[ {suburb:"Paddington",state:"NSW"},{suburb:"Centennial Park",state:"NSW"} ],
-  "2025":[ {suburb:"Woollahra",state:"NSW"} ],
-  "2026":[ {suburb:"Bondi Beach",state:"NSW"},{suburb:"Bondi",state:"NSW"} ],
-  "2030":[ {suburb:"Vaucluse",state:"NSW"},{suburb:"Watsons Bay",state:"NSW"} ],
-  "2033":[ {suburb:"Coogee",state:"NSW"} ],
-  "2040":[ {suburb:"Leichhardt",state:"NSW"} ],
-  "2042":[ {suburb:"Newtown",state:"NSW"} ],
-  "2044":[ {suburb:"St Peters",state:"NSW"} ],
-  "2048":[ {suburb:"Glebe",state:"NSW"} ],
-  "2050":[ {suburb:"Camperdown",state:"NSW"} ],
-  "2060":[ {suburb:"North Sydney",state:"NSW"} ],
-  "2065":[ {suburb:"Crows Nest",state:"NSW"},{suburb:"St Leonards",state:"NSW"} ],
-  "2070":[ {suburb:"Lindfield",state:"NSW"} ],
-  "2088":[ {suburb:"Mosman",state:"NSW"} ],
-  "2090":[ {suburb:"Cremorne",state:"NSW"} ],
-  "2095":[ {suburb:"Manly",state:"NSW"} ],
-  "2113":[ {suburb:"Ryde",state:"NSW"} ],
-  "2150":[ {suburb:"Parramatta",state:"NSW"} ],
-  "2170":[ {suburb:"Liverpool",state:"NSW"} ],
-  "2200":[ {suburb:"Bankstown",state:"NSW"} ],
-  "2204":[ {suburb:"Marrickville",state:"NSW"} ],
-  "2205":[ {suburb:"Arncliffe",state:"NSW"} ],
-  "2208":[ {suburb:"Hurstville",state:"NSW"} ],
-  "2220":[ {suburb:"Hurstville",state:"NSW"} ],
-  "2230":[ {suburb:"Cronulla",state:"NSW"} ],
-  // VIC
-  "3000":[ {suburb:"Melbourne",state:"VIC"},{suburb:"Melbourne CBD",state:"VIC"} ],
-  "3002":[ {suburb:"East Melbourne",state:"VIC"} ],
-  "3004":[ {suburb:"St Kilda Road",state:"VIC"} ],
-  "3006":[ {suburb:"Southbank",state:"VIC"},{suburb:"South Melbourne",state:"VIC"} ],
-  "3008":[ {suburb:"Docklands",state:"VIC"} ],
-  "3010":[ {suburb:"Carlton",state:"VIC"} ],
-  "3011":[ {suburb:"Footscray",state:"VIC"} ],
-  "3031":[ {suburb:"Flemington",state:"VIC"} ],
-  "3051":[ {suburb:"North Melbourne",state:"VIC"} ],
-  "3053":[ {suburb:"Carlton",state:"VIC"} ],
-  "3054":[ {suburb:"Carlton North",state:"VIC"} ],
-  "3056":[ {suburb:"Brunswick",state:"VIC"} ],
-  "3057":[ {suburb:"Brunswick East",state:"VIC"} ],
-  "3065":[ {suburb:"Fitzroy",state:"VIC"} ],
-  "3066":[ {suburb:"Collingwood",state:"VIC"} ],
-  "3067":[ {suburb:"Abbotsford",state:"VIC"} ],
-  "3068":[ {suburb:"Clifton Hill",state:"VIC"} ],
-  "3070":[ {suburb:"Northcote",state:"VIC"} ],
-  "3078":[ {suburb:"Richmond",state:"VIC"} ],
-  "3101":[ {suburb:"Kew",state:"VIC"} ],
-  "3121":[ {suburb:"Richmond",state:"VIC"} ],
-  "3122":[ {suburb:"Hawthorn",state:"VIC"} ],
-  "3124":[ {suburb:"Camberwell",state:"VIC"} ],
-  "3126":[ {suburb:"Canterbury",state:"VIC"} ],
-  "3127":[ {suburb:"Box Hill South",state:"VIC"} ],
-  "3128":[ {suburb:"Box Hill",state:"VIC"} ],
-  "3130":[ {suburb:"Blackburn",state:"VIC"} ],
-  "3141":[ {suburb:"South Yarra",state:"VIC"} ],
-  "3142":[ {suburb:"Hawksburn",state:"VIC"} ],
-  "3143":[ {suburb:"Armadale",state:"VIC"} ],
-  "3144":[ {suburb:"Malvern",state:"VIC"} ],
-  "3145":[ {suburb:"Malvern East",state:"VIC"} ],
-  "3161":[ {suburb:"Windsor",state:"VIC"} ],
-  "3162":[ {suburb:"Caulfield",state:"VIC"} ],
-  "3163":[ {suburb:"Caulfield South",state:"VIC"} ],
-  "3168":[ {suburb:"Clayton",state:"VIC"} ],
-  "3175":[ {suburb:"Dandenong",state:"VIC"} ],
-  "3181":[ {suburb:"Prahran",state:"VIC"} ],
-  "3182":[ {suburb:"St Kilda",state:"VIC"} ],
-  "3183":[ {suburb:"St Kilda East",state:"VIC"} ],
-  "3187":[ {suburb:"Brighton East",state:"VIC"} ],
-  "3188":[ {suburb:"Hampton",state:"VIC"} ],
-  "3189":[ {suburb:"Moorabbin",state:"VIC"} ],
-  "3192":[ {suburb:"Cheltenham",state:"VIC"} ],
-  "3204":[ {suburb:"Bentleigh",state:"VIC"} ],
-  // QLD
-  "4000":[ {suburb:"Brisbane",state:"QLD"},{suburb:"Brisbane City",state:"QLD"} ],
-  "4005":[ {suburb:"New Farm",state:"QLD"} ],
-  "4006":[ {suburb:"Bowen Hills",state:"QLD"},{suburb:"Fortitude Valley",state:"QLD"} ],
-  "4007":[ {suburb:"Ascot",state:"QLD"} ],
-  "4010":[ {suburb:"Hamilton",state:"QLD"} ],
-  "4011":[ {suburb:"Clayfield",state:"QLD"} ],
-  "4020":[ {suburb:"Redcliffe",state:"QLD"} ],
-  "4030":[ {suburb:"Lutwyche",state:"QLD"} ],
-  "4051":[ {suburb:"Enoggera",state:"QLD"} ],
-  "4059":[ {suburb:"Paddington",state:"QLD"} ],
-  "4066":[ {suburb:"Toowong",state:"QLD"} ],
-  "4101":[ {suburb:"South Brisbane",state:"QLD"} ],
-  "4102":[ {suburb:"Woolloongabba",state:"QLD"} ],
-  "4170":[ {suburb:"Cannon Hill",state:"QLD"} ],
-  "4172":[ {suburb:"Murarrie",state:"QLD"} ],
-  "4300":[ {suburb:"Springfield",state:"QLD"} ],
-  "4500":[ {suburb:"Strathpine",state:"QLD"} ],
-  "4006":[ {suburb:"Fortitude Valley",state:"QLD"},{suburb:"Newstead",state:"QLD"} ],
-  "4013":[ {suburb:"Newstead",state:"QLD"} ],
-  // WA
-  "6000":[ {suburb:"Perth",state:"WA"},{suburb:"Perth CBD",state:"WA"} ],
-  "6003":[ {suburb:"Northbridge",state:"WA"} ],
-  "6005":[ {suburb:"West Perth",state:"WA"} ],
-  "6007":[ {suburb:"Leederville",state:"WA"} ],
-  "6008":[ {suburb:"Subiaco",state:"WA"} ],
-  "6009":[ {suburb:"Nedlands",state:"WA"} ],
-  "6010":[ {suburb:"Claremont",state:"WA"} ],
-  "6012":[ {suburb:"Mosman Park",state:"WA"} ],
-  "6014":[ {suburb:"Joondanna",state:"WA"} ],
-  "6060":[ {suburb:"Nollamara",state:"WA"} ],
-  "6100":[ {suburb:"East Victoria Park",state:"WA"} ],
-  "6106":[ {suburb:"Welshpool",state:"WA"} ],
-  "6160":[ {suburb:"Fremantle",state:"WA"} ],
-  "6163":[ {suburb:"Hamilton Hill",state:"WA"} ],
-  // SA
-  "5000":[ {suburb:"Adelaide",state:"SA"},{suburb:"Adelaide CBD",state:"SA"} ],
-  "5006":[ {suburb:"North Adelaide",state:"SA"} ],
-  "5007":[ {suburb:"Welland",state:"SA"} ],
-  "5031":[ {suburb:"Mile End",state:"SA"} ],
-  "5034":[ {suburb:"Unley",state:"SA"} ],
-  "5041":[ {suburb:"Pasadena",state:"SA"} ],
-  "5062":[ {suburb:"Springfield",state:"SA"} ],
-  "5065":[ {suburb:"Toorak Gardens",state:"SA"} ],
-  // ACT
-  "2600":[ {suburb:"Canberra",state:"ACT"},{suburb:"Yarralumla",state:"ACT"} ],
-  "2601":[ {suburb:"Braddon",state:"ACT"},{suburb:"Civic",state:"ACT"} ],
-  "2602":[ {suburb:"Ainslie",state:"ACT"} ],
-  "2605":[ {suburb:"Curtin",state:"ACT"} ],
-  "2609":[ {suburb:"Fyshwick",state:"ACT"} ],
-  "2614":[ {suburb:"Belconnen",state:"ACT"} ],
-  // TAS
-  "7000":[ {suburb:"Hobart",state:"TAS"},{suburb:"Hobart CBD",state:"TAS"} ],
-  "7004":[ {suburb:"Battery Point",state:"TAS"} ],
-  "7005":[ {suburb:"Sandy Bay",state:"TAS"} ],
-  // NT
-  "0800":[ {suburb:"Darwin",state:"NT"},{suburb:"Darwin CBD",state:"NT"} ],
-  "0810":[ {suburb:"Casuarina",state:"NT"} ],
-};
-
-function lookupPostcode(pc) {
-  if (!pc || pc.length !== 4) return [];
-  return AU_POSTCODES[pc] || [];
-}
-
-function formatLocation(suburb, state, postcode) {
-  if (!suburb) return postcode || "";
-  return `${suburb} ${state} ${postcode}`;
-}
-
-// ── PostcodeInput component ────────────────────────────────────────────────────
-function PostcodeInput({ value, onChange, onError }) {
-  // value is the raw location string: "Suburb STATE 1234" or "1234"
-  // We split it to derive internal state
-  const parseValue = (v) => {
-    if (!v) return { postcode: "", suburb: "", state: "" };
-    // format: "Suburb STATE NNNN"
-    const m = v.match(/^(.+)\s([A-Z]{2,3})\s(\d{4})$/);
-    if (m) return { suburb: m[1], state: m[2], postcode: m[3] };
-    // plain postcode
-    if (/^\d{4}$/.test(v.trim())) return { postcode: v.trim(), suburb: "", state: "" };
-    return { postcode: "", suburb: "", state: "" };
-  };
-
-  const parsed = parseValue(value);
-  const [pc, setPc] = useState(parsed.postcode);
-  const [suburb, setSuburb] = useState(parsed.suburb);
-  const [state, setState] = useState(parsed.state);
-  const [options, setOptions] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [pcError, setPcError] = useState("");
-
-  const handlePcChange = (v) => {
-    const digits = v.replace(/\D/g, "").slice(0, 4);
-    setPc(digits);
-    setPcError("");
-    if (digits.length === 4) {
-      const found = lookupPostcode(digits);
-      if (found.length === 0) {
-        setPcError("Invalid postcode — please check and try again");
-        setOptions([]);
-        setShowDropdown(false);
-        if (onError) onError("Invalid postcode — please check and try again");
-      } else if (found.length === 1) {
-        // Auto-select single match
-        setSuburb(found[0].suburb);
-        setState(found[0].state);
-        setShowDropdown(false);
-        onChange(formatLocation(found[0].suburb, found[0].state, digits));
-        if (onError) onError("");
-      } else {
-        setOptions(found);
-        setShowDropdown(true);
-        setSuburb("");
-        setState("");
-        if (onError) onError("");
-      }
-    } else {
-      setOptions([]);
-      setShowDropdown(false);
-      setSuburb("");
-      setState("");
-      onChange(digits);
-    }
-  };
-
-  const selectSuburb = (opt) => {
-    setSuburb(opt.suburb);
-    setState(opt.state);
-    setShowDropdown(false);
-    setPcError("");
-    onChange(formatLocation(opt.suburb, opt.state, pc));
-    if (onError) onError("");
-  };
-
-  return (
-    <div style={{ marginBottom: 12, position: "relative" }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ flex: 1 }}>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="Postcode *"
-            value={pc}
-            onChange={e => handlePcChange(e.target.value)}
-            style={{
-              width: "100%", border: `1.5px solid ${pcError ? "#ef4444" : "#e5e7eb"}`,
-              borderRadius: 14, padding: "14px", fontSize: 14, outline: "none",
-              color: "#374151", background: "white"
-            }}
-          />
-          {pcError && (
-            <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4, fontWeight: 600 }}>
-              ⚠️ {pcError}
-            </div>
-          )}
-        </div>
-        {suburb && (
-          <div style={{
-            flex: 2, border: "1.5px solid #e5e7eb", borderRadius: 14,
-            padding: "14px", fontSize: 14, color: "#374151",
-            background: "#f0fdf4", display: "flex", alignItems: "center", gap: 6
-          }}>
-            <span>📍</span>
-            <span style={{ fontWeight: 600 }}>{suburb}</span>
-            <span style={{ color: "#6b7280" }}>{state}</span>
-          </div>
-        )}
-      </div>
-      {showDropdown && options.length > 1 && (
-        <div style={{
-          position: "absolute", top: "100%", left: 0, right: 0,
-          background: "white", border: "1.5px solid #e5e7eb", borderRadius: 14,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 50, overflow: "hidden", marginTop: 4
-        }}>
-          <div style={{ padding: "10px 14px 6px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Select your suburb
-          </div>
-          {options.map((opt, i) => (
-            <div key={i} onClick={() => selectSuburb(opt)}
-              style={{
-                padding: "12px 14px", cursor: "pointer", fontSize: 14, fontWeight: 600,
-                color: "#374151", borderTop: i > 0 ? "1px solid #f3f4f6" : "none",
-                display: "flex", justifyContent: "space-between", alignItems: "center"
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = "#f0fdf4"}
-              onMouseLeave={e => e.currentTarget.style.background = "white"}
-            >
-              <span>{opt.suburb}</span>
-              <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{opt.state} {pc}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {showDropdown && !suburb && !pcError && (
-        <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4, fontWeight: 600 }}>
-          ⚠️ Please select your suburb from the list above
-        </div>
-      )}
-    </div>
-  );
-}
-
 function VintageTag({ label }) {
   const c = TAG_COLORS[label] || { bg:"#f3f4f6", text:"#374151", border:"#e5e7eb" };
   return (
@@ -1310,9 +796,7 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
           )}
         </div>
         <div style={{padding:"11px 12px 13px"}}>
-          <div style={{fontWeight:900,fontSize:17,color:"#111",letterSpacing:"-0.3px"}}>
-            {Number(item.price) === 0 ? <span style={{color:GREEN}}>FREE</span> : `$${item.price}`}
-          </div>
+          <div style={{fontWeight:900,fontSize:17,color:"#111",letterSpacing:"-0.3px"}}>${item.price}</div>
           <div style={{fontSize:13,fontWeight:600,color:"#1a1a1a",marginTop:3,
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
           <div style={{fontSize:11,color:"#aaa",marginTop:3,
@@ -1339,9 +823,7 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
       <div style={{padding:"13px 14px",flex:1,minWidth:0,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{fontWeight:900,fontSize:18,color:"#111",letterSpacing:"-0.3px"}}>
-              {Number(item.price) === 0 ? <span style={{color:GREEN}}>FREE</span> : `$${item.price}`}
-            </div>
+            <div style={{fontWeight:900,fontSize:18,color:"#111",letterSpacing:"-0.3px"}}>${item.price}</div>
             <div onClick={e => onSave(item.id, e)} style={{fontSize:18,cursor:"pointer",flexShrink:0}}>{item.is_saved?"❤️":"🤍"}</div>
           </div>
           <div style={{fontSize:14,fontWeight:600,color:"#1a1a1a",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
@@ -1457,25 +939,17 @@ function HomeTicker() {
 
 // ═══════════════════════════════════════════════════════
 //  CHAT SCREEN — controlled: messages live in parent store
-//  props: sellerName, listingTitle, messages[], onSend(msg), onBack, onPollMessages
+//  props: sellerName, listingTitle, messages[], onSend(msg), onBack
 // ═══════════════════════════════════════════════════════
-function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPollMessages, convId, userId }) {
+function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false); // lock to prevent duplicate sends
+  // viewH tracks the visual viewport height so the chat shrinks correctly
+  // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
   const [viewH, setViewH] = useState(
     () => window.visualViewport?.height || window.innerHeight
   );
   const endRef = useRef(null);
   const inputRef = useRef(null);
-  const sendLock = useRef(false); // ref-based lock survives re-renders
-
-  // Polling fallback — fires every 4s to catch messages when realtime fails
-  useEffect(() => {
-    if (!onPollMessages || !convId) return;
-    onPollMessages();
-    const interval = setInterval(onPollMessages, 4000);
-    return () => clearInterval(interval);
-  }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Visual Viewport API: fires when keyboard opens/closes or browser chrome resizes
   useEffect(() => {
@@ -1501,12 +975,12 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
 
   const send = () => {
     const trimmed = text.trim();
-    if (!trimmed || sendLock.current) return;
-    sendLock.current = true;
-    setSending(true);
-    onSend({ content: trimmed }).finally(() => {
-      sendLock.current = false;
-      setSending(false);
+    if (!trimmed) return;
+    onSend({
+      id: `msg_${Date.now()}`,
+      from_me: true,
+      content: trimmed,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     });
     setText("");
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -1525,11 +999,13 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
       position: "fixed",
-      top: 0, left: 0, right: 0, bottom: 0,
+      top: 0, left: 0, right: 0,
+      // Use measured visual viewport height — auto-adjusts when keyboard opens
+      height: `${viewH}px`,
       background: "white",
       display: "flex",
       flexDirection: "column",
-      zIndex: 9999,
+      zIndex: 300,
       overflow: "hidden",
     }}>
       <style>{`
@@ -1580,7 +1056,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
             fontWeight: 700, fontSize: 15, color: "#111",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            {sellerName || "LoopGen User"}
+            {sellerName || "Seller"}
           </div>
           {listingTitle && (
             <div style={{
@@ -1637,23 +1113,20 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
                 padding: "11px 15px",
                 fontSize: 15, fontWeight: 500, lineHeight: 1.5,
                 borderRadius: m.from_me ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
-                background: m.status === "failed" ? "#fee2e2" : m.from_me ? "#1c7c45" : "white",
-                color: m.status === "failed" ? "#991b1b" : m.from_me ? "white" : "#111",
+                background: m.from_me ? "#1c7c45" : "white",
+                color: m.from_me ? "white" : "#111",
                 boxShadow: m.from_me ? "0 2px 8px rgba(28,124,69,0.25)" : "0 1px 4px rgba(0,0,0,0.08)",
                 wordBreak: "break-word",
-                opacity: m.status === "sending" ? 0.55 : 1,
-                transition: "opacity 0.2s",
               }}>
                 {m.content}
-                <div style={{
-                  fontSize: 10, marginTop: 4, opacity: 0.7,
-                  textAlign: m.from_me ? "right" : "left",
-                  display: "flex", justifyContent: m.from_me ? "flex-end" : "flex-start",
-                  alignItems: "center", gap: 3,
-                }}>
-                  {m.status === "failed" && <span>⚠️</span>}
-                  {m.time && <span>{m.time}</span>}
-                </div>
+                {m.time && (
+                  <div style={{
+                    fontSize: 10, marginTop: 4, opacity: 0.65,
+                    textAlign: m.from_me ? "right" : "left",
+                  }}>
+                    {m.time}
+                  </div>
+                )}
               </div>
             </div>
           ))
@@ -1703,21 +1176,19 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, onPoll
         <button
           className="lg-send-btn"
           onClick={send}
-          disabled={!text.trim() || sending}
+          disabled={!text.trim()}
           style={{
             width: 48, height: 48, borderRadius: "50%",
-            background: (text.trim() && !sending) ? "#1c7c45" : "#e5e7eb",
+            background: text.trim() ? "#1c7c45" : "#e5e7eb",
             border: "none",
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: (text.trim() && !sending) ? "pointer" : "default",
+            cursor: text.trim() ? "pointer" : "default",
             flexShrink: 0,
             transition: "background 0.15s",
-            boxShadow: (text.trim() && !sending) ? "0 4px 12px rgba(28,124,69,0.35)" : "none",
+            boxShadow: text.trim() ? "0 4px 12px rgba(28,124,69,0.35)" : "none",
           }}
         >
-          {sending
-            ? <div style={{width:18,height:18,border:"2px solid rgba(255,255,255,0.4)",borderTop:"2px solid #9ca3af",borderRadius:"50%",animation:"loopgen-spin 0.7s linear infinite"}}/>
-            : <IcoSend />}
+          <IcoSend />
         </button>
       </div>
     </div>
@@ -1742,17 +1213,18 @@ export default function LoopGenApp() {
   // ── Data state ───────────────────────────────────────
   const [listings,  setListings]= useState(HAS_SUPABASE ? [] : [...DEMO_VINTAGE, ...DEMO_LISTINGS]);
   const [convos,    setConvos]  = useState(HAS_SUPABASE ? [] : DEMO_CONVOS);
-  const [unreadTotal, setUnreadTotal] = useState(0); // global unread badge
   const [detail,    setDetail]  = useState(null);
   const [convo,     setConvo]   = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
+  // chatContext: drives ChatScreen — includes messages directly to avoid async race
+  // { id, sellerName, listingTitle }
   const [chatContext, setChatContext] = useState(null);
+  // localChatStore: source of truth, keyed by chat id (survives navigation)
+  // We use a ref so reads are always synchronous, and trigger re-renders via chatContext
   const localChatStore = useRef({});
-  const pendingOfferMsgs = useRef({}); // { [listingId]: offerMsg } — ensures offer appears in chat
   const [userListings, setUserListings]= useState([]);
   const [savedListings,setSavedListings]=useState([]);
-  const globalRealtimeSub = useRef(null);
 
   // ── Sell state ───────────────────────────────────────
   const [sellStep,  setSellStep]= useState(1);
@@ -1795,30 +1267,12 @@ export default function LoopGenApp() {
       return { ...f, tags: merged };
     });
   }, [sell.title, sell.category, sell.condition]); // eslint-disable-line react-hooks/exhaustive-deps
-  // ── APP VERSION CHECK — clears stale cache on new deploy ────────────────
-  useEffect(() => {
-    const stored = localStorage.getItem("app_version");
-    if (stored !== APP_VERSION) {
-      console.log("[LoopGen] New version:", APP_VERSION, "clearing old cache");
-      if ("caches" in window) {
-        caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-      }
-      const session = localStorage.getItem("sb-wknlvmsgjnsiamcbntek-auth-token");
-      localStorage.clear();
-      if (session) localStorage.setItem("sb-wknlvmsgjnsiamcbntek-auth-token", session);
-      localStorage.setItem("app_version", APP_VERSION);
-      console.log("[LoopGen] Cache cleared, version set:", APP_VERSION);
-    }
-  }, []);
-
-  const authInProgress = useRef(false);
-
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        loadProfile(session.user.id, session.user);
+        loadProfile(session.user.id);
       } else {
         setUser(null);
         setProfile(null);
@@ -1826,11 +1280,9 @@ export default function LoopGenApp() {
       setSessionReady(true);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      // Don't interfere while handleAuth is actively running — it manages state itself
-      if (authInProgress.current) return;
       if (session?.user) {
         setUser(session.user);
-        loadProfile(session.user.id, session.user);
+        loadProfile(session.user.id);
       } else {
         setUser(null); setProfile(null);
       }
@@ -1844,56 +1296,40 @@ export default function LoopGenApp() {
     if (screen === "home" || screen === "explore") {
       loadListings();
     }
-    if (screen === "chats") {
-      if (user) loadConversations();
+    if (screen === "chats" && user) {
+      loadConversations();
     }
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
     }
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Also reload conversations whenever user logs in/changes
+  // When a real user logs in/out, force-refresh listings with their saved state
   useEffect(() => {
-    if (!HAS_SUPABASE) return;
+    if (!HAS_SUPABASE) return; // demo mode never needs this
     listingsLoaded.current = false;
     if (screen === "home" || screen === "explore") {
       loadListings({ force: true });
     }
-    // Always refresh conversations on login so inbox is current
-    if (user) {
-      loadConversations();
-    }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Global realtime: receive incoming messages (user-only deps — never re-subs on send) ──
+  // ── Realtime messages ────────────────────────────────
   useEffect(() => {
-    if (!supabase || !user) { globalRealtimeSub.current?.unsubscribe(); return; }
-    globalRealtimeSub.current = supabase
-      .channel(`inbox:${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" },
+    if (!supabase || !convo?.id || String(convo.id).startsWith("mock_")) return;
+    realtimeSub.current = supabase
+      .channel(`messages:${convo.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convo.id}` },
         payload => {
           const msg = payload.new;
-          if (!msg?.conversation_id) return;
-          const me = userRef.current;
-          if (msg.sender_id === me?.id) return;
-          const key = chatKey(msg.conversation_id);
-          mergeIntoStore(key, [normMsg({ ...msg, from_me: false }, me?.id)]);
-          setUnreadTotal(n => n + 1);
-          const isViewing = screenRef.current === "chat" &&
-            chatCtxRef.current?.convId === msg.conversation_id;
-          if (!isViewing) {
-            showToast("💬 New message received");
-            loadConversations();
-          }
+          setChatMsgs(prev => {
+            if (prev.find(m => m.id === msg.id)) return prev;
+            return [...prev, { ...msg, from_me: msg.sender_id === user?.id }];
+          });
+          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
         })
       .subscribe();
-    return () => { globalRealtimeSub.current?.unsubscribe(); };
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clear unread badge when user opens Messages tab
-  useEffect(() => {
-    if (screen === "chats") setUnreadTotal(0);
-  }, [screen]);
+    return () => { realtimeSub.current?.unsubscribe(); };
+  }, [convo, user]);
 
   // ── Data loaders ─────────────────────────────────────
   async function loadListings({ force = false } = {}) {
@@ -1920,32 +1356,22 @@ export default function LoopGenApp() {
     }
   }
 
-  async function loadProfile(uid, userObj) {
-    const email = userObj?.email || (supabase ? (await supabase.auth.getUser()).data.user?.email : "");
-    const emailUsername = email?.split("@")[0] || "user";
+  async function loadProfile(uid) {
     const p = await dbGetProfile(uid);
-    if (p) {
-      // Always backfill username if any name field is missing
-      if (!p.username && !p.display_name && !p.first_name) {
-        await dbUpsertProfile(uid, { username: emailUsername });
-        setProfile({ ...p, username: emailUsername });
-      } else {
-        setProfile(p);
-      }
-    } else {
-      await dbUpsertProfile(uid, { username: emailUsername, avatar_url: null });
-      setProfile({ id: uid, username: emailUsername });
+    if (p) setProfile(p);
+    else {
+      // Auto-create profile on first login
+      const email = supabase ? (await supabase.auth.getUser()).data.user?.email : "";
+      const username = email?.split("@")[0] || "user";
+      await dbUpsertProfile(uid, { username, avatar_url: null });
+      setProfile({ id: uid, username });
     }
   }
 
   async function loadConversations() {
-    if (!user) { console.log("[convos] skip — no user"); return; }
-    console.log("[convos] loading for user:", user.id);
+    if (!user) return;
     const data = await dbGetConversations(user.id);
-    console.log("[convos] loaded:", data.length, "conversations");
     setConvos(data);
-    const total = data.reduce((sum, c) => sum + (c.unread || 0), 0);
-    setUnreadTotal(total);
   }
 
   async function loadProfileData() {
@@ -1973,24 +1399,24 @@ export default function LoopGenApp() {
   // ── Auth ─────────────────────────────────────────────
   async function handleAuth() {
     if (!supabase) { showToast("Connect Supabase to enable auth"); nav("home"); return; }
+    // P2: enforce terms acceptance server-side, not just via disabled button
     if (authMode === "register" && !agreeTerms) {
       setAuthError("You must agree to the Terms of Service and Privacy Policy to register.");
       return;
     }
-    authInProgress.current = true;
     setAuthLoading(true); setAuthError("");
     try {
       if (authMode === "register") {
         const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         if (data.user && data.session) {
+          // Email confirmation OFF — user is fully signed in immediately
           await dbUpsertProfile(data.user.id, { username: authForm.username || authForm.email.split("@")[0] });
           setUser(data.user);
-          await loadProfile(data.user.id, data.user);
-          setSessionReady(true);
           showToast("🎉 Account created! Welcome to LoopGen.");
           nav("home");
         } else if (data.user && !data.session) {
+          // Email confirmation ON — user created but needs to verify email
           setAuthError("✅ Account created! Check your email to confirm before signing in.");
         } else {
           setAuthError("Something went wrong. Please try again.");
@@ -1999,8 +1425,7 @@ export default function LoopGenApp() {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         setUser(data.user);
-        await loadProfile(data.user.id, data.user);
-        setSessionReady(true);
+        await loadProfile(data.user.id);
         showToast("👋 Welcome back!");
         nav("home");
       }
@@ -2008,7 +1433,6 @@ export default function LoopGenApp() {
       setAuthError(e.message || "Authentication failed");
     }
     setAuthLoading(false);
-    authInProgress.current = false;
   }
 
   async function handleSignOut() {
@@ -2065,70 +1489,31 @@ export default function LoopGenApp() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     if (!user) { showToast("Sign in to upload photos"); return; }
+    // Validate file sizes (max 10MB each)
     const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
     if (oversized.length) { showToast(`${oversized.length} photo(s) exceed 10MB limit`); return; }
-
-    // ── Show local blob previews immediately ──────────────
-    const sliced = files.slice(0, Math.max(0, 5 - sellImages.length));
-    const blobs = sliced.map(f => URL.createObjectURL(f));
-    setSellImages(prev => [...prev, ...blobs].slice(0, 5));
-    // Placeholder in sell.image_urls so indices stay in sync
-    setSell(f => ({...f, image_urls: [...f.image_urls, ...blobs].slice(0, 5)}));
-
-    // ── Upload to Supabase in background ──────────────────
     setUploadingImg(true);
     try {
-      const urls = await Promise.all(sliced.map(f => dbUploadImage(f, user.id)));
-      // Replace blob URLs with real Supabase URLs
-      setSellImages(prev => {
-        const next = [...prev];
-        blobs.forEach((blob, i) => {
-          const idx = next.indexOf(blob);
-          if (idx !== -1) next[idx] = urls[i] || blob;
-          URL.revokeObjectURL(blob);
-        });
-        return next;
-      });
-      setSell(f => {
-        const next = [...f.image_urls];
-        blobs.forEach((blob, i) => {
-          const idx = next.indexOf(blob);
-          if (idx !== -1) next[idx] = urls[i] || blob;
-        });
-        return {...f, image_urls: next};
-      });
-      showToast(`📸 ${urls.filter(Boolean).length} photo(s) uploaded`);
-    } catch (err) {
-      showToast("Upload failed — " + err.message);
+      const urls = await Promise.all(files.slice(0,5).map(f => dbUploadImage(f, user.id)));
+      const valid = urls.filter(Boolean);
+      setSellImages(prev => [...prev, ...valid].slice(0, 5));
+      setSell(f => ({...f, image_urls:[...f.image_urls, ...valid].slice(0, 5)}));
+      showToast(`📸 ${valid.length} photo(s) uploaded`);
+    } catch (e) {
+      showToast("Upload failed — " + e.message);
     }
     setUploadingImg(false);
-    // Reset input so same file can be re-selected
-    e.target.value = "";
   }
 
   async function handleList() {
-    if (!sell.title || !sell.category || !sell.condition) {
+    if (!sell.title || !sell.price || !sell.category || !sell.condition) {
       showToast("Please fill all required fields"); return;
     }
-    // Price validation
-    const isFreeCategory = sell.category === "Free Stuff";
-    const priceVal = isFreeCategory ? 0 : parseFloat(sell.price);
-    if (!isFreeCategory && (isNaN(priceVal) || priceVal < 0)) {
-      showToast("Please enter a valid price"); return;
-    }
-    // Location / suburb validation
-    const loc = sell.location || "";
-    const hasSuburb = /^.+\s[A-Z]{2,3}\s\d{4}$/.test(loc.trim());
-    if (!loc) { showToast("Please enter your postcode"); return; }
-    if (!hasSuburb) { showToast("Please select a suburb from the dropdown"); return; }
-    // Seller must exist (logged in)
-    if (!user) { showToast("Please sign in to post a listing"); return; }
     setLoading(true);
     try {
-      const sellerName = profile?.display_name || profile?.first_name || profile?.username || user.email?.split("@")[0] || "user";
       const listing = {
         title: sell.title,
-        price: priceVal,
+        price: parseFloat(sell.price),
         category: sell.category,
         sub: sell.sub,
         condition: sell.condition,
@@ -2137,7 +1522,6 @@ export default function LoopGenApp() {
         image_urls: sell.image_urls,
         tags: sell.tags || [],
         seller_id: user?.id,
-        seller_username: sellerName,
       };
       if (user && supabase) {
         await dbCreateListing(listing, user.id);
@@ -2145,7 +1529,7 @@ export default function LoopGenApp() {
         await loadListings();
       } else {
         // Demo mode — add locally
-        const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: currentUser, time: "Just now", is_saved: false };
+        const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
         setListings(ls => [newItem, ...ls]);
         showToast("🎉 Listed! (Demo mode)");
       }
@@ -2172,146 +1556,108 @@ export default function LoopGenApp() {
     setAiLoading(false);
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  //  UNIFIED CHAT ENGINE
-  // ═══════════════════════════════════════════════════════════════
+  // ── Chat ──────────────────────────────────────────────
+  // Stable key for a conversation — MUST be identical everywhere
+  // chatKey: ALWAYS keyed by listing id + seller username — never by conv/message id
+  // item can be: a listing object (has .id = listing id)
+  //              a conversation object (has .listing_id, .seller_username)
+  const chatKey = (item) => {
+    const seller = (item.seller_username || item.other_user || "seller").trim();
+    // Prefer explicit listing_id (conv objects), then id only if it looks like a listing id
+    // (not a UUID from conversations table)
+    const listingId = item.listing_id || item.id || item.title || "item";
+    return `chat_${seller}_${listingId}`.replace(/\s+/g, "_").toLowerCase();
+  };
 
-  const chatKey = (convId) => convId ? `conv_${convId}` : null;
-
-  const normMsg = (m, myId) => ({
-    ...m,
-    from_me: m.from_me !== undefined ? m.from_me : (m.sender_id === myId),
-    time: m.time || (m.created_at
-      ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
-  });
-
-  const mergeIntoStore = (key, incoming) => {
-    if (!key || !incoming?.length) return;
+  // addMessageToStore: synchronously mutates the ref, then forces a re-render
+  // by updating chatContext (which ChatScreen reads messages from via the ref)
+  const addMessageToStore = (key, msg) => {
     const store = localChatStore.current;
-    const existing = store[key] || [];
-    const map = new Map();
-    existing.forEach(m => map.set(String(m.id), m));
-    incoming.forEach(m => map.set(String(m.id), m));
-    store[key] = Array.from(map.values()).sort((a, b) => {
-      if (!a.created_at && !b.created_at) return 0;
-      if (!a.created_at) return 1;
-      if (!b.created_at) return -1;
-      return new Date(a.created_at) - new Date(b.created_at);
-    });
+    store[key] = [...(store[key] || []), msg];
+    // Force ChatScreen to re-render with new messages
     setChatContext(ctx => ctx ? { ...ctx } : ctx);
   };
 
-  // sendMessage — unified pipeline for text input AND offer button.
-  // receiverId is read from chatCtxRef so dbSendMessage skips its extra SELECT.
-  const sendMessage = async ({ convId, content, type = "text" }) => {
-    if (!convId || !content?.trim()) return;
-    const key    = chatKey(convId);
-    const myId   = user?.id;
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  // openChat: single entry point — always synchronous, no async state race
+  const openChat = (item, seedMessages = []) => {
+    const key = chatKey(item);
+    const store = localChatStore.current;
+    const existing = store[key] || [];
 
-    // Optimistic: show immediately
-    mergeIntoStore(key, [normMsg({
-      id: tempId,
-      sender_id: myId,
-      conversation_id: convId,
-      content: content.trim(),
-      type,
-      created_at: new Date().toISOString(),
-      status: "sending",
-      from_me: true,
-    }, myId)]);
-
-    if (!supabase || !myId) return;
-
-    const receiverId = chatCtxRef.current?.receiverId || null;
-    try {
-      const saved = await dbSendMessage(convId, myId, content.trim(), receiverId);
-      if (!saved) throw new Error("No data returned");
-      const store = localChatStore.current;
-      if (store[key]) store[key] = store[key].filter(m => m.id !== tempId);
-      mergeIntoStore(key, [normMsg({ ...saved, from_me: true, type, status: "sent" }, myId)]);
-    } catch (e) {
-      console.error("[sendMessage] failed:", e.message);
-      const store = localChatStore.current;
-      if (store[key]) store[key] = store[key].map(m =>
-        m.id === tempId ? { ...m, status: "failed" } : m
-      );
-      setChatContext(ctx => ctx ? { ...ctx } : ctx);
-      showToast(`Send failed: ${e.message}`);
+    if (seedMessages.length > 0) {
+      // Append seeds that aren't already stored (dedup by id)
+      const existingIds = new Set(existing.map(m => m.id));
+      const toAdd = seedMessages.filter(m => !existingIds.has(m.id));
+      if (toAdd.length > 0) {
+        store[key] = [...existing, ...toAdd];
+      }
+    } else if (!store[key]) {
+      // First time opening this convo with no seeds — initialise empty
+      store[key] = [];
     }
-  };
-
-  // Refs so realtime callback reads latest values without re-subscribing
-  const screenRef  = useRef(screen);
-  const chatCtxRef = useRef(chatContext);
-  const userRef    = useRef(user);
-  useEffect(() => { screenRef.current  = screen;      }, [screen]);
-  useEffect(() => { chatCtxRef.current = chatContext; }, [chatContext]);
-  useEffect(() => { userRef.current    = user;        }, [user]);
-
-  const openChat = (convId, meta) => {
-    const key = chatKey(convId);
-    if (!key) { console.warn("[openChat] missing convId"); return; }
-    if (!localChatStore.current[key]) localChatStore.current[key] = [];
+    // Set context and navigate — single synchronous update, no race
     setChatContext({
-      id: key, convId,
-      receiverId: meta.receiverId || null,
-      sellerName: meta.sellerName || "LoopGen User",
-      listingTitle: meta.listingTitle || "Item",
+      id: key,
+      sellerName: item.seller_username || item.other_user || "Seller",
+      listingTitle: item.title || item.listing_title || "Item",
     });
     push("chat");
   };
 
+  // openConvo: used by the chats list screen
   const openConvo = async (c) => {
-    const key = chatKey(c.id);
-    if (!localChatStore.current[key]) localChatStore.current[key] = [];
-    const receiverId = user ? (c.buyer_id === user.id ? c.seller_id : c.buyer_id) : null;
-    setChatContext({
-      id: key, convId: c.id, receiverId,
-      sellerName: c.other_user || "LoopGen User",
-      listingTitle: c.listing_title || "Item",
-    });
-    push("chat");
-    if (!supabase || !user || !c.id) return;
-    const myId = user.id;
-    try {
-      const fetched = await dbGetMessages(c.id);
-      if (!fetched.length) return;
-      mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
-    } catch (e) { console.error("[openConvo] fetch error:", e); }
+    let msgs = c.messages || [];
+    if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
+      try {
+        const fetched = await dbGetMessages(c.id);
+        msgs = fetched.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+      } catch (e) { console.error("openConvo:", e); }
+    }
+    openChat(c, msgs);
   };
 
   const openSellerChat = async (item) => {
+    // No auth gate — works for guests and logged-in users
     if (!supabase || !user) {
-      const localKey = `local_listing_${item.id}`;
-      if (!localChatStore.current[localKey]) localChatStore.current[localKey] = [];
-      setChatContext({ id: localKey, convId: null, receiverId: null, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
-      push("chat");
+      openChat(item, []);
       return;
     }
     if (item.seller_id === user.id) { showToast("That's your own listing!"); return; }
     try {
       const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-      if (!conv) throw new Error("Could not create conversation");
-      const key = chatKey(conv.id);
-      if (!localChatStore.current[key]) localChatStore.current[key] = [];
-      const myId = user.id;
-      const receiverId = conv.buyer_id === myId ? conv.seller_id : conv.buyer_id;
-      const fetched = await dbGetMessages(conv.id);
-      if (fetched.length) mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
-      setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [{
-        ...conv, other_user: item.seller_username || "LoopGen User",
-        listing_title: item.title || "Item", last_message: "", last_time: "", unread: 0,
-      }, ...cs]);
-      openChat(conv.id, { receiverId, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
+      if (conv) {
+        const msgs = await dbGetMessages(conv.id);
+        const enriched = {
+          ...conv,
+          // Preserve original listing id so chatKey produces the same key as Make Offer
+          listing_id: item.id,
+          seller_username: item.seller_username || "Seller",
+          title: item.title || "Item",
+        };
+        setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+        openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
+      } else {
+        openChat(item, []);
+      }
     } catch (e) {
-      console.error("[openSellerChat]:", e);
-      showToast("Couldn't open chat — " + e.message);
+      console.error("openSellerChat:", e);
+      openChat(item, []);
     }
   };
 
-  const sendMsg = async () => { console.warn("[LoopGen] Legacy sendMsg called"); };
+  const sendMsg = async () => {
+    if (!msgText.trim()) return;
+    const text = msgText;
+    setMsgText("");
+    const time = new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const optimistic = {id:`opt_${Date.now()}`, from_me:true, content:text, created_at:time};
+    setChatMsgs(m => [...m, optimistic]);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    if (supabase && user && convo?.id && !String(convo.id).startsWith("mock_")) {
+      try { await dbSendMessage(convo.id, user.id, text); }
+      catch (e) { showToast("Send failed"); }
+    }
+  };
 
   // ── Derived data ──────────────────────────────────────
   const filtered = listings.filter(l => {
@@ -2320,26 +1666,19 @@ export default function LoopGenApp() {
   });
 
   const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles"];
-  const currentUser = user ? (profile?.username || profile?.display_name || user.email?.split("@")[0] || "You") : "Guest";
+  const currentUser = user ? (profile?.username || user.email?.split("@")[0] || "You") : "Guest";
   const isGuest = !user;
 
   // ════════════════════════════
   //  SPLASH  (LandingPage component)
   // ════════════════════════════
-  // Auto-redirect: if session is ready and user is logged in, skip splash/auth and go straight to home
-  useEffect(() => {
-    if (sessionReady && user && (screen === "splash" || screen === "auth")) {
-      setScreen("home");
-    }
-  }, [sessionReady, user]); // eslint-disable-line react-hooks/exhaustive-deps
-
   if (screen === "splash") return (
     <Phone>
       <LandingPage
         onBrowse={() => nav("home")}
         onSell={() => nav("sell")}
-        onSignIn={() => { setAuthMode("login"); setAuthForm({email:"",password:"",username:""}); setAuthError(""); push("auth"); }}
-        onRegister={() => { setAuthMode("register"); setAuthForm({email:"",password:"",username:""}); setAuthError(""); push("auth"); }}
+        onSignIn={() => { setAuthMode("login"); push("auth"); }}
+        onRegister={() => { setAuthMode("register"); push("auth"); }}
         demoMode={!HAS_SUPABASE}
       />
     </Phone>
@@ -2364,9 +1703,9 @@ export default function LoopGenApp() {
           </div>
         )}
 
-        {authMode==="register" && <FInp placeholder="Username" value={authForm.username} onChange={v=>setAuthForm(f=>({...f,username:v}))} autoComplete="username"/>}
-        <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))} autoComplete={authMode==="login" ? "email" : "new-email"}/>
-        <FInp placeholder="Password" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))} autoComplete={authMode==="login" ? "current-password" : "new-password"}/>
+        {authMode==="register" && <FInp placeholder="Username" value={authForm.username} onChange={v=>setAuthForm(f=>({...f,username:v}))}/>}
+        <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))}/>
+        <FInp placeholder="Password" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))}/>
 
         {authMode==="register" && (
           <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:16,cursor:"pointer"}}>
@@ -2618,7 +1957,7 @@ export default function LoopGenApp() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="home" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -2684,7 +2023,7 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="explore" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="explore" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -2694,6 +2033,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "detail" && detail) {
     const img = detail.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
+    const demoSeller = DEMO_SELLERS[detail.seller_username];
     return (
       <Phone>
         <div style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
@@ -2725,9 +2065,7 @@ export default function LoopGenApp() {
             {/* Price + Title */}
             <div style={{marginBottom:4}}>
               <div style={{fontSize:32,fontWeight:900,color:"#0f0f0f",letterSpacing:"-1px",lineHeight:1}}>
-                {Number(detail.price) === 0
-                  ? <span style={{color:GREEN}}>FREE</span>
-                  : `$${detail.price}`}
+                ${detail.price}
               </div>
               <div style={{fontSize:18,fontWeight:700,color:"#1a1a1a",marginTop:6,lineHeight:1.25}}>
                 {detail.title}
@@ -2766,30 +2104,23 @@ export default function LoopGenApp() {
 
             {/* Seller card */}
             {(() => {
-              const demoSeller = DEMO_SELLERS[detail.seller_username];
-              // If this is the logged-in user's listing, use their live profile — never "LoopGen User"
-              const isOwnListing = user && detail.seller_id === user.id;
-              const resolvedName = isOwnListing
-                ? (profile?.display_name || profile?.first_name || profile?.username || user.email?.split("@")[0] || "You")
-                : (detail.seller_username || detail.seller_display_name || "LoopGen User");
-              const sellerDisplayName = resolvedName;
               return (
                 <div style={{background:"white",borderRadius:20,padding:"16px",marginTop:14,
                   boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
                   <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12}}>
-                    About the Seller
+                    Seller
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
                     <div style={{width:46,height:46,borderRadius:50,
                       background:`linear-gradient(135deg,${GREEN},#22c55e)`,
                       display:"flex",alignItems:"center",justifyContent:"center",
                       color:"white",fontWeight:900,fontSize:18,flexShrink:0}}>
-                      {sellerDisplayName[0].toUpperCase()}
+                      {(detail.seller_username||"U")[0].toUpperCase()}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:7}}>
                         <span style={{fontWeight:800,fontSize:15,color:"#0f0f0f"}}>
-                          {sellerDisplayName}
+                          {detail.seller_username || "Seller"}
                         </span>
                         <span style={{background:"rgba(26,107,58,0.09)",color:GREEN,
                           fontSize:9,fontWeight:800,padding:"2px 7px",
@@ -2880,26 +2211,16 @@ export default function LoopGenApp() {
               border:`2px solid ${GREEN}`,background:"white",
               color:GREEN,fontWeight:700,fontSize:13,cursor:"pointer",
               fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            {detail.seller_id && user?.id === detail.seller_id ? "📋 My Listing" : "💬 Message Seller"}
+            💬 Message Seller
           </button>
-          {detail.seller_id && user?.id === detail.seller_id ? (
-            <button disabled
-              style={{flex:1,padding:"14px 8px",borderRadius:16,
-                border:"none",background:"#e5e7eb",color:"#9ca3af",
-                fontWeight:700,fontSize:13,cursor:"not-allowed",
-                fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              Your Listing
-            </button>
-          ) : (
-            <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
-              style={{flex:1,padding:"14px 8px",borderRadius:16,
-                border:"none",background:GREEN,color:"white",
-                fontWeight:700,fontSize:13,cursor:"pointer",
-                boxShadow:`0 6px 18px ${GREEN}44`,
-                fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              {offerSent[detail.id] ? `Offer: $${offerSent[detail.id]}` : "Make Offer"}
-            </button>
-          )}
+          <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
+            style={{flex:1,padding:"14px 8px",borderRadius:16,
+              border:"none",background:GREEN,color:"white",
+              fontWeight:700,fontSize:13,cursor:"pointer",
+              boxShadow:`0 6px 18px ${GREEN}44`,
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            {offerSent[detail.id] ? `Offer: $${offerSent[detail.id]}` : "Make Offer"}
+          </button>
         </div>
         <Toast msg={toast}/>
         <OfferModal
@@ -2908,12 +2229,10 @@ export default function LoopGenApp() {
           setOfferPrice={setOfferPrice}
           onClose={() => setOfferModal(null)}
           onSubmit={async () => {
-            if (offerModal?.item?.seller_id && user?.id === offerModal.item.seller_id) {
-              showToast("You can't make an offer on your own listing"); setOfferModal(null); return;
-            }
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
+            // Persist to Supabase — silent fallback if table missing
             if (user) {
               try {
                 await dbSaveOffer({
@@ -2922,39 +2241,23 @@ export default function LoopGenApp() {
                   seller_id:  offerModal.item.seller_id || null,
                   price:      offerPrice,
                 });
-              } catch { /* table may not exist yet */ }
+              } catch { /* table may not exist yet — local state handles it */ }
             }
+            // Always update local state regardless of DB outcome
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
             const price = offerPrice;
             setOfferModal(null);
             showToast(`Offer of $${price} sent!`);
-            const offerContent = `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`;
-
-            if (supabase && user && item.seller_id) {
-              try {
-                const conv = await dbGetOrCreateConversation(item.id, user.id, item.seller_id);
-                if (!conv) throw new Error("Could not create conversation");
-                const receiverId = conv.buyer_id === user.id ? conv.seller_id : conv.buyer_id;
-                setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [{
-                  ...conv, other_user: item.seller_username || "LoopGen User",
-                  listing_title: item.title || "Item", last_message: offerContent,
-                  last_time: "Just now", unread: 0,
-                }, ...cs]);
-                openChat(conv.id, { receiverId, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
-                await sendMessage({ convId: conv.id, content: offerContent, type: "offer" });
-                return;
-              } catch (e) {
-                console.error("[offer] chat error:", e);
-                showToast("Offer sent but chat failed to open");
-              }
-            }
-            // Fallback: guest or no seller_id
-            const localKey = `local_listing_${item.id}`;
-            if (!localChatStore.current[localKey]) localChatStore.current[localKey] = [];
-            setChatContext({ id: localKey, convId: null, receiverId: null, sellerName: item.seller_username || "LoopGen User", listingTitle: item.title || "Item" });
-            push("chat");
-            mergeIntoStore(localKey, [normMsg({ id: `temp_offer_${Date.now()}`, sender_id: user?.id || "guest", content: offerContent, type: "offer", created_at: new Date().toISOString(), from_me: true, status: "sent" }, user?.id)]);
+            // Open chat — openChat uses chatKey(item) consistently
+            // and appends the offer message into the store before opening
+            const offerMsg = {
+              id: `offer_${Date.now()}`,
+              from_me: true,
+              content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            };
+            openChat(item, [offerMsg]);
           }}
         />
         <ReportModal
@@ -3002,92 +2305,25 @@ export default function LoopGenApp() {
           <>
             {/* Photo upload — REAL */}
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handlePhotoSelect} style={{display:"none"}}/>
-
-            {sellImages.length === 0 ? (
-              /* Empty state — full tap target */
-              <div onClick={() => fileInputRef.current?.click()}
-                style={{background:"#f9fafb",borderRadius:20,height:160,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"2px dashed #e5e7eb",marginBottom:12}}>
-                <div style={{width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",marginBottom:10}}><IcoCamera/></div>
-                <div style={{fontWeight:600,color:"#374151",fontSize:14}}>{uploadingImg?"Uploading…":"Add photos"}</div>
-                <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>Tap to upload · Up to 5</div>
-              </div>
-            ) : (
-              /* Photo strip — shows all photos with remove buttons */
-              <div style={{marginBottom:12}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:12,fontWeight:700,color:"#374151"}}>
-                    Photos <span style={{color:"#9ca3af",fontWeight:500}}>({sellImages.length}/5)</span>
-                  </span>
-                  {sellImages.length < 5 && (
-                    <button onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingImg}
-                      style={{fontSize:12,fontWeight:700,color:GREEN,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit",opacity:uploadingImg?0.5:1}}>
-                      {uploadingImg ? "Uploading…" : "+ Add more"}
-                    </button>
-                  )}
+            <div onClick={() => fileInputRef.current?.click()}
+              style={{background:"#f9fafb",borderRadius:20,height:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"2px dashed #e5e7eb",marginBottom:16,position:"relative",overflow:"hidden"}}>
+              {sellImages.length > 0
+                ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>
+                : <>
+                    <div style={{width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",marginBottom:10}}><IcoCamera/></div>
+                    <div style={{fontWeight:600,color:"#374151",fontSize:14}}>{uploadingImg?"Uploading…":"Add photos"}</div>
+                    <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>Tap to upload · Up to 5</div>
+                  </>
+              }
+              {sellImages.length > 0 && (
+                <div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.6)",color:"white",fontSize:11,fontWeight:700,padding:"4px 9px",borderRadius:20}}>
+                  {sellImages.length} photo{sellImages.length>1?"s":""}
                 </div>
-                <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:12,paddingTop:10,scrollbarWidth:"none"}}>
-                  {sellImages.map((src, i) => {
-                    const isUploading = uploadingImg && src.startsWith("blob:");
-                    return (
-                    <div key={src + i} style={{position:"relative",flexShrink:0,width:110,height:110,overflow:"visible"}}>
-                      <img src={src} alt={`photo ${i+1}`}
-                        style={{width:110,height:110,objectFit:"cover",borderRadius:14,display:"block",
-                          border:`2px solid ${isUploading ? "#fbbf24" : "#e5e7eb"}`,
-                          opacity: isUploading ? 0.7 : 1}}/>
-                      {/* Uploading spinner overlay */}
-                      {isUploading && (
-                        <div style={{position:"absolute",inset:0,borderRadius:14,background:"rgba(0,0,0,0.35)",
-                          display:"flex",alignItems:"center",justifyContent:"center",zIndex:1}}>
-                          <div style={{width:22,height:22,border:"3px solid rgba(255,255,255,0.4)",
-                            borderTop:"3px solid white",borderRadius:"50%",
-                            animation:"loopgen-spin 0.7s linear infinite"}}/>
-                        </div>
-                      )}
-                      {/* Remove button — positioned inside tile bounds so it's never clipped */}
-                      <button
-                        onPointerDown={e => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          const updated = sellImages.filter((_, idx) => idx !== i);
-                          setSellImages(updated);
-                          setSell(f => ({...f, image_urls: f.image_urls.filter((_, idx) => idx !== i)}));
-                        }}
-                        style={{
-                          position:"absolute", top:6, right:6,
-                          width:28, height:28, borderRadius:"50%",
-                          background:"rgba(0,0,0,0.65)", border:"2px solid white", color:"white",
-                          fontSize:14, fontWeight:900, lineHeight:1, cursor:"pointer",
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          boxShadow:"0 2px 8px rgba(0,0,0,0.35)", padding:0,
-                          fontFamily:"inherit", zIndex:10,
-                          WebkitTapHighlightColor:"transparent",
-                          touchAction:"manipulation",
-                        }}>
-                        ✕
-                      </button>
-                      {/* Cover label */}
-                      {i === 0 && !isUploading && (
-                        <div style={{position:"absolute",bottom:6,left:0,right:0,textAlign:"center",
-                          fontSize:9,fontWeight:700,color:"white",zIndex:2,
-                          textShadow:"0 1px 3px rgba(0,0,0,0.8)",letterSpacing:"0.04em"}}>
-                          COVER
-                        </div>
-                      )}
-                    </div>
-                    );
-                  })}
-                </div>
-                <div style={{fontSize:11,color:"#9ca3af",marginTop:6}}>
-                  First photo is the cover · Tap ✕ to remove
-                </div>
-              </div>
-            )}
+              )}
+            </div>
             <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
-            <FSel value={sell.category} onChange={v=>{
-              setSell(f=>({...f,category:v,sub:"", price: v==="Free Stuff" ? "0" : f.price}));
-            }} ph="Category *"
+            <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
               opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Baby & Kids","Free Stuff"]}/>
             {sell.category === "Vintage & Collectibles" && (
               <FSel value={sell.sub} onChange={v=>setSell(f=>({...f,sub:v}))} ph="Subcategory"
@@ -3200,19 +2436,7 @@ export default function LoopGenApp() {
             })()}
             <GreenBtn onClick={()=>{
               if (!sell.title.trim()) { showToast("Please add a title"); return; }
-              const priceVal = parseFloat(sell.price);
-              const isFreeCategory = sell.category === "Free Stuff";
-              if (!sell.price && !isFreeCategory) { showToast("Please add a price"); return; }
-              if (!isFreeCategory && (isNaN(priceVal) || priceVal < 0)) { showToast("Please add a valid price"); return; }
-              if (isFreeCategory && priceVal > 0) {
-                showToast("Items in 'Free Stuff' must have a price of $0");
-                setSell(f => ({...f, price: "0"}));
-                return;
-              }
-              if (!isFreeCategory && priceVal === 0) {
-                showToast("For free items, please use the 'Free Stuff' category");
-                return;
-              }
+              if (!sell.price || parseFloat(sell.price) <= 0) { showToast("Please add a valid price"); return; }
               if (!sell.category) { showToast("Please select a category"); return; }
               if (!sell.condition) { showToast("Please select a condition"); return; }
               if (sellImages.length === 0) { showToast("Please add at least 1 photo"); return; }
@@ -3241,24 +2465,10 @@ export default function LoopGenApp() {
                 {aiLoading?"⏳ Generating…":"✨ Generate with AI"}
               </button>
             )}
-            <div style={{marginBottom:4}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6}}>Location (postcode) *</div>
-              <PostcodeInput
-                value={sell.location}
-                onChange={v => setSell(f => ({...f, location: v}))}
-                onError={e => {}}
-              />
-            </div>
+            <FInp placeholder="📍 Location (suburb or postcode)" value={sell.location} onChange={v=>setSell(f=>({...f,location:v}))}/>
             <div style={{display:"flex",gap:10,marginTop:4}}>
               <button onClick={()=>setSellStep(1)} style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Back</button>
-              <GreenBtn onClick={()=>{
-                // Validate location has suburb resolved
-                const loc = sell.location || "";
-                const hasSuburb = /^.+\s[A-Z]{2,3}\s\d{4}$/.test(loc.trim());
-                if (!loc) { showToast("Please enter your postcode"); return; }
-                if (!hasSuburb) { showToast("Please select your suburb from the dropdown"); return; }
-                setSellStep(3);
-              }} mt={0} style={{flex:2}}>Preview →</GreenBtn>
+              <GreenBtn onClick={()=>setSellStep(3)} mt={0} style={{flex:2}}>Preview →</GreenBtn>
             </div>
           </>
         )}
@@ -3270,11 +2480,7 @@ export default function LoopGenApp() {
                 : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>📦</div>
               }
               <div style={{padding:16}}>
-                <div style={{fontWeight:800,fontSize:22,color:"#111"}}>
-                  {(!sell.price || sell.price === "0" || Number(sell.price) === 0)
-                    ? <span style={{color:GREEN}}>FREE</span>
-                    : `$${sell.price}`}
-                </div>
+                <div style={{fontWeight:800,fontSize:22,color:"#111"}}>{sell.price?`$${sell.price}`:"$—"}</div>
                 <div style={{fontSize:16,fontWeight:600,color:"#374151"}}>{sell.title||"Untitled"}</div>
                 <div style={{fontSize:12,color:"#9ca3af",marginTop:3}}>{sell.category}{sell.condition?` · ${sell.condition}`:""}</div>
                 {sell.location && <div style={{fontSize:12,color:"#6b7280",marginTop:3}}>📍 {sell.location}</div>}
@@ -3291,7 +2497,7 @@ export default function LoopGenApp() {
           </>
         )}
       </div>
-      <BottomNav active="sell" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="sell" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3348,7 +2554,7 @@ export default function LoopGenApp() {
           ))}
         </div>
       )}
-      <BottomNav active="chats" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="chats" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3358,24 +2564,10 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "chat") return (
     <ChatScreen
-      sellerName={chatContext?.sellerName || "LoopGen User"}
+      sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
-      convId={chatContext?.convId}
-      userId={user?.id}
-      onPollMessages={async () => {
-        if (!supabase || !user || !chatContext?.convId) return;
-        const myId = user.id;
-        const key  = chatContext.id;
-        try {
-          const fetched = await dbGetMessages(chatContext.convId);
-          if (!fetched.length) return;
-          mergeIntoStore(key, fetched.map(m => normMsg(m, myId)));
-        } catch (e) { console.error("[poll]:", e); }
-      }}
-      onSend={async (msg) => {
-        await sendMessage({ convId: chatContext?.convId, content: msg.content, type: "text" });
-      }}
+      onSend={(msg) => addMessageToStore(chatContext?.id, msg)}
       onBack={pop}
     />
   );
@@ -3458,7 +2650,7 @@ export default function LoopGenApp() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -3532,7 +2724,7 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -3579,7 +2771,7 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="profile" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3687,7 +2879,7 @@ export default function LoopGenApp() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} unreadCount={unreadTotal}/>
+      <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
