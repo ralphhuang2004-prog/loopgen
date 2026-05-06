@@ -1247,7 +1247,8 @@ export default function LoopGenApp() {
   // ── Sell state ───────────────────────────────────────
   const [sellStep,  setSellStep]= useState(1);
   const [sell,      setSell]    = useState({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]});
-  const [sellImages,setSellImages]=useState([]);
+  const [sellImages,setSellImages]=useState([]); // blob: preview URLs
+  const [sellImageFiles,setSellImageFiles]=useState([]); // raw File objects for upload
   const [uploadingImg,setUploadingImg]=useState(false);
 
   // ── UI state ─────────────────────────────────────────
@@ -1424,7 +1425,7 @@ export default function LoopGenApp() {
   const nav  = s => {
     if (s === "sell" && !sessionReady) { showToast("Loading…"); return; }
     if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
-    if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); }
+    if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); setSellImageFiles([]); }
     setHistory([]); setScreen(s); setDetail(null); setConvo(null);
   };
 
@@ -1521,18 +1522,57 @@ export default function LoopGenApp() {
   // ── Sell / Photo upload ───────────────────────────────
   async function handlePhotoSelect(e) {
     const files = Array.from(e.target.files || []);
+    // Reset input so the same file can be re-selected after removal
+    e.target.value = "";
     if (!files.length) return;
-    if (!user) { showToast("Sign in to upload photos"); return; }
     // Validate file sizes (max 10MB each)
     const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
     if (oversized.length) { showToast(`${oversized.length} photo(s) exceed 10MB limit`); return; }
+
+    // ── Instant local previews (blob URLs) so photos show immediately ──────
+    const remaining = 5 - sellImages.length;
+    if (remaining <= 0) { showToast("Maximum 5 photos reached"); return; }
+    const toAdd = files.slice(0, remaining);
+    const blobUrls = toAdd.map(f => URL.createObjectURL(f));
+    setSellImages(prev => [...prev, ...blobUrls]);
+    setSellImageFiles(prev => [...prev, ...toAdd]);
+    // Temporary blob URLs in sell.image_urls so preview step shows them
+    setSell(f => ({...f, image_urls: [...f.image_urls, ...blobUrls].slice(0, 5)}));
+
+    if (!user || !supabase) {
+      // Demo mode — blob previews are all we can do; that's fine
+      showToast(`📸 ${toAdd.length} photo(s) added`);
+      return;
+    }
+
+    // ── Background upload — swap blob URLs for real public URLs ────────────
     setUploadingImg(true);
     try {
-      const urls = await Promise.all(files.slice(0,5).map(f => dbUploadImage(f, user.id)));
-      const valid = urls.filter(Boolean);
-      setSellImages(prev => [...prev, ...valid].slice(0, 5));
-      setSell(f => ({...f, image_urls:[...f.image_urls, ...valid].slice(0, 5)}));
-      showToast(`📸 ${valid.length} photo(s) uploaded`);
+      const uploadResults = await Promise.all(
+        toAdd.map(async (file, i) => {
+          try {
+            const url = await dbUploadImage(file, user.id);
+            return { blobUrl: blobUrls[i], publicUrl: url };
+          } catch {
+            return { blobUrl: blobUrls[i], publicUrl: null };
+          }
+        })
+      );
+      const failed = uploadResults.filter(r => !r.publicUrl).length;
+      // Swap blob URLs for real URLs in state
+      setSellImages(prev => prev.map(url => {
+        const match = uploadResults.find(r => r.blobUrl === url);
+        return (match && match.publicUrl) ? match.publicUrl : url;
+      }));
+      setSell(f => ({
+        ...f,
+        image_urls: f.image_urls.map(url => {
+          const match = uploadResults.find(r => r.blobUrl === url);
+          return (match && match.publicUrl) ? match.publicUrl : url;
+        }),
+      }));
+      if (failed > 0) showToast(`⚠️ ${failed} photo(s) failed to upload`);
+      else showToast(`📸 ${toAdd.length} photo(s) uploaded`);
     } catch (e) {
       showToast("Upload failed — " + e.message);
     }
@@ -1570,6 +1610,7 @@ export default function LoopGenApp() {
       setSellStep(1);
       setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]});
       setSellImages([]);
+      setSellImageFiles([]);
       nav("home");
     } catch (e) {
       showToast("Failed to list: " + e.message);
@@ -2332,10 +2373,11 @@ export default function LoopGenApp() {
       <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px",paddingBottom:90}}>
         {sellStep===1 && (
           <>
-            {/* Photo upload — REAL */}
+            {/* Photo upload — with preview strip and remove buttons */}
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handlePhotoSelect} style={{display:"none"}}/>
-            <div onClick={() => fileInputRef.current?.click()}
-              style={{background:"#f9fafb",borderRadius:20,height:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"2px dashed #e5e7eb",marginBottom:16,position:"relative",overflow:"hidden"}}>
+            {/* Main drop zone */}
+            <div onClick={() => sellImages.length < 5 && fileInputRef.current?.click()}
+              style={{background:"#f9fafb",borderRadius:20,height:180,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:sellImages.length<5?"pointer":"default",border:"2px dashed #e5e7eb",marginBottom:sellImages.length>0?10:16,position:"relative",overflow:"hidden"}}>
               {sellImages.length > 0
                 ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>
                 : <>
@@ -2346,10 +2388,50 @@ export default function LoopGenApp() {
               }
               {sellImages.length > 0 && (
                 <div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.6)",color:"white",fontSize:11,fontWeight:700,padding:"4px 9px",borderRadius:20}}>
-                  {sellImages.length} photo{sellImages.length>1?"s":""}
+                  {sellImages.length}/5 photo{sellImages.length>1?"s":""}
+                </div>
+              )}
+              {uploadingImg && (
+                <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.35)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{color:"white",fontWeight:700,fontSize:13}}>Uploading…</span>
                 </div>
               )}
             </div>
+            {/* Thumbnail strip with remove buttons */}
+            {sellImages.length > 0 && (
+              <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:16,paddingBottom:4,scrollbarWidth:"none"}}>
+                {sellImages.map((url, idx) => (
+                  <div key={idx} style={{position:"relative",flexShrink:0,width:70,height:70,borderRadius:12,overflow:"hidden",border:idx===0?"2.5px solid #1c7c45":"2px solid #e5e7eb"}}>
+                    <img src={url} alt={`Photo ${idx+1}`} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    {/* Primary badge */}
+                    {idx===0 && (
+                      <div style={{position:"absolute",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,fontWeight:800,color:"white",background:"rgba(28,124,69,0.85)",padding:"1px 0",letterSpacing:"0.03em"}}>MAIN</div>
+                    )}
+                    {/* Remove button */}
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        const newImages = sellImages.filter((_,i) => i !== idx);
+                        const newFiles  = sellImageFiles.filter((_,i) => i !== idx);
+                        setSellImages(newImages);
+                        setSellImageFiles(newFiles);
+                        setSell(f => ({...f, image_urls: f.image_urls.filter((_,i) => i !== idx)}));
+                      }}
+                      style={{position:"absolute",top:3,right:3,width:20,height:20,borderRadius:"50%",background:"rgba(0,0,0,0.65)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,color:"white",fontSize:13,lineHeight:1,fontWeight:700}}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {/* Add more button */}
+                {sellImages.length < 5 && (
+                  <div onClick={() => fileInputRef.current?.click()}
+                    style={{flexShrink:0,width:70,height:70,borderRadius:12,border:"2px dashed #d1d5db",background:"#f9fafb",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:2}}>
+                    <span style={{fontSize:22,color:"#9ca3af",lineHeight:1}}>+</span>
+                    <span style={{fontSize:9,color:"#9ca3af",fontWeight:600}}>Add</span>
+                  </div>
+                )}
+              </div>
+            )}
             <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
             <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
