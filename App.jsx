@@ -1693,6 +1693,10 @@ export default function LoopGenApp() {
   const [reportModal, setReportModal] = useState(null); // { item } | null
   // P5 — Terms agreement for register
   const [agreeTerms, setAgreeTerms] = useState(false);
+  // Username edit (settings screen)
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameLoading, setUsernameLoading] = useState(false);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const listingsLoaded = useRef(false);
@@ -1739,12 +1743,24 @@ export default function LoopGenApp() {
       }
       setSessionReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        loadProfile(session.user.id);
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Ignore TOKEN_REFRESHED and other non-login/logout events to avoid race
+      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        if (session?.user) {
+          setUser(session.user);
+          loadProfile(session.user.id);
+        }
+      } else if (event === "SIGNED_OUT") {
         setUser(null); setProfile(null);
+        // Only navigate away if already past the auth screen
+        setScreen(s => (s !== "auth" && s !== "splash") ? "splash" : s);
+      } else if (event === "INITIAL_SESSION") {
+        if (session?.user) {
+          setUser(session.user);
+          loadProfile(session.user.id);
+        } else {
+          setUser(null); setProfile(null);
+        }
       }
       setSessionReady(true);
     });
@@ -1818,13 +1834,16 @@ export default function LoopGenApp() {
 
   async function loadProfile(uid) {
     const p = await dbGetProfile(uid);
-    if (p) setProfile(p);
-    else {
-      // Auto-create profile on first login
-      const email = supabase ? (await supabase.auth.getUser()).data.user?.email : "";
-      const username = email?.split("@")[0] || "user";
+    if (p && p.username) {
+      setProfile(p);
+    } else {
+      // Auto-create/fix profile — derive username from email
+      const { data: { user: authUser } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
+      const email = authUser?.email || "";
+      // Strip everything from @ and clean to alphanumeric + underscores
+      const username = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") || "user";
       await dbUpsertProfile(uid, { username, avatar_url: null });
-      setProfile({ id: uid, username });
+      setProfile({ id: uid, username, ...(p || {}) });
     }
   }
 
@@ -3415,14 +3434,69 @@ export default function LoopGenApp() {
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88,display:"flex",flexDirection:"column",gap:16}}>
-        {/* Account info */}
+        {/* Account info + username edit */}
         <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Account</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:13,color:"#6b7280"}}>Username</span>
-              <span style={{fontSize:13,fontWeight:600,color:"#111"}}>{currentUser}</span>
+
+            {/* Username row — editable */}
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:13,color:"#6b7280"}}>Username</span>
+                {!editingUsername && (
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,fontWeight:600,color:"#111"}}>{currentUser}</span>
+                    <button onClick={()=>{setUsernameInput(currentUser);setEditingUsername(true);}}
+                      style={{fontSize:11,color:GREEN,fontWeight:700,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>
+                      Edit
+                    </button>
+                  </div>
+                )}
+              </div>
+              {editingUsername && (
+                <div style={{marginTop:10}}>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <input
+                      value={usernameInput}
+                      onChange={e=>setUsernameInput(e.target.value.replace(/[^a-zA-Z0-9_.]/g,"").slice(0,30))}
+                      placeholder="Enter username"
+                      maxLength={30}
+                      style={{flex:1,borderRadius:10,border:`1.5px solid ${GREEN}`,padding:"10px 12px",
+                        fontSize:14,outline:"none",fontFamily:"inherit",color:"#111"}}
+                    />
+                    <button
+                      disabled={usernameLoading || !usernameInput.trim() || usernameInput.trim().length < 3}
+                      onClick={async()=>{
+                        const newName = usernameInput.trim();
+                        if (newName.length < 3) { showToast("Username must be at least 3 characters"); return; }
+                        setUsernameLoading(true);
+                        try {
+                          await dbUpsertProfile(user.id, { username: newName });
+                          setProfile(p => ({...p, username: newName}));
+                          setEditingUsername(false);
+                          showToast("✅ Username updated!");
+                        } catch(e) { showToast("Failed: " + e.message); }
+                        setUsernameLoading(false);
+                      }}
+                      style={{padding:"10px 14px",borderRadius:10,background:GREEN,color:"white",
+                        border:"none",fontWeight:700,fontSize:13,cursor:"pointer",
+                        fontFamily:"inherit",opacity:usernameLoading?0.6:1}}>
+                      {usernameLoading?"…":"Save"}
+                    </button>
+                    <button onClick={()=>setEditingUsername(false)}
+                      style={{padding:"10px 12px",borderRadius:10,border:"1.5px solid #e5e7eb",
+                        background:"white",color:"#6b7280",fontWeight:600,fontSize:13,
+                        cursor:"pointer",fontFamily:"inherit"}}>
+                      Cancel
+                    </button>
+                  </div>
+                  <div style={{fontSize:11,color:"#9ca3af",marginTop:5,paddingLeft:2}}>
+                    3–30 chars · letters, numbers, _ and . only
+                  </div>
+                </div>
+              )}
             </div>
+
             <div style={{height:1,background:"#f0f0f0"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:13,color:"#6b7280"}}>Email</span>
