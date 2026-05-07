@@ -1719,6 +1719,7 @@ export default function LoopGenApp() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   // Username edit (settings screen)
   const [editingUsername, setEditingUsername] = useState(false);
+  const [showMoreCats, setShowMoreCats] = useState(false); // More Categories panel on home
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameLoading, setUsernameLoading] = useState(false);
   const chatEndRef = useRef(null);
@@ -2276,7 +2277,7 @@ export default function LoopGenApp() {
     return ms && (catFilter==="All" || l.category===catFilter);
   });
 
-  const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles"];
+  const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Boats & Jet Skis","Miscellaneous","Freebies"];
   const currentUser = user ? (profile?.username || user.email?.split("@")[0] || "You") : "Guest";
   const isGuest = !user;
 
@@ -2411,71 +2412,113 @@ export default function LoopGenApp() {
             <span style={{fontSize:16,fontWeight:900,color:"#111",letterSpacing:"-0.3px"}}>Browse by Category</span>
             <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:700,cursor:"pointer"}}>See all ›</span>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-            {[
+
+          {/* ── Primary 6 tiles ── */}
+          {(() => {
+            const PRIMARY_CATS = [
               { cat:"Vintage & Collectibles", label:"Vintage",
-                bg:"linear-gradient(160deg,#1a0040 0%,#4c1d95 100%)",
-                glow:"#a78bfa", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&q=90",
-                imgPos:"center" },
+                bg:"linear-gradient(160deg,#1a0040 0%,#4c1d95 100%)", tintOpacity:0.50,
+                img:"https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&q=90" },
               { cat:"Electronics", label:"Tech",
-                bg:"linear-gradient(160deg,#001433 0%,#1e3a8a 100%)",
-                glow:"#60a5fa", tintOpacity:0.50,
+                bg:"linear-gradient(160deg,#001433 0%,#1e3a8a 100%)", tintOpacity:0.50,
                 img:"https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500&q=90",
                 imgPos:"center 40%" },
               { cat:"Fashion", label:"Fashion",
-                bg:"linear-gradient(160deg,#3b0019 0%,#be123c 100%)",
-                glow:"#fb7185", tintOpacity:0.50,
+                bg:"linear-gradient(160deg,#3b0019 0%,#be123c 100%)", tintOpacity:0.50,
                 img:"https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=500&q=90",
                 imgPos:"center top" },
               { cat:"Home", label:"Home",
-                bg:"linear-gradient(160deg,#1a0e00 0%,#b45309 100%)",
-                glow:"#fbbf24", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=500&q=90",
-                imgPos:"center" },
+                bg:"linear-gradient(160deg,#1a0e00 0%,#b45309 100%)", tintOpacity:0.50,
+                img:"https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=500&q=90" },
               { cat:"Sports", label:"Sports",
-                bg:"linear-gradient(160deg,#001a10 0%,#065f46 100%)",
-                glow:"#34d399", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=500&q=90",
-                imgPos:"center" },
-              { cat:"All", label:"All Items",
-                bg:"linear-gradient(160deg,#0a1a2a 0%,#1e3a5f 100%)",
-                glow:"#93c5fd", tintOpacity:0.35,
-                img:"https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=500&q=90",
-                imgPos:"center" },
-            ].map(({cat,label,bg,glow,img,imgPos,tintOpacity})=>(
-              <div key={cat} onClick={()=>{setCatF(cat);nav("explore");}}
-                style={{
-                  borderRadius:22,
-                  overflow:"hidden",
-                  cursor:"pointer",
-                  position:"relative",
-                  aspectRatio:"1/1.15",
-                  boxShadow:"0 6px 22px rgba(0,0,0,0.28)",
-                  border:"1px solid rgba(255,255,255,0.06)",
-                }}>
-                {/* Full-bleed photo */}
-                <img src={img} alt={label}
-                  style={{position:"absolute",inset:0,width:"100%",height:"100%",
-                    objectFit:"cover",objectPosition:imgPos||"center",display:"block"}}
-                  onError={e=>{e.target.style.display="none"}}/>
-                {/* Glass colour tint — per-tile opacity */}
-                <div style={{position:"absolute",inset:0,background:bg,opacity:tintOpacity||0.50}}/>
-                {/* Bottom gradient for label */}
-                <div style={{position:"absolute",bottom:0,left:0,right:0,height:"55%",
-                  background:"linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 100%)"}}/>
-                {/* Label */}
-                <div style={{position:"absolute",bottom:11,left:0,right:0,
-                  textAlign:"center",zIndex:3}}>
-                  <span style={{fontSize:14,fontWeight:900,color:"white",
-                    letterSpacing:"0.02em",
-                    textShadow:"0 2px 6px rgba(0,0,0,0.5)"}}>
-                    {label}
-                  </span>
-                </div>
+                bg:"linear-gradient(160deg,#001a10 0%,#065f46 100%)", tintOpacity:0.50,
+                img:"https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=500&q=90" },
+              { cat:"__more__", label: showMoreCats ? "Show Less ↑" : "More Categories ↓",
+                bg:"linear-gradient(160deg,#0f0f0f 0%,#1c7c45 100%)", tintOpacity:0.72,
+                img:"https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=500&q=90" },
+            ];
+            return (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+                {PRIMARY_CATS.map(({cat,label,bg,img,imgPos,tintOpacity})=>(
+                  <div key={cat}
+                    onClick={()=>{
+                      if (cat==="__more__") { setShowMoreCats(v=>!v); }
+                      else { setCatF(cat); nav("explore"); }
+                    }}
+                    style={{borderRadius:22,overflow:"hidden",cursor:"pointer",position:"relative",
+                      aspectRatio:"1/1.15",boxShadow:"0 6px 22px rgba(0,0,0,0.28)",
+                      border: cat==="__more__" && showMoreCats
+                        ? `2px solid ${GREEN}`
+                        : "1px solid rgba(255,255,255,0.06)"}}>
+                    <img src={img} alt={label}
+                      style={{position:"absolute",inset:0,width:"100%",height:"100%",
+                        objectFit:"cover",objectPosition:imgPos||"center",display:"block"}}
+                      onError={e=>{e.target.style.display="none"}}/>
+                    <div style={{position:"absolute",inset:0,background:bg,opacity:tintOpacity||0.50}}/>
+                    <div style={{position:"absolute",bottom:0,left:0,right:0,height:"55%",
+                      background:"linear-gradient(to top,rgba(0,0,0,0.80) 0%,transparent 100%)"}}/>
+                    <div style={{position:"absolute",bottom:11,left:0,right:0,textAlign:"center",zIndex:3}}>
+                      <span style={{fontSize:13,fontWeight:900,color:"white",letterSpacing:"0.01em",
+                        textShadow:"0 2px 6px rgba(0,0,0,0.6)",padding:"0 4px",display:"block",lineHeight:1.25}}>
+                        {label}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
+
+          {/* ── More Categories panel — 8 extra tiles, animated ── */}
+          {showMoreCats && (
+            <div style={{marginTop:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",
+                letterSpacing:"0.08em",marginBottom:10,paddingLeft:2}}>
+                More Categories
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+                {[
+                  { cat:"Pets",                emoji:"🐾", label:"Pets",
+                    bg:"linear-gradient(135deg,#78350f,#d97706)" },
+                  { cat:"Tickets",             emoji:"🎟️", label:"Tickets",
+                    bg:"linear-gradient(135deg,#1e1b4b,#6d28d9)" },
+                  { cat:"Music, Books & Games",emoji:"🎵", label:"Music &
+Books",
+                    bg:"linear-gradient(135deg,#0c4a6e,#0284c7)" },
+                  { cat:"Cars & Vehicles",     emoji:"🚗", label:"Cars &
+Vehicles",
+                    bg:"linear-gradient(135deg,#1c1917,#78716c)" },
+                  { cat:"Baby & Kids",         emoji:"🍼", label:"Baby &
+Kids",
+                    bg:"linear-gradient(135deg,#831843,#ec4899)" },
+                  { cat:"Boats & Jet Skis",    emoji:"⛵", label:"Boats &
+Jet Skis",
+                    bg:"linear-gradient(135deg,#0c4a6e,#0e7490)" },
+                  { cat:"Miscellaneous",       emoji:"📦", label:"Misc
+Goods",
+                    bg:"linear-gradient(135deg,#1f2937,#374151)" },
+                  { cat:"Freebies",            emoji:"🎁", label:"Freebies",
+                    bg:"linear-gradient(135deg,#14532d,#16a34a)" },
+                ].map(({cat,emoji,label,bg})=>(
+                  <div key={cat}
+                    onClick={()=>{ setCatF(cat); setShowMoreCats(false); nav("explore"); }}
+                    style={{borderRadius:16,overflow:"hidden",cursor:"pointer",position:"relative",
+                      aspectRatio:"1/1",background:bg,
+                      boxShadow:"0 4px 14px rgba(0,0,0,0.25)",
+                      display:"flex",flexDirection:"column",
+                      alignItems:"center",justifyContent:"center",gap:4,
+                      border:"1px solid rgba(255,255,255,0.08)"}}>
+                    <span style={{fontSize:26,lineHeight:1}}>{emoji}</span>
+                    <span style={{fontSize:10,fontWeight:800,color:"white",textAlign:"center",
+                      lineHeight:1.25,padding:"0 4px",
+                      textShadow:"0 1px 4px rgba(0,0,0,0.5)",whiteSpace:"pre-line"}}>
+                      {label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         {/* ── TRENDING VINTAGE ── */}
         {(() => {
@@ -3001,7 +3044,7 @@ export default function LoopGenApp() {
             <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
             <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
-              opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Baby & Kids","Free Stuff"]}/>
+              opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Boats & Jet Skis","Miscellaneous","Freebies"]}/>
             {sell.category === "Vintage & Collectibles" && (
               <FSel value={sell.sub} onChange={v=>setSell(f=>({...f,sub:v}))} ph="Subcategory"
                 opts={["","Vinyl Records","DVD / Blu-ray","Retro Games","Film Cameras","Polaroid Cameras","Cassette Tapes","Vintage Clothing","Retro Electronics","Collectible Toys","Posters & Memorabilia"]}/>
