@@ -616,7 +616,8 @@ async function dbGetListings(userId) {
   }
   return rawListings.map(l => ({
     ...l,
-    seller_username: profileMap[l.seller_id]?.username || "LoopGen User",
+    seller_username: profileMap[l.seller_id]?.username ||
+      (profileMap[l.seller_id] ? profileMap[l.seller_id].id?.slice(0,8) : null) || "LoopGen User",
     seller_avatar: profileMap[l.seller_id]?.avatar_url || null,
     is_saved: savedSet.has(l.id),
     image_urls: l.image_urls || [], tags: l.tags || [], time: timeSince(l.created_at),
@@ -1701,6 +1702,7 @@ export default function LoopGenApp() {
   const fileInputRef = useRef(null);
   const listingsLoaded = useRef(false);
   const realtimeSub = useRef(null);
+  const authInitialised = useRef(false); // guards against double-init on mount
 
   // ── T2: Auto-merge tags when title/category/condition change ────────────────
   useEffect(() => {
@@ -1733,7 +1735,12 @@ export default function LoopGenApp() {
 
   useEffect(() => {
     if (!supabase) return;
+
+    // Step 1 — restore any persisted session exactly once on mount.
+    // We do this ourselves via getSession() so we can set sessionReady
+    // synchronously and avoid the listener double-firing on startup.
     supabase.auth.getSession().then(({ data: { session } }) => {
+      authInitialised.current = true;
       if (session?.user) {
         setUser(session.user);
         loadProfile(session.user.id);
@@ -1743,26 +1750,36 @@ export default function LoopGenApp() {
       }
       setSessionReady(true);
     });
+
+    // Step 2 — listen for changes that happen AFTER the initial restore.
+    // INITIAL_SESSION is skipped because authInitialised guards it.
+    // TOKEN_REFRESHED is skipped — it doesn't change who's logged in.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Ignore TOKEN_REFRESHED and other non-login/logout events to avoid race
-      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
-        if (session?.user) {
-          setUser(session.user);
-          loadProfile(session.user.id);
-        }
-      } else if (event === "SIGNED_OUT") {
-        setUser(null); setProfile(null);
-        // Only navigate away if already past the auth screen
+      // Always skip until getSession() has run — avoids double init race
+      if (!authInitialised.current) return;
+
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+        setProfile(null);
         setScreen(s => (s !== "auth" && s !== "splash") ? "splash" : s);
-      } else if (event === "INITIAL_SESSION") {
+        setSessionReady(true);
+      } else if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
+        // TOKEN_REFRESHED: token silently rotated, user object unchanged — ignore
+        // INITIAL_SESSION: already handled by getSession() above — ignore
+      } else if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        // Fires when handleAuth() calls signInWithPassword / signUp.
+        // handleAuth() already called setUser + loadProfile directly,
+        // so we only need to handle the case where handleAuth is NOT the caller
+        // (e.g. magic link or OAuth callback).
         if (session?.user) {
           setUser(session.user);
-          loadProfile(session.user.id);
-        } else {
-          setUser(null); setProfile(null);
+          // Don't call loadProfile here — handleAuth already did it,
+          // and calling it again can overwrite a freshly-saved username.
+          // Instead just refresh profile state if we don't have it yet.
+          setProfile(p => p ?? null);
         }
+        setSessionReady(true);
       }
-      setSessionReady(true);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -1834,16 +1851,17 @@ export default function LoopGenApp() {
 
   async function loadProfile(uid) {
     const p = await dbGetProfile(uid);
-    if (p && p.username) {
+    if (p) {
+      // Profile row exists — always use whatever username is stored, never overwrite
       setProfile(p);
     } else {
-      // Auto-create/fix profile — derive username from email
-      const { data: { user: authUser } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
-      const email = authUser?.email || "";
-      // Strip everything from @ and clean to alphanumeric + underscores
-      const username = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") || "user";
+      // No profile row yet — create one with email-derived username as fallback.
+      // This only runs for brand-new users who somehow bypassed registration.
+      const { data: authData } = supabase ? await supabase.auth.getUser() : { data: {} };
+      const email = authData?.user?.email || "";
+      const username = email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").replace(/_+$/g, "") || "user";
       await dbUpsertProfile(uid, { username, avatar_url: null });
-      setProfile({ id: uid, username, ...(p || {}) });
+      setProfile({ id: uid, username });
     }
   }
 
@@ -1889,9 +1907,15 @@ export default function LoopGenApp() {
         const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         if (data.user && data.session) {
-          // Email confirmation OFF — user is fully signed in immediately
-          await dbUpsertProfile(data.user.id, { username: authForm.username || authForm.email.split("@")[0] });
+          // Email confirmation OFF — user is fully signed in immediately.
+          // Save the exact username the user typed (trimmed). Never derive from email here.
+          const chosenUsername = authForm.username.trim() ||
+            authForm.email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").replace(/_+$/g, "") || "user";
+          await dbUpsertProfile(data.user.id, { username: chosenUsername, avatar_url: null });
+          // Immediately set profile in state — do NOT call loadProfile which might
+          // race and overwrite with an email-derived name before the DB write lands.
           setUser(data.user);
+          setProfile({ id: data.user.id, username: chosenUsername });
           showToast("🎉 Account created! Welcome to LoopGen.");
           nav("home");
         } else if (data.user && !data.session) {
@@ -2044,7 +2068,8 @@ export default function LoopGenApp() {
       if (user && supabase) {
         await dbCreateListing(listing, user.id);
         showToast("🎉 Listed! Your item is live.");
-        await loadListings();
+        listingsLoaded.current = false; // force a full refresh
+        await loadListings({ force: true });
       } else {
         // Demo mode — add locally
         const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
