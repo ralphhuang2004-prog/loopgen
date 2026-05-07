@@ -2478,26 +2478,21 @@ export default function LoopGenApp() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
                 {[
-                  { cat:"Pets",                emoji:"🐾", label:"Pets",
+                  { cat:"Pets",                 emoji:"🐾", label:"Pets",
                     bg:"linear-gradient(135deg,#78350f,#d97706)" },
-                  { cat:"Tickets",             emoji:"🎟️", label:"Tickets",
+                  { cat:"Tickets",              emoji:"🎟️", label:"Tickets",
                     bg:"linear-gradient(135deg,#1e1b4b,#6d28d9)" },
-                  { cat:"Music, Books & Games",emoji:"🎵", label:"Music &
-Books",
+                  { cat:"Music, Books & Games", emoji:"🎵", label:"Music & Books",
                     bg:"linear-gradient(135deg,#0c4a6e,#0284c7)" },
-                  { cat:"Cars & Vehicles",     emoji:"🚗", label:"Cars &
-Vehicles",
+                  { cat:"Cars & Vehicles",      emoji:"🚗", label:"Cars & Vehicles",
                     bg:"linear-gradient(135deg,#1c1917,#78716c)" },
-                  { cat:"Baby & Kids",         emoji:"🍼", label:"Baby &
-Kids",
+                  { cat:"Baby & Kids",          emoji:"🍼", label:"Baby & Kids",
                     bg:"linear-gradient(135deg,#831843,#ec4899)" },
-                  { cat:"Boats & Jet Skis",    emoji:"⛵", label:"Boats &
-Jet Skis",
+                  { cat:"Boats & Jet Skis",     emoji:"⛵", label:"Boats & Jet Skis",
                     bg:"linear-gradient(135deg,#0c4a6e,#0e7490)" },
-                  { cat:"Miscellaneous",       emoji:"📦", label:"Misc
-Goods",
+                  { cat:"Miscellaneous",        emoji:"📦", label:"Misc Goods",
                     bg:"linear-gradient(135deg,#1f2937,#374151)" },
-                  { cat:"Freebies",            emoji:"🎁", label:"Freebies",
+                  { cat:"Freebies",             emoji:"🎁", label:"Freebies",
                     bg:"linear-gradient(135deg,#14532d,#16a34a)" },
                 ].map(({cat,emoji,label,bg})=>(
                   <div key={cat}
@@ -2511,7 +2506,7 @@ Goods",
                     <span style={{fontSize:26,lineHeight:1}}>{emoji}</span>
                     <span style={{fontSize:10,fontWeight:800,color:"white",textAlign:"center",
                       lineHeight:1.25,padding:"0 4px",
-                      textShadow:"0 1px 4px rgba(0,0,0,0.5)",whiteSpace:"pre-line"}}>
+                      textShadow:"0 1px 4px rgba(0,0,0,0.5)"}}>
                       {label}
                     </span>
                   </div>
