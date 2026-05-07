@@ -2478,21 +2478,21 @@ export default function LoopGenApp() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
                 {[
-                  { cat:"Pets",                 emoji:"🐾", label:"Pets",
+                  { cat:"Pets",                 emoji:"\uD83D\uDC3E", label:"Pets",
                     bg:"linear-gradient(135deg,#78350f,#d97706)" },
-                  { cat:"Tickets",              emoji:"🎟️", label:"Tickets",
+                  { cat:"Tickets",              emoji:"\uD83C\uDF9F️", label:"Tickets",
                     bg:"linear-gradient(135deg,#1e1b4b,#6d28d9)" },
-                  { cat:"Music, Books & Games", emoji:"🎵", label:"Music & Books",
+                  { cat:"Music, Books & Games", emoji:"\uD83C\uDFB5", label:"Music & Books",
                     bg:"linear-gradient(135deg,#0c4a6e,#0284c7)" },
-                  { cat:"Cars & Vehicles",      emoji:"🚗", label:"Cars & Vehicles",
+                  { cat:"Cars & Vehicles",      emoji:"\uD83D\uDE97", label:"Cars & Vehicles",
                     bg:"linear-gradient(135deg,#1c1917,#78716c)" },
-                  { cat:"Baby & Kids",          emoji:"🍼", label:"Baby & Kids",
+                  { cat:"Baby & Kids",          emoji:"\uD83C\uDF7C", label:"Baby & Kids",
                     bg:"linear-gradient(135deg,#831843,#ec4899)" },
-                  { cat:"Boats & Jet Skis",     emoji:"⛵", label:"Boats & Jet Skis",
+                  { cat:"Boats & Jet Skis",     emoji:"\u26F5", label:"Boats & Jet Skis",
                     bg:"linear-gradient(135deg,#0c4a6e,#0e7490)" },
-                  { cat:"Miscellaneous",        emoji:"📦", label:"Misc Goods",
+                  { cat:"Miscellaneous",        emoji:"\uD83D\uDCE6", label:"Misc Goods",
                     bg:"linear-gradient(135deg,#1f2937,#374151)" },
-                  { cat:"Freebies",             emoji:"🎁", label:"Freebies",
+                  { cat:"Freebies",             emoji:"\uD83C\uDF81", label:"Freebies",
                     bg:"linear-gradient(135deg,#14532d,#16a34a)" },
                 ].map(({cat,emoji,label,bg})=>(
                   <div key={cat}
@@ -2530,7 +2530,7 @@ export default function LoopGenApp() {
               {/* Category banner */}
               <div style={{margin:"0 16px 12px",borderRadius:18,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
                 <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(255,255,255,0.07)"}}/>
-                <div style={{fontSize:28}}>🎵</div>
+                <div style={{fontSize:28}}>\uD83C\uDFB5</div>
                 <div>
                   <div style={{color:"white",fontWeight:800,fontSize:13,letterSpacing:0.2}}>Vintage & Collectibles</div>
                   <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
@@ -3243,7 +3243,7 @@ export default function LoopGenApp() {
             <div style={{background:"white",borderRadius:20,overflow:"hidden",boxShadow:"0 3px 16px rgba(0,0,0,0.09)",marginBottom:16}}>
               {sellImages.length > 0
                 ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:160,objectFit:"cover"}}/>
-                : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>📦</div>
+                : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>\uD83D\uDCE6</div>
               }
               <div style={{padding:16}}>
                 <div style={{fontWeight:800,fontSize:22,color:"#111"}}>{sell.price?`$${sell.price}`:"$—"}</div>
@@ -3392,7 +3392,7 @@ export default function LoopGenApp() {
             </>
           ) : (
             [
-              ["My Listings",      "📦", ()=>push("my-listings")],
+              ["My Listings",      "\uD83D\uDCE6", ()=>push("my-listings")],
               ["Saved Items",      "❤️", ()=>push("saved-items")],
               ["Account Settings", "⚙️", ()=>push("settings")],
               ["Reviews",          "⭐", ()=>showToast("Reviews coming after beta 🌟")],
@@ -3449,7 +3449,7 @@ export default function LoopGenApp() {
       <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88}}>
         {userListings.length === 0 ? (
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:60,gap:14}}>
-            <div style={{fontSize:44}}>📦</div>
+            <div style={{fontSize:44}}>\uD83D\uDCE6</div>
             <div style={{fontWeight:700,fontSize:16,color:"#111"}}>No listings yet</div>
             <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Tap the + button to sell your first item</div>
             <GreenBtn onClick={()=>nav("sell")} mt={8} style={{width:"auto",padding:"13px 28px"}}>Start Selling</GreenBtn>
@@ -3646,7 +3646,7 @@ export default function LoopGenApp() {
         {/* Notifications — post-beta stub */}
         <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Notifications</div>
-          {[["New messages","💬",true],["Listing activity","📦",true],["Promotions","🎉",false]].map(([label,icon,def],i,arr) => (
+          {[["New messages","💬",true],["Listing activity","\uD83D\uDCE6",true],["Promotions","🎉",false]].map(([label,icon,def],i,arr) => (
             <div key={label}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
