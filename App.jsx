@@ -600,13 +600,34 @@ const DEMO_CONVOS = [
 
 async function dbGetListings(userId) {
   if (!supabase) return [...DEMO_VINTAGE, ...DEMO_LISTINGS];
-  // Single query: join profiles via FK so username is always fresh
+
+  // Step 1: fetch all active listings (requires public SELECT policy on listings table)
   const { data: rawListings, error } = await supabase
     .from("listings")
-    .select("*, seller:seller_id(id, username, avatar_url)")
+    .select("*")
     .eq("status", "active")
     .order("created_at", { ascending: false });
-  if (error || !rawListings || rawListings.length === 0) return [];
+
+  if (error) {
+    console.error("[LoopGen] dbGetListings error:", error.message,
+      "\n→ Check Supabase RLS: listings table needs a public SELECT policy.");
+    return [];
+  }
+  if (!rawListings || rawListings.length === 0) return [];
+
+  // Step 2: fetch profiles for all unique seller_ids in one query
+  const sellerIds = [...new Set(rawListings.map(l => l.seller_id).filter(Boolean))];
+  let profileMap = {};
+  if (sellerIds.length > 0) {
+    const { data: profiles, error: pErr } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", sellerIds);
+    if (pErr) console.error("[LoopGen] profiles fetch error:", pErr.message);
+    (profiles || []).forEach(p => { profileMap[p.id] = p; });
+  }
+
+  // Step 3: fetch saved state for the current user
   let savedSet = new Set();
   if (userId) {
     const { data: saved } = await supabase
@@ -614,12 +635,15 @@ async function dbGetListings(userId) {
       .in("listing_id", rawListings.map(l => l.id));
     (saved || []).forEach(s => savedSet.add(s.listing_id));
   }
+
   return rawListings.map(l => ({
     ...l,
-    seller_username: l.seller?.username || null,
-    seller_avatar:   l.seller?.avatar_url || null,
+    seller_username: profileMap[l.seller_id]?.username || null,
+    seller_avatar:   profileMap[l.seller_id]?.avatar_url || null,
     is_saved: savedSet.has(l.id),
-    image_urls: l.image_urls || [], tags: l.tags || [], time: timeSince(l.created_at),
+    image_urls: l.image_urls || [],
+    tags: l.tags || [],
+    time: timeSince(l.created_at),
   }));
 }
 
@@ -1837,8 +1861,13 @@ export default function LoopGenApp() {
     setListingsLoading(true);
     try {
       const data = await dbGetListings(user?.id);
-      const hasVintage = data.some(l => l.category === "Vintage & Collectibles");
-      setListings(hasVintage ? data : [...DEMO_VINTAGE, ...data]);
+      // Always show real DB listings first. Only pad with demo Vintage items
+      // when the DB is completely empty so the feed never looks blank.
+      if (data.length === 0) {
+        setListings([...DEMO_VINTAGE, ...DEMO_LISTINGS]);
+      } else {
+        setListings(data);
+      }
       listingsLoaded.current = true;
     } catch (err) {
       console.error("loadListings:", err);
