@@ -2530,7 +2530,7 @@ export default function LoopGenApp() {
               {/* Category banner */}
               <div style={{margin:"0 16px 12px",borderRadius:18,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
                 <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(255,255,255,0.07)"}}/>
-                <div style={{fontSize:28}}>🎵</div>
+                <div style={{fontSize:28}}>{String.fromCodePoint(0x1F3B5)}</div>
                 <div>
                   <div style={{color:"white",fontWeight:800,fontSize:13,letterSpacing:0.2}}>Vintage & Collectibles</div>
                   <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
@@ -2660,7 +2660,7 @@ export default function LoopGenApp() {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{textAlign:"center",color:"#9ca3af",fontSize:14,paddingTop:60}}>
-            <div style={{fontSize:40,marginBottom:12}}>🔍</div>
+            <div style={{fontSize:40,marginBottom:12}}>{String.fromCodePoint(0x1F50D)}</div>
             <div style={{fontWeight:700,color:"#374151",fontSize:15,marginBottom:6}}>No listings found</div>
             <div style={{fontSize:13}}>{search ? `Try a different search term` : `Nothing in ${catFilter} yet`}</div>
           </div>
@@ -3243,7 +3243,7 @@ export default function LoopGenApp() {
             <div style={{background:"white",borderRadius:20,overflow:"hidden",boxShadow:"0 3px 16px rgba(0,0,0,0.09)",marginBottom:16}}>
               {sellImages.length > 0
                 ? <img src={sellImages[0]} alt="preview" style={{width:"100%",height:160,objectFit:"cover"}}/>
-                : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>📦</div>
+                : <div style={{background:"#f3f4f6",height:160,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52}}>{String.fromCodePoint(0x1F4E6)}</div>
               }
               <div style={{padding:16}}>
                 <div style={{fontWeight:800,fontSize:22,color:"#111"}}>{sell.price?`$${sell.price}`:"$—"}</div>
@@ -3283,7 +3283,7 @@ export default function LoopGenApp() {
       </div>
       {isGuest ? (
         <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 28px",gap:16}}>
-          <div style={{fontSize:52}}>💬</div>
+          <div style={{fontSize:52}}>{String.fromCodePoint(0x1F4AC)}</div>
           <div style={{fontWeight:800,fontSize:18,color:"#111",textAlign:"center"}}>Chat with sellers</div>
           <div style={{fontSize:14,color:"#9ca3af",textAlign:"center",lineHeight:1.6}}>Sign in to message sellers and buyers, and get notified when someone's interested in your items.</div>
           <GreenBtn onClick={()=>push("auth")} mt={4}>Sign In to Message</GreenBtn>
@@ -3293,7 +3293,7 @@ export default function LoopGenApp() {
         <div style={{flex:1,overflowY:"auto",padding:"0 16px",display:"flex",flexDirection:"column",gap:8,paddingBottom:78}}>
           {convos.length === 0 ? (
             <div style={{textAlign:"center",padding:"52px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
-              <div style={{fontSize:48}}>📭</div>
+              <div style={{fontSize:48}}>{String.fromCodePoint(0x1F4ED)}</div>
               <div style={{fontWeight:700,fontSize:16,color:"#111"}}>No messages yet</div>
               <div style={{fontSize:13,color:"#9ca3af",lineHeight:1.6}}>Find something you like and tap<br/>"Message Seller" to start a chat</div>
               <button onClick={()=>nav("explore")} style={{marginTop:4,padding:"13px 24px",borderRadius:50,background:GREEN,border:"none",color:"white",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:`0 6px 18px ${GREEN}44`}}>Browse Listings</button>
@@ -3449,7 +3449,7 @@ export default function LoopGenApp() {
       <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88}}>
         {userListings.length === 0 ? (
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:60,gap:14}}>
-            <div style={{fontSize:44}}>📦</div>
+            <div style={{fontSize:44}}>{String.fromCodePoint(0x1F4E6)}</div>
             <div style={{fontWeight:700,fontSize:16,color:"#111"}}>No listings yet</div>
             <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Tap the + button to sell your first item</div>
             <GreenBtn onClick={()=>nav("sell")} mt={8} style={{width:"auto",padding:"13px 28px"}}>Start Selling</GreenBtn>
@@ -3524,7 +3524,7 @@ export default function LoopGenApp() {
       <div style={{flex:1,overflowY:"auto",padding:"0 20px",paddingBottom:88}}>
         {savedListings.length === 0 ? (
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:60,gap:14}}>
-            <div style={{fontSize:44}}>🤍</div>
+            <div style={{fontSize:44}}>{String.fromCodePoint(0x1FA76)}</div>
             <div style={{fontWeight:700,fontSize:16,color:"#111"}}>Nothing saved yet</div>
             <div style={{fontSize:13,color:"#9ca3af",textAlign:"center"}}>Tap the heart on any listing to save it</div>
             <GreenBtn onClick={()=>nav("explore")} mt={8} style={{width:"auto",padding:"13px 28px"}}>Browse Listings</GreenBtn>
