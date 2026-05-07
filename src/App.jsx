@@ -600,25 +600,24 @@ const DEMO_CONVOS = [
 
 async function dbGetListings(userId) {
   if (!supabase) return [...DEMO_VINTAGE, ...DEMO_LISTINGS];
+  // Single query: join profiles via FK so username is always fresh
   const { data: rawListings, error } = await supabase
-    .from("listings").select("*").eq("status", "active").order("created_at", { ascending: false });
+    .from("listings")
+    .select("*, seller:seller_id(id, username, avatar_url)")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
   if (error || !rawListings || rawListings.length === 0) return [];
-  const sellerIds = [...new Set(rawListings.map(l => l.seller_id).filter(Boolean))];
-  let profileMap = {};
-  if (sellerIds.length > 0) {
-    const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", sellerIds);
-    (profiles || []).forEach(p => { profileMap[p.id] = p; });
-  }
   let savedSet = new Set();
   if (userId) {
-    const { data: saved } = await supabase.from("saved_items").select("listing_id").eq("user_id", userId).in("listing_id", rawListings.map(l => l.id));
+    const { data: saved } = await supabase
+      .from("saved_items").select("listing_id").eq("user_id", userId)
+      .in("listing_id", rawListings.map(l => l.id));
     (saved || []).forEach(s => savedSet.add(s.listing_id));
   }
   return rawListings.map(l => ({
     ...l,
-    seller_username: profileMap[l.seller_id]?.username ||
-      (profileMap[l.seller_id] ? profileMap[l.seller_id].id?.slice(0,8) : null) || "LoopGen User",
-    seller_avatar: profileMap[l.seller_id]?.avatar_url || null,
+    seller_username: l.seller?.username || null,
+    seller_avatar:   l.seller?.avatar_url || null,
     is_saved: savedSet.has(l.id),
     image_urls: l.image_urls || [], tags: l.tags || [], time: timeSince(l.created_at),
   }));
@@ -1985,7 +1984,32 @@ export default function LoopGenApp() {
     });
   };
 
-  const openDetail = item => { setDetail(item); push("detail"); };
+  const openDetail = async (item) => {
+    // If seller_username is missing, fetch it fresh from profiles
+    let enriched = { ...item };
+    if (!enriched.seller_username && enriched.seller_id && supabase) {
+      try {
+        const { data: p } = await supabase
+          .from("profiles").select("id, username, avatar_url")
+          .eq("id", enriched.seller_id).maybeSingle();
+        if (p?.username) {
+          enriched.seller_username = p.username;
+          enriched.seller_avatar   = p.avatar_url || null;
+          // Update the cached listing too so subsequent opens are instant
+          setListings(ls => ls.map(l => l.id === item.id
+            ? { ...l, seller_username: p.username, seller_avatar: p.avatar_url || null }
+            : l
+          ));
+        }
+      } catch { /* non-critical — show whatever we have */ }
+    }
+    // If still missing and it's the logged-in user's own listing, use their profile
+    if (!enriched.seller_username && user && enriched.seller_id === user.id && profile?.username) {
+      enriched.seller_username = profile.username;
+    }
+    setDetail(enriched);
+    push("detail");
+  };
 
   // ── Sell / Photo upload ───────────────────────────────
   async function handlePhotoSelect(e) {
@@ -2066,8 +2090,21 @@ export default function LoopGenApp() {
         seller_id: user?.id,
       };
       if (user && supabase) {
-        await dbCreateListing(listing, user.id);
+        const created = await dbCreateListing(listing, user.id);
         showToast("🎉 Listed! Your item is live.");
+        // Optimistically prepend with correct username before DB refresh
+        if (created) {
+          const optimistic = {
+            ...created,
+            seller_username: profile?.username || currentUser,
+            seller_avatar: profile?.avatar_url || null,
+            image_urls: created.image_urls || [],
+            tags: created.tags || [],
+            time: "Just now",
+            is_saved: false,
+          };
+          setListings(ls => [optimistic, ...ls]);
+        }
         listingsLoaded.current = false; // force a full refresh
         await loadListings({ force: true });
       } else {
@@ -2660,12 +2697,16 @@ export default function LoopGenApp() {
                       background:`linear-gradient(135deg,${GREEN},#22c55e)`,
                       display:"flex",alignItems:"center",justifyContent:"center",
                       color:"white",fontWeight:900,fontSize:18,flexShrink:0}}>
-                      {(detail.seller_username||"U")[0].toUpperCase()}
+                      {(detail.seller_username ||
+                        (detail.seller_id === user?.id ? (profile?.username || currentUser) : null) ||
+                        "U")[0].toUpperCase()}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:7}}>
                         <span style={{fontWeight:800,fontSize:15,color:"#0f0f0f"}}>
-                          {detail.seller_username || "Seller"}
+                          {detail.seller_username ||
+                            (detail.seller_id === user?.id ? (profile?.username || currentUser) : null) ||
+                            "Seller"}
                         </span>
                         <span style={{background:"rgba(26,107,58,0.09)",color:GREEN,
                           fontSize:9,fontWeight:800,padding:"2px 7px",
