@@ -2479,37 +2479,51 @@ export default function LoopGenApp() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
                 {[
                   { cat:"Pets",                 label:"Pets",
-                    bg:"linear-gradient(160deg,#2d1000 0%,#92400e 100%)" },
+                    bg:"linear-gradient(160deg,#c4a090 0%,#ddc0b0 100%)",
+                    img:"https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Tickets",              label:"Tickets",
-                    bg:"linear-gradient(160deg,#1e1b4b 0%,#6d28d9 100%)" },
+                    bg:"linear-gradient(160deg,#a090c8 0%,#c8b8e8 100%)",
+                    img:"https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Music, Books & Games", label:"Music & Books",
-                    bg:"linear-gradient(160deg,#001220 0%,#0369a1 100%)" },
+                    bg:"linear-gradient(160deg,#7a9fb8 0%,#aacce0 100%)",
+                    img:"https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Cars & Vehicles",      label:"Cars",
-                    bg:"linear-gradient(160deg,#0c0c0c 0%,#44403c 100%)" },
+                    bg:"linear-gradient(160deg,#8a8580 0%,#b8b3ae 100%)",
+                    img:"https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Baby & Kids",          label:"Baby & Kids",
-                    bg:"linear-gradient(160deg,#4a0020 0%,#be185d 100%)" },
+                    bg:"linear-gradient(160deg,#c87890 0%,#e8a8b8 100%)",
+                    img:"https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Boats & Jet Skis",     label:"Boats",
-                    bg:"linear-gradient(160deg,#001a2e 0%,#0e7490 100%)" },
+                    bg:"linear-gradient(160deg,#7aaab8 0%,#aaccd8 100%)",
+                    img:"https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Miscellaneous",        label:"Misc Goods",
-                    bg:"linear-gradient(160deg,#111827 0%,#374151 100%)" },
+                    bg:"linear-gradient(160deg,#8a9aa8 0%,#b8c8d5 100%)",
+                    img:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=340&fit=crop&auto=format&q=80" },
                   { cat:"Freebies",             label:"Freebies",
-                    bg:"linear-gradient(160deg,#052e16 0%,#15803d 100%)" },
-                ].map(({cat,label,bg})=>(
+                    bg:"linear-gradient(160deg,#80a888 0%,#aacca8 100%)",
+                    img:"https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=300&h=340&fit=crop&auto=format&q=80" },
+                ].map(({cat,label,bg,img})=>(
                   <div key={cat}
                     onClick={()=>{ setCatF(cat); setShowMoreCats(false); nav("explore"); }}
                     style={{borderRadius:18,overflow:"hidden",cursor:"pointer",position:"relative",
                       aspectRatio:"1/1.15",background:bg,
-                      boxShadow:"0 5px 18px rgba(0,0,0,0.30)",
+                      boxShadow:"0 4px 14px rgba(0,0,0,0.18)",
                       border:"1px solid rgba(255,255,255,0.06)"}}>
+                    {/* Photo — luminosity blend preserves gradient colour, adds texture */}
+                    <img src={img} alt={label}
+                      style={{position:"absolute",inset:0,width:"100%",height:"100%",
+                        objectFit:"cover",objectPosition:"center",display:"block",
+                        mixBlendMode:"luminosity",opacity:0.90}}
+                      onError={e=>{e.target.style.display="none"}}/>
                     {/* Bottom gradient for label legibility */}
-                    <div style={{position:"absolute",bottom:0,left:0,right:0,height:"58%",
-                      background:"linear-gradient(to top,rgba(0,0,0,0.60) 0%,transparent 100%)"}}/>
+                    <div style={{position:"absolute",bottom:0,left:0,right:0,height:"45%",
+                      background:"linear-gradient(to top,rgba(0,0,0,0.45) 0%,transparent 100%)"}}/>
                     {/* Label */}
                     <div style={{position:"absolute",bottom:8,left:0,right:0,
-                      textAlign:"center",zIndex:3,padding:"0 3px"}}>
-                      <span style={{fontSize:10,fontWeight:900,color:"white",
+                      textAlign:"center",zIndex:3,padding:"0 4px"}}>
+                      <span style={{fontSize:13,fontWeight:900,color:"white",
                         letterSpacing:"0.01em",lineHeight:1.2,display:"block",
-                        textShadow:"0 1px 5px rgba(0,0,0,0.7)"}}>
+                        textShadow:"0 1px 4px rgba(0,0,0,0.5)"}}>
                         {label}
                       </span>
                     </div>
