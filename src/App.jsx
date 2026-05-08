@@ -2469,7 +2469,7 @@ export default function LoopGenApp() {
             );
           })()}
 
-          {/* ── More Categories panel — 8 extra tiles, animated ── */}
+          {/* ── More Categories panel — 8 extra photo tiles matching primary style ── */}
           {showMoreCats && (
             <div style={{marginTop:12}}>
               <div style={{fontSize:12,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",
@@ -2478,37 +2478,41 @@ export default function LoopGenApp() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
                 {[
-                  { cat:"Pets",                 emoji:"🐾", label:"Pets",
-                    bg:"linear-gradient(135deg,#78350f,#d97706)" },
-                  { cat:"Tickets",              emoji:"🎟️", label:"Tickets",
-                    bg:"linear-gradient(135deg,#1e1b4b,#6d28d9)" },
-                  { cat:"Music, Books & Games", emoji:"🎵", label:"Music & Books",
-                    bg:"linear-gradient(135deg,#0c4a6e,#0284c7)" },
-                  { cat:"Cars & Vehicles",      emoji:"🚗", label:"Cars & Vehicles",
-                    bg:"linear-gradient(135deg,#1c1917,#78716c)" },
-                  { cat:"Baby & Kids",          emoji:"🍼", label:"Baby & Kids",
-                    bg:"linear-gradient(135deg,#831843,#ec4899)" },
-                  { cat:"Boats & Jet Skis",     emoji:"⛵", label:"Boats & Jet Skis",
-                    bg:"linear-gradient(135deg,#0c4a6e,#0e7490)" },
-                  { cat:"Miscellaneous",        emoji:"📦", label:"Misc Goods",
-                    bg:"linear-gradient(135deg,#1f2937,#374151)" },
-                  { cat:"Freebies",             emoji:"🎁", label:"Freebies",
-                    bg:"linear-gradient(135deg,#14532d,#16a34a)" },
-                ].map(({cat,emoji,label,bg})=>(
+                  { cat:"Pets",                 label:"Pets",
+                    bg:"linear-gradient(160deg,#2d1000 0%,#92400e 100%)" },
+                  { cat:"Tickets",              label:"Tickets",
+                    bg:"linear-gradient(160deg,#1e1b4b 0%,#6d28d9 100%)" },
+                  { cat:"Music, Books & Games", label:"Music & Books",
+                    bg:"linear-gradient(160deg,#001220 0%,#0369a1 100%)" },
+                  { cat:"Cars & Vehicles",      label:"Cars",
+                    bg:"linear-gradient(160deg,#0c0c0c 0%,#44403c 100%)" },
+                  { cat:"Baby & Kids",          label:"Baby & Kids",
+                    bg:"linear-gradient(160deg,#4a0020 0%,#be185d 100%)" },
+                  { cat:"Boats & Jet Skis",     label:"Boats",
+                    bg:"linear-gradient(160deg,#001a2e 0%,#0e7490 100%)" },
+                  { cat:"Miscellaneous",        label:"Misc Goods",
+                    bg:"linear-gradient(160deg,#111827 0%,#374151 100%)" },
+                  { cat:"Freebies",             label:"Freebies",
+                    bg:"linear-gradient(160deg,#052e16 0%,#15803d 100%)" },
+                ].map(({cat,label,bg})=>(
                   <div key={cat}
                     onClick={()=>{ setCatF(cat); setShowMoreCats(false); nav("explore"); }}
-                    style={{borderRadius:16,overflow:"hidden",cursor:"pointer",position:"relative",
-                      aspectRatio:"1/1",background:bg,
-                      boxShadow:"0 4px 14px rgba(0,0,0,0.25)",
-                      display:"flex",flexDirection:"column",
-                      alignItems:"center",justifyContent:"center",gap:4,
-                      border:"1px solid rgba(255,255,255,0.08)"}}>
-                    <span style={{fontSize:26,lineHeight:1}}>{emoji}</span>
-                    <span style={{fontSize:10,fontWeight:800,color:"white",textAlign:"center",
-                      lineHeight:1.25,padding:"0 4px",
-                      textShadow:"0 1px 4px rgba(0,0,0,0.5)"}}>
-                      {label}
-                    </span>
+                    style={{borderRadius:18,overflow:"hidden",cursor:"pointer",position:"relative",
+                      aspectRatio:"1/1.15",background:bg,
+                      boxShadow:"0 5px 18px rgba(0,0,0,0.30)",
+                      border:"1px solid rgba(255,255,255,0.06)"}}>
+                    {/* Bottom gradient for label legibility */}
+                    <div style={{position:"absolute",bottom:0,left:0,right:0,height:"58%",
+                      background:"linear-gradient(to top,rgba(0,0,0,0.60) 0%,transparent 100%)"}}/>
+                    {/* Label */}
+                    <div style={{position:"absolute",bottom:8,left:0,right:0,
+                      textAlign:"center",zIndex:3,padding:"0 3px"}}>
+                      <span style={{fontSize:10,fontWeight:900,color:"white",
+                        letterSpacing:"0.01em",lineHeight:1.2,display:"block",
+                        textShadow:"0 1px 5px rgba(0,0,0,0.7)"}}>
+                        {label}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
