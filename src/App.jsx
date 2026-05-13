@@ -2817,8 +2817,6 @@ export default function LoopGenApp() {
     return (
       <Phone>
         <BottomNav active="home" onNav={nav}/>
-        <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden",position:"relative"}}>
-        <div className="lg-content-scroll" style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
 
           {/* ── Full-bleed image hero ── */}
           <div style={{position:"relative",height:300,overflow:"hidden",borderRadius:"0 0 28px 28px",boxShadow:"0 8px 32px rgba(0,0,0,0.14)"}}>
@@ -2979,8 +2977,6 @@ export default function LoopGenApp() {
             })()}
           </div>
         </div>
-        </div>{/* end lg-content-scroll */}
-
         {/* ── Sticky CTA bar ── */}
         {(() => {
           // Own listing check — works in both Supabase mode (by user.id) and demo mode (by username)
@@ -3084,7 +3080,6 @@ export default function LoopGenApp() {
             showToast("Report submitted. Thank you.");
           }}
         />
-        </div>{/* end lg-content */}
       </Phone>
     );
   }
