@@ -950,8 +950,7 @@ function Phone({ children }) {
             display:flex; flex-direction:column;
             overflow-y:auto; overflow-x:hidden;
             height:100vh;
-          }
-          .lg-bottom-nav { display:none !important; }
+          }          .lg-bottom-nav { display:none !important; }
           .lg-content-scroll { padding-bottom:32px !important; }
 
           /* Explore: 2-column listing grid */
@@ -2407,6 +2406,8 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "auth") return (
     <Phone>
+      <BottomNav active="home" onNav={nav}/>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px",display:"flex",flexDirection:"column"}}>
@@ -2462,6 +2463,8 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "home") return (
     <Phone>
+      <BottomNav active="chats" onNav={nav}/>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{flex:1,overflowY:"auto",paddingBottom:84}}>
@@ -2731,8 +2734,8 @@ export default function LoopGenApp() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -2741,6 +2744,8 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "explore") return (
     <Phone>
+      <BottomNav active="explore" onNav={nav}/>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       {/* Search */}
@@ -2797,8 +2802,8 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="explore" onNav={nav}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -2810,6 +2815,8 @@ export default function LoopGenApp() {
     const demoSeller = DEMO_SELLERS[detail.seller_username];
     return (
       <Phone>
+        <BottomNav active="home" onNav={nav}/>
+        <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
         <div className="lg-content-scroll" style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
 
           {/* ── Full-bleed image hero ── */}
@@ -3076,12 +3083,14 @@ export default function LoopGenApp() {
             showToast("Report submitted. Thank you.");
           }}
         />
+        </div>{/* end lg-content */}
       </Phone>
     );
   }
   // ════════════════════════════
   if (screen === "sell") return (
     <Phone>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 16px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -3390,6 +3399,7 @@ export default function LoopGenApp() {
       </div>
       <BottomNav active="sell" onNav={nav}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3398,6 +3408,8 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "chats") return (
     <Phone>
+      <BottomNav active="profile" onNav={nav}/>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 16px 12px",flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -3445,8 +3457,8 @@ export default function LoopGenApp() {
           ))}
         </div>
       )}
-      <BottomNav active="chats" onNav={nav}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3564,6 +3576,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "my-listings") return (
     <Phone>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -3630,6 +3643,7 @@ export default function LoopGenApp() {
       <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3638,6 +3652,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "saved-items") return (
     <Phone>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -3674,8 +3689,8 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3684,6 +3699,7 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "settings") return (
     <Phone>
+      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -3840,6 +3856,7 @@ export default function LoopGenApp() {
       <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
