@@ -2325,9 +2325,9 @@ export default function LoopGenApp() {
               style={{width:16,height:16,marginTop:2,accentColor:GREEN,flexShrink:0,cursor:"pointer"}}/>
             <span style={{fontSize:12,color:"#6b7280",lineHeight:1.55}}>
               I agree to the{" "}
-              <a href="/terms" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Terms of Service</a>
+              <a href="https://www.loopgen.com.au/terms" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Terms of Service</a>
               {" "}and{" "}
-              <a href="/privacy" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Privacy Policy</a>
+              <a href="https://www.loopgen.com.au/privacy" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Privacy Policy</a>
             </span>
           </label>
         )}
@@ -2616,10 +2616,10 @@ export default function LoopGenApp() {
             LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620).
           </div>
           <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-            <a href="/terms"    style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Terms</a>
-            <a href="/privacy"  style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Privacy</a>
-            <a href="/trust"    style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Safety</a>
-            <a href="mailto:loopgensupport@gmail.com" style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
+            <a href="https://www.loopgen.com.au/terms"    style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Terms</a>
+            <a href="https://www.loopgen.com.au/privacy"  style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Privacy</a>
+            <a href="https://www.loopgen.com.au/trust"    style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Safety</a>
+            <a href="mailto:support@loopgen.com.au" style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
           </div>
         </div>
 
@@ -2824,7 +2824,7 @@ export default function LoopGenApp() {
               <span style={{fontSize:16,flexShrink:0}}>🛡️</span>
               <div style={{fontSize:11,color:"#92400e",lineHeight:1.55,flex:1}}>
                 <strong>Stay safe:</strong> Always meet in a public place. Never pay before inspecting.{" "}
-                <a href="/trust" style={{color:GREEN,fontWeight:700,textDecoration:"none"}}>Safety tips →</a>
+                <a href="https://www.loopgen.com.au/trust" style={{color:GREEN,fontWeight:700,textDecoration:"none"}}>Safety tips →</a>
               </div>
             </div>
             <button onClick={() => setReportModal({item:detail})}
@@ -3436,13 +3436,13 @@ export default function LoopGenApp() {
           </div>
           <div style={{fontSize:11,color:"#9ca3af",textAlign:"center",lineHeight:1.6}}>
             LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)<br/>
-            <a href="/terms"   style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Terms</a>
+            <a href="https://www.loopgen.com.au/terms"   style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Terms</a>
             {" · "}
-            <a href="/privacy" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Privacy</a>
+            <a href="https://www.loopgen.com.au/privacy" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Privacy</a>
             {" · "}
-            <a href="/trust"   style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Safety</a>
+            <a href="https://www.loopgen.com.au/trust"   style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Safety</a>
             {" · "}
-            <a href="mailto:loopgensupport@gmail.com" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
+            <a href="mailto:support@loopgen.com.au" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
           </div>
         </div>
       </div>
@@ -3682,11 +3682,11 @@ export default function LoopGenApp() {
         <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Legal &amp; Safety</div>
           {[
-            ["Terms of Service",    "📄", ()=>{ window.location.href="/terms"; }],
-            ["Privacy Policy",      "🔒", ()=>{ window.location.href="/privacy"; }],
-            ["Community Guidelines","🤝", ()=>{ window.location.href="/trust"; }],
-            ["Safety Tips",         "🛡️", ()=>{ window.location.href="/trust"; }],
-            ["Contact Support",     "💬", ()=>{ window.location.href="mailto:loopgensupport@gmail.com"; }],
+            ["Terms of Service",    "📄", ()=>{ window.location.href="https://www.loopgen.com.au/terms"; }],
+            ["Privacy Policy",      "🔒", ()=>{ window.location.href="https://www.loopgen.com.au/privacy"; }],
+            ["Community Guidelines","🤝", ()=>{ window.location.href="https://www.loopgen.com.au/trust"; }],
+            ["Safety Tips",         "🛡️", ()=>{ window.location.href="https://www.loopgen.com.au/trust"; }],
+            ["Contact Support",     "💬", ()=>{ window.location.href="mailto:support@loopgen.com.au"; }],
           ].map(([label,icon,action],i,arr) => (
             <div key={label}>
               <div onClick={action} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",cursor:"pointer"}}>
