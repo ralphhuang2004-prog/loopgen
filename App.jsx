@@ -917,53 +917,78 @@ function Phone({ children }) {
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
         html,body,#root{height:100%;width:100%;margin:0;padding:0;}
 
-        /* ── Mobile (default): full-width single column ── */
+        /* ── Mobile (default) ── */
         .lg-layout { display:flex; flex-direction:column; width:100%; min-height:100vh; background:white; }
         .lg-sidebar { display:none; }
         .lg-content { flex:1; display:flex; flex-direction:column; position:relative; width:100%; }
         .lg-bottom-nav { display:flex; }
-        .lg-content-scroll { padding-bottom: 88px; }
+        .lg-content-scroll { padding-bottom:88px; }
 
-        /* ── Tablet / Desktop (>= 768px): sidebar + content ── */
+        /* ── Desktop (>= 768px) ── */
         @media (min-width: 768px) {
-          .lg-app-root { background:#f3f4f6; }
+          .lg-app-root { background:#f3f4f6; min-height:100vh; }
           .lg-layout {
             flex-direction:row;
-            max-width:1100px;
+            max-width:1140px;
             margin:0 auto;
             min-height:100vh;
             background:white;
             box-shadow:0 0 40px rgba(0,0,0,0.08);
+            align-items:stretch;
           }
+          /* Sidebar: sticky, scrolls independently */
           .lg-sidebar {
-            display:flex;
-            flex-direction:column;
-            width:220px;
-            min-width:220px;
-            background:white;
-            border-right:1px solid #f0f1f3;
+            display:flex; flex-direction:column;
+            width:220px; min-width:220px; flex-shrink:0;
+            background:white; border-right:1px solid #f0f1f3;
             padding:24px 0;
-            position:sticky;
-            top:0;
-            height:100vh;
-            overflow-y:auto;
-            flex-shrink:0;
+            position:sticky; top:0; height:100vh; overflow-y:auto;
           }
+          /* Content: scrollable column, NO fixed height, NO overflow:hidden */
           .lg-content {
-            flex:1;
-            min-width:0;
+            flex:1; min-width:0;
+            display:flex; flex-direction:column;
+            overflow-y:auto; overflow-x:hidden;
             height:100vh;
-            overflow:hidden;
           }
           .lg-bottom-nav { display:none !important; }
-          .lg-content-scroll { padding-bottom: 24px !important; }
-          .lg-no-bottom-pad { padding-bottom:24px !important; }
+          .lg-content-scroll { padding-bottom:32px !important; }
+
+          /* Explore: 2-column listing grid */
+          .lg-listings-grid {
+            display:grid !important;
+            grid-template-columns:repeat(2,1fr) !important;
+            gap:14px !important;
+          }
+          /* Skeleton also 2-col */
+          .lg-skeleton-grid {
+            display:grid !important;
+            grid-template-columns:repeat(2,1fr) !important;
+            gap:14px !important;
+          }
+
+          /* Detail: sticky CTA stays within content column */
+          .lg-detail-cta {
+            position:sticky !important;
+            bottom:0 !important; left:auto !important; right:auto !important;
+            width:100% !important;
+          }
+
+          /* Home: horizontal listing scroll → grid */
+          .lg-listing-row {
+            display:grid !important;
+            grid-template-columns:repeat(3,1fr) !important;
+            overflow-x:visible !important;
+            padding-bottom:8px !important;
+          }
         }
 
-        /* ── Large desktop (>= 1200px): wider layout ── */
+        /* ── Large desktop (>= 1200px) ── */
         @media (min-width: 1200px) {
-          .lg-layout { max-width:1280px; }
+          .lg-layout { max-width:1320px; }
           .lg-sidebar { width:260px; min-width:260px; }
+          .lg-listings-grid { grid-template-columns:repeat(3,1fr) !important; }
+          .lg-skeleton-grid { grid-template-columns:repeat(3,1fr) !important; }
         }
       `}</style>
       <div className="lg-layout">
@@ -2740,7 +2765,7 @@ export default function LoopGenApp() {
           </div>
         )}
         {listingsLoading ? (
-          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+          <div className="lg-skeleton-grid" style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
             {Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)}
           </div>
         ) : filtered.length === 0 ? (
@@ -2750,7 +2775,7 @@ export default function LoopGenApp() {
             <div style={{fontSize:13}}>{search ? `Try a different search term` : `Nothing in ${catFilter} yet`}</div>
           </div>
         ) : (
-          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+          <div className="lg-listings-grid" style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
             {filtered.map(item => (
               <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
             ))}
@@ -2940,7 +2965,7 @@ export default function LoopGenApp() {
               (!detail.seller_id && detail.seller_username && detail.seller_username === currentUser)
             : false;
           return (
-            <div style={{position:"absolute",bottom:0,left:0,right:0,
+            <div className="lg-detail-cta" style={{position:"absolute",bottom:0,left:0,right:0,
               padding:"12px 16px 28px",background:"white",
               borderTop:"1px solid #f0ede8",display:"flex",gap:9,
               boxShadow:"0 -4px 20px rgba(0,0,0,0.06)"}}>
