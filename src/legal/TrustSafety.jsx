@@ -252,7 +252,7 @@ export default function TrustSafetyArchitecture() {
             ["Law Enforcement Referral", "User details shared with AFP, ACCC, or state police per valid legal request.", "Criminal activity or imminent harm"],
           ]}
         />
-        <P>Users may appeal account actions within 14 days by contacting <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a>. Appeals are reviewed by a senior T&S team member not involved in the original decision.</P>
+        <P>Users may appeal account actions within 14 days by contacting <a href="mailto:support@loopgen.com.au">support@loopgen.com.au</a>. Appeals are reviewed by a senior T&S team member not involved in the original decision.</P>
       </Section>
 
       <Section id="law">
@@ -262,10 +262,10 @@ export default function TrustSafetyArchitecture() {
           <Li>Emergency disclosures may be made without a court order where there is an imminent threat to life</Li>
           <Li>CSAM reports are referred immediately to the Australian Federal Police and eSafety Commissioner — no exceptions</Li>
           <Li>LoopGen maintains records of all law enforcement requests and responses</Li>
-          <Li>Contact: <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a></Li>
+          <Li>Contact: <a href="mailto:support@loopgen.com.au">support@loopgen.com.au</a></Li>
         </Ul>
         <H3>Contact</H3>
-        <P>For all Trust &amp; Safety enquiries: <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a></P>
+        <P>For all Trust &amp; Safety enquiries: <a href="mailto:support@loopgen.com.au">support@loopgen.com.au</a></P>
       </Section>
     </LegalLayout>
   );

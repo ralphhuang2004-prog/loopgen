@@ -126,7 +126,7 @@ export default function PrivacyPolicy() {
         <Callout title="Notifiable Data Breach Policy" type="blue">
           <p>In the event of a breach likely to result in serious harm, LoopGen will: (1) contain the breach immediately; (2) assess nature and scope within 30 days; (3) notify the OAIC if the serious harm threshold is met; (4) notify affected individuals as soon as practicable; (5) remediate the root cause within 60 days.</p>
         </Callout>
-        <P>Contact: <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a> · OAIC: <a href="https://oaic.gov.au" target="_blank" rel="noreferrer">oaic.gov.au</a> · 1300 363 992</P>
+        <P>Contact: <a href="mailto:support@loopgen.com.au">support@loopgen.com.au</a> · OAIC: <a href="https://oaic.gov.au" target="_blank" rel="noreferrer">oaic.gov.au</a> · 1300 363 992</P>
       </Section>
 
       <Section id="rights">
@@ -138,7 +138,7 @@ export default function PrivacyPolicy() {
             ["Correction (APP 13)", "Account Settings → Edit Profile"],
             ["Deletion", "Account Settings → Privacy → Delete my account"],
             ["Opt-out of marketing", "Account Settings → Notifications → Email Preferences"],
-            ["Complaint", "loopgensupport@gmail.com or OAIC at oaic.gov.au | 1300 363 992"],
+            ["Complaint", "support@loopgen.com.au or OAIC at oaic.gov.au | 1300 363 992"],
           ]}
         />
         <P>All requests are fulfilled within 30 days as required by the APPs.</P>
@@ -147,7 +147,7 @@ export default function PrivacyPolicy() {
       <Section id="officer">
         <H2>11. Privacy Officer</H2>
         <P>LoopGen has designated a Privacy Officer responsible for APP compliance, handling privacy enquiries and complaints, and overseeing the data breach response process.</P>
-        <P><strong>Privacy Officer:</strong> <a href="mailto:loopgensupport@gmail.com">loopgensupport@gmail.com</a></P>
+        <P><strong>Privacy Officer:</strong> <a href="mailto:support@loopgen.com.au">support@loopgen.com.au</a></P>
         <P>If you are not satisfied with our response, you may lodge a complaint with the Office of the Australian Information Commissioner (OAIC) at <a href="https://oaic.gov.au" target="_blank" rel="noreferrer">oaic.gov.au</a>.</P>
       </Section>
     </LegalLayout>

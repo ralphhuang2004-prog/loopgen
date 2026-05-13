@@ -3414,7 +3414,7 @@ export default function LoopGenApp() {
               ["Saved Items",      "❤️", ()=>push("saved-items")],
               ["Account Settings", "⚙️", ()=>push("settings")],
               ["Reviews",          "⭐", ()=>showToast("Reviews coming after beta 🌟")],
-              ["Help & Support",   "💬", ()=>showToast("Support: hello@loopgen.app")],
+              ["Help & Support",   "💬", ()=>showToast("Support: support@loopgen.com.au")],
               ["Sign Out",         "🚪", handleSignOut],
             ].map(([label, icon, action], i) => (
               <div key={label} onClick={action}
@@ -3715,7 +3715,7 @@ export default function LoopGenApp() {
               onConfirm: async () => {
                 // Supabase doesn't expose deleteUser from client — direct users to support
                 setConfirm(null);
-                showToast("Contact hello@loopgen.app to delete your account");
+                showToast("Contact support@loopgen.com.au to delete your account");
               }
             })}
             style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer"}}>
@@ -3726,7 +3726,7 @@ export default function LoopGenApp() {
 
         <div style={{fontSize:11,color:"#c4c9d4",textAlign:"center",paddingBottom:8,lineHeight:1.8}}>
           <LoopGenLogo height={22} style={{margin:"0 auto 8px"}} />
-          LoopGen Beta v0.1.0 · <a href="mailto:hello@loopgen.app" style={{color:"#9ca3af",textDecoration:"none"}}>hello@loopgen.app</a><br/>
+          LoopGen Beta v0.1.0 · <a href="mailto:support@loopgen.com.au" style={{color:"#9ca3af",textDecoration:"none"}}>support@loopgen.com.au</a><br/>
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>

@@ -171,8 +171,8 @@ const TermsOfService = () => {
         <h2>19. Contact</h2>
         <p>For enquiries:</p>
         <p>
-          <a href="mailto:loopgensupport@gmail.com" className="terms-email">
-            loopgensupport@gmail.com
+          <a href="mailto:support@loopgen.com.au" className="terms-email">
+            support@loopgen.com.au
           </a>
         </p>
       </section>
