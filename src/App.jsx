@@ -2455,6 +2455,7 @@ export default function LoopGenApp() {
         </div>
       </div>
       <Toast msg={toast}/>
+      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -2978,6 +2979,7 @@ export default function LoopGenApp() {
             })()}
           </div>
         </div>
+        </div>{/* end lg-content-scroll */}
 
         {/* ── Sticky CTA bar ── */}
         {(() => {
