@@ -903,7 +903,7 @@ const CAT_ICONS = { All: CatAllIcon, Fashion: CatFashionIcon, Electronics: CatEl
 // ═══════════════════════════════════════════════════════
 function Phone({ children }) {
   return (
-    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#dde1e7",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",padding:20}}>
+    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"white",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
@@ -915,42 +915,18 @@ function Phone({ children }) {
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
-
-        /* ── Mobile: fill the real screen, no mock frame ── */
-        @media (max-width: 500px) {
-          .lg-phone-outer {
-            background: white !important;
-            padding: 0 !important;
-            align-items: stretch !important;
-            min-height: 100dvh !important;
-          }
-          .lg-phone-inner {
-            width: 100% !important;
-            height: 100dvh !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-          }
-        }
+        html,body,#root{height:100%;width:100%;}
       `}</style>
-      <div className="lg-phone-outer" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#dde1e7",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",padding:20,width:"100%"}}>
-        <div className="lg-phone-inner" style={{width:390,height:844,background:"white",borderRadius:52,overflow:"hidden",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 60px 140px rgba(0,0,0,0.32),0 0 0 10px #1c1c1e,0 0 0 13px #3a3a3a"}}>
-          {children}
-        </div>
+      <div className="lg-phone-inner" style={{width:"100%",flex:1,background:"white",display:"flex",flexDirection:"column",position:"relative",maxWidth:600,margin:"0 auto"}}>
+        {children}
       </div>
     </div>
   );
 }
 
 function StatusBar() {
-  return (
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 24px 6px",fontSize:12,fontWeight:700,color:"#111",flexShrink:0}}>
-      <span>9:41</span>
-      <div style={{display:"flex",gap:5,alignItems:"center"}}>
-        <svg width="16" height="11" viewBox="0 0 16 11" fill="#111"><rect x="0" y="6" width="2.5" height="5" rx="1"/><rect x="3.5" y="4" width="2.5" height="7" rx="1"/><rect x="7" y="2" width="2.5" height="9" rx="1"/><rect x="10.5" y="0" width="2.5" height="11" rx="1"/></svg>
-        <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0.5" y="0.5" width="20" height="11" rx="2.5" stroke="#111" strokeWidth="1.2" fill="none"/><rect x="2" y="2" width="13" height="8" rx="1.5" fill="#111"/><path d="M22 4v4a2 2 0 000-4z" fill="#111"/></svg>
-      </div>
-    </div>
-  );
+  // Removed — fake status bar (9:41 / signal / battery) not shown in production
+  return null;
 }
 
 function BottomNav({ active, onNav }) {
