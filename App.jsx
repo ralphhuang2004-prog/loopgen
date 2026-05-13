@@ -966,6 +966,18 @@ function Phone({ children }) {
             grid-template-columns:repeat(2,1fr) !important;
             gap:14px !important;
           }
+          /* Switch listing/skeleton cards to vertical layout inside grid */
+          .lg-listings-grid .lg-card-inner,
+          .lg-skeleton-grid .lg-card-inner {
+            flex-direction:column !important;
+            height:auto !important;
+          }
+          .lg-listings-grid .lg-card-img,
+          .lg-skeleton-grid .lg-card-img {
+            width:100% !important;
+            min-width:unset !important;
+            height:180px !important;
+          }
 
           /* Detail: sticky CTA stays within content column */
           .lg-detail-cta {
@@ -989,6 +1001,7 @@ function Phone({ children }) {
           .lg-sidebar { width:260px; min-width:260px; }
           .lg-listings-grid { grid-template-columns:repeat(3,1fr) !important; }
           .lg-skeleton-grid { grid-template-columns:repeat(3,1fr) !important; }
+          .lg-card-img { height:200px !important; }
         }
       `}</style>
       <div className="lg-layout">
@@ -1374,8 +1387,9 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
   return (
     <div onClick={() => onTap(item)} style={{background:"white",borderRadius:22,overflow:"hidden",
       boxShadow:"0 3px 14px rgba(0,0,0,0.08)",cursor:"pointer",display:"flex",
-      flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}>
-      <div style={{position:"relative",flexShrink:0,width:120,minWidth:120,height:115}}>
+      flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}
+      className="lg-card-inner">
+      <div className="lg-card-img" style={{position:"relative",flexShrink:0,width:120,minWidth:120,height:115}}>
         <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}
           onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
         {item.condition==="New"&&<div style={{position:"absolute",top:7,left:7,background:GREEN,color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8}}>NEW</div>}
@@ -1426,8 +1440,9 @@ function SkeletonCard({ compact=false }) {
     );
   }
   return (
-    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}>
-      <div style={{...shine,flexShrink:0,width:120,minWidth:120,height:115}}/>
+    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}
+      className="lg-card-inner">
+      <div className="lg-card-img" style={{...shine,flexShrink:0,width:120,minWidth:120,height:115}}/>
       <div style={{padding:"13px 14px",flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:8}}>
         <div style={{...shine,height:16,borderRadius:6,width:"35%"}}/>
         <div style={{...shine,height:13,borderRadius:6,width:"75%"}}/>
@@ -2765,7 +2780,7 @@ export default function LoopGenApp() {
           </div>
         )}
         {listingsLoading ? (
-          <div className="lg-skeleton-grid" style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+          <div className="lg-skeleton-grid" style={{display:"grid",gridTemplateColumns:"1fr",gap:12,paddingTop:4}}>
             {Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)}
           </div>
         ) : filtered.length === 0 ? (
@@ -2775,7 +2790,7 @@ export default function LoopGenApp() {
             <div style={{fontSize:13}}>{search ? `Try a different search term` : `Nothing in ${catFilter} yet`}</div>
           </div>
         ) : (
-          <div className="lg-listings-grid" style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+          <div className="lg-listings-grid" style={{display:"grid",gridTemplateColumns:"1fr",gap:12,paddingTop:4}}>
             {filtered.map(item => (
               <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
             ))}
