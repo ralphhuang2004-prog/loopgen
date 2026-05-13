@@ -917,90 +917,53 @@ function Phone({ children }) {
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
         html,body,#root{height:100%;width:100%;margin:0;padding:0;}
 
-        /* ── Mobile (default) ── */
+        /* ── Mobile (default): full-width single column ── */
         .lg-layout { display:flex; flex-direction:column; width:100%; min-height:100vh; background:white; }
         .lg-sidebar { display:none; }
         .lg-content { flex:1; display:flex; flex-direction:column; position:relative; width:100%; }
         .lg-bottom-nav { display:flex; }
-        .lg-content-scroll { padding-bottom:88px; }
+        .lg-content-scroll { padding-bottom: 88px; }
 
-        /* ── Desktop (>= 768px) ── */
+        /* ── Tablet / Desktop (>= 768px): sidebar + content ── */
         @media (min-width: 768px) {
-          .lg-app-root { background:#f3f4f6; min-height:100vh; }
+          .lg-app-root { background:#f3f4f6; }
           .lg-layout {
             flex-direction:row;
-            max-width:1140px;
+            max-width:1100px;
             margin:0 auto;
             min-height:100vh;
             background:white;
             box-shadow:0 0 40px rgba(0,0,0,0.08);
-            align-items:stretch;
           }
-          /* Sidebar: sticky, scrolls independently */
           .lg-sidebar {
-            display:flex; flex-direction:column;
-            width:220px; min-width:220px; flex-shrink:0;
-            background:white; border-right:1px solid #f0f1f3;
+            display:flex;
+            flex-direction:column;
+            width:220px;
+            min-width:220px;
+            background:white;
+            border-right:1px solid #f0f1f3;
             padding:24px 0;
-            position:sticky; top:0; height:100vh; overflow-y:auto;
-          }
-          /* Content: scrollable column, NO fixed height, NO overflow:hidden */
-          .lg-content {
-            flex:1; min-width:0;
-            display:flex; flex-direction:column;
-            overflow-y:auto; overflow-x:hidden;
+            position:sticky;
+            top:0;
             height:100vh;
-          }          .lg-bottom-nav { display:none !important; }
-          .lg-content-scroll { padding-bottom:32px !important; }
-
-          /* Explore: 2-column listing grid */
-          .lg-listings-grid {
-            display:grid !important;
-            grid-template-columns:repeat(2,1fr) !important;
-            gap:14px !important;
+            overflow-y:auto;
+            flex-shrink:0;
           }
-          /* Skeleton also 2-col */
-          .lg-skeleton-grid {
-            display:grid !important;
-            grid-template-columns:repeat(2,1fr) !important;
-            gap:14px !important;
+          .lg-content {
+            flex:1;
+            min-width:0;
+            height:100vh;
+            overflow:hidden;
           }
-          /* Switch listing/skeleton cards to vertical layout inside grid */
-          .lg-listings-grid .lg-card-inner,
-          .lg-skeleton-grid .lg-card-inner {
-            flex-direction:column !important;
-            height:auto !important;
-          }
-          .lg-listings-grid .lg-card-img,
-          .lg-skeleton-grid .lg-card-img {
-            width:100% !important;
-            min-width:unset !important;
-            height:180px !important;
-          }
-
-          /* Detail: sticky CTA stays within content column */
-          .lg-detail-cta {
-            position:sticky !important;
-            bottom:0 !important; left:auto !important; right:auto !important;
-            width:100% !important;
-          }
-
-          /* Home: horizontal listing scroll → grid */
-          .lg-listing-row {
-            display:grid !important;
-            grid-template-columns:repeat(3,1fr) !important;
-            overflow-x:visible !important;
-            padding-bottom:8px !important;
-          }
+          .lg-bottom-nav { display:none !important; }
+          .lg-content-scroll { padding-bottom: 24px !important; }
+          .lg-no-bottom-pad { padding-bottom:24px !important; }
         }
 
-        /* ── Large desktop (>= 1200px) ── */
+        /* ── Large desktop (>= 1200px): wider layout ── */
         @media (min-width: 1200px) {
-          .lg-layout { max-width:1320px; }
+          .lg-layout { max-width:1280px; }
           .lg-sidebar { width:260px; min-width:260px; }
-          .lg-listings-grid { grid-template-columns:repeat(3,1fr) !important; }
-          .lg-skeleton-grid { grid-template-columns:repeat(3,1fr) !important; }
-          .lg-card-img { height:200px !important; }
         }
       `}</style>
       <div className="lg-layout">
@@ -1386,9 +1349,8 @@ function ListingCard({ item, onTap, onSave, compact=false }) {
   return (
     <div onClick={() => onTap(item)} style={{background:"white",borderRadius:22,overflow:"hidden",
       boxShadow:"0 3px 14px rgba(0,0,0,0.08)",cursor:"pointer",display:"flex",
-      flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}
-      className="lg-card-inner">
-      <div className="lg-card-img" style={{position:"relative",flexShrink:0,width:120,minWidth:120,height:115}}>
+      flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}>
+      <div style={{position:"relative",flexShrink:0,width:120,minWidth:120,height:115}}>
         <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}
           onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
         {item.condition==="New"&&<div style={{position:"absolute",top:7,left:7,background:GREEN,color:"white",fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:8}}>NEW</div>}
@@ -1439,9 +1401,8 @@ function SkeletonCard({ compact=false }) {
     );
   }
   return (
-    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}
-      className="lg-card-inner">
-      <div className="lg-card-img" style={{...shine,flexShrink:0,width:120,minWidth:120,height:115}}/>
+    <div style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.06)",display:"flex",flexDirection:"row",alignItems:"stretch",width:"100%",gap:0}}>
+      <div style={{...shine,flexShrink:0,width:120,minWidth:120,height:115}}/>
       <div style={{padding:"13px 14px",flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:8}}>
         <div style={{...shine,height:16,borderRadius:6,width:"35%"}}/>
         <div style={{...shine,height:13,borderRadius:6,width:"75%"}}/>
@@ -2406,8 +2367,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "auth") return (
     <Phone>
-      <BottomNav active="home" onNav={nav}/>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px",display:"flex",flexDirection:"column"}}>
@@ -2455,7 +2414,6 @@ export default function LoopGenApp() {
         </div>
       </div>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -2464,8 +2422,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "home") return (
     <Phone>
-      <BottomNav active="chats" onNav={nav}/>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{flex:1,overflowY:"auto",paddingBottom:84}}>
@@ -2735,8 +2691,8 @@ export default function LoopGenApp() {
         </div>
 
       </div>
+      <BottomNav active="home" onNav={nav}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -2745,8 +2701,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "explore") return (
     <Phone>
-      <BottomNav active="explore" onNav={nav}/>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       {/* Search */}
@@ -2786,7 +2740,7 @@ export default function LoopGenApp() {
           </div>
         )}
         {listingsLoading ? (
-          <div className="lg-skeleton-grid" style={{display:"grid",gridTemplateColumns:"1fr",gap:12,paddingTop:4}}>
+          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
             {Array.from({length:6}).map((_,i) => <SkeletonCard key={i}/>)}
           </div>
         ) : filtered.length === 0 ? (
@@ -2796,15 +2750,15 @@ export default function LoopGenApp() {
             <div style={{fontSize:13}}>{search ? `Try a different search term` : `Nothing in ${catFilter} yet`}</div>
           </div>
         ) : (
-          <div className="lg-listings-grid" style={{display:"grid",gridTemplateColumns:"1fr",gap:12,paddingTop:4}}>
+          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
             {filtered.map(item => (
               <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave}/>
             ))}
           </div>
         )}
       </div>
+      <BottomNav active="explore" onNav={nav}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -2816,7 +2770,7 @@ export default function LoopGenApp() {
     const demoSeller = DEMO_SELLERS[detail.seller_username];
     return (
       <Phone>
-        <BottomNav active="home" onNav={nav}/>
+        <div className="lg-content-scroll" style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
 
           {/* ── Full-bleed image hero ── */}
           <div style={{position:"relative",height:300,overflow:"hidden",borderRadius:"0 0 28px 28px",boxShadow:"0 8px 32px rgba(0,0,0,0.14)"}}>
@@ -2977,6 +2931,7 @@ export default function LoopGenApp() {
             })()}
           </div>
         </div>
+
         {/* ── Sticky CTA bar ── */}
         {(() => {
           // Own listing check — works in both Supabase mode (by user.id) and demo mode (by username)
@@ -2985,7 +2940,7 @@ export default function LoopGenApp() {
               (!detail.seller_id && detail.seller_username && detail.seller_username === currentUser)
             : false;
           return (
-            <div className="lg-detail-cta" style={{position:"absolute",bottom:0,left:0,right:0,
+            <div style={{position:"absolute",bottom:0,left:0,right:0,
               padding:"12px 16px 28px",background:"white",
               borderTop:"1px solid #f0ede8",display:"flex",gap:9,
               boxShadow:"0 -4px 20px rgba(0,0,0,0.06)"}}>
@@ -3069,6 +3024,7 @@ export default function LoopGenApp() {
           onClose={() => setReportModal(null)}
           onSubmit={async (reason) => {
             if (!reason) { showToast("Please select a reason"); return; }
+            // Persist to Supabase — silent fallback if table missing
             try {
               await dbSaveReport({
                 listing_id: reportModal.item.id,
@@ -3086,7 +3042,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "sell") return (
     <Phone>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 16px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -3395,7 +3350,6 @@ export default function LoopGenApp() {
       </div>
       <BottomNav active="sell" onNav={nav}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3404,8 +3358,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "chats") return (
     <Phone>
-      <BottomNav active="profile" onNav={nav}/>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 16px 12px",flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -3453,8 +3405,8 @@ export default function LoopGenApp() {
           ))}
         </div>
       )}
+      <BottomNav active="chats" onNav={nav}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3572,7 +3524,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "my-listings") return (
     <Phone>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -3639,7 +3590,6 @@ export default function LoopGenApp() {
       <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3648,7 +3598,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "saved-items") return (
     <Phone>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -3685,8 +3634,8 @@ export default function LoopGenApp() {
           </div>
         )}
       </div>
+      <BottomNav active="profile" onNav={nav}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
@@ -3695,7 +3644,6 @@ export default function LoopGenApp() {
   // ════════════════════════════
   if (screen === "settings") return (
     <Phone>
-      <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
       <StatusBar/>
       <DemoBanner/>
       <div style={{padding:"4px 20px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -3852,7 +3800,6 @@ export default function LoopGenApp() {
       <BottomNav active="profile" onNav={nav}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
-      </div>{/* end lg-content */}
     </Phone>
   );
 
