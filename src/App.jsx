@@ -2817,7 +2817,7 @@ export default function LoopGenApp() {
     return (
       <Phone>
         <BottomNav active="home" onNav={nav}/>
-        <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden"}}>
+        <div className="lg-content" style={{display:"flex",flexDirection:"column",flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden",position:"relative"}}>
         <div className="lg-content-scroll" style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
 
           {/* ── Full-bleed image hero ── */}
@@ -3073,7 +3073,6 @@ export default function LoopGenApp() {
           onClose={() => setReportModal(null)}
           onSubmit={async (reason) => {
             if (!reason) { showToast("Please select a reason"); return; }
-            // Persist to Supabase — silent fallback if table missing
             try {
               await dbSaveReport({
                 listing_id: reportModal.item.id,
