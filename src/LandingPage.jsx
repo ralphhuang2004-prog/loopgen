@@ -115,58 +115,7 @@ const CSS = `
   .lp-save:active { transform:scale(1.3); }
 
   .lp-checkbox { width:16px; height:16px; cursor:pointer; accent-color:#1a6b3a; flex-shrink:0; }
-
-  /* ── Desktop responsive ── */
-  @media (min-width: 768px) {
-    .lp-root-inner {
-      max-width: 780px;
-      margin: 0 auto;
-    }
-    .lp-hero-bento {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
-      grid-template-rows: auto !important;
-      gap: 12px !important;
-    }
-    .lp-bento-row1 {
-      display: contents !important;
-    }
-    .lp-bento-row2 {
-      display: contents !important;
-    }
-    .lp-bento-tall {
-      height: auto !important;
-      aspect-ratio: 4/3 !important;
-    }
-    .lp-bento-short {
-      height: auto !important;
-      aspect-ratio: 4/3 !important;
-    }
-    .lp-listing-scroll {
-      display: grid !important;
-      grid-template-columns: repeat(3, 1fr) !important;
-      overflow-x: visible !important;
-      padding: 4px 0 22px !important;
-    }
-    .lp-listing-card {
-      width: auto !important;
-      flex-shrink: unset !important;
-    }
-    .lp-features-grid {
-      display: grid !important;
-      grid-template-columns: repeat(3, 1fr) !important;
-    }
-    .lp-section-pad {
-      padding-left: 0 !important;
-      padding-right: 0 !important;
-    }
-    .lp-cta-box {
-      max-width: 480px;
-      margin: 0 auto;
-    }
-  }
 `;
-
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 function useEnter(ms = 60) {
@@ -282,7 +231,6 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
         fontFamily:"'Plus Jakarta Sans',system-ui,sans-serif",
         scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
       <style>{CSS}</style>
-      {/* lp-root-inner constrains max-width on desktop, transparent on mobile */}
 
       {demoMode && (
         <div style={{ background:"#0f0f0f", color:"rgba(255,255,255,0.55)",
@@ -291,8 +239,6 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
           DEMO MODE
         </div>
       )}
-
-      <div className="lp-root-inner">
 
       {/* ══ HERO ══════════════════════════════════════════════════════════ */}
       <section style={{ background:T.surface, paddingBottom:28 }}>
@@ -365,9 +311,9 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
           </div>
           <p style={{ fontSize:10, color:T.ink3, textAlign:"center", marginTop:8 }}>
             By continuing, you agree to our{" "}
-            <a href="https://www.loopgen.com.au/terms" style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Terms</a>
+            <a href="/terms" style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Terms</a>
             {" & "}
-            <a href="https://www.loopgen.com.au/privacy" style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Privacy Policy</a>
+            <a href="/privacy" style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Privacy Policy</a>
           </p>
         </div>
 
@@ -382,7 +328,7 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
       <section style={{ background:T.surface, paddingTop:40, paddingBottom:4 }}>
         <SHead eyebrow="Live now" title="Trending on LoopGen"
           action="See all" onAction={() => go(onBrowse)} pad />
-        <div className="lp-listing-scroll" style={{ display:"flex", gap:12, overflowX:"auto",
+        <div style={{ display:"flex", gap:12, overflowX:"auto",
           padding:"4px 22px 22px", scrollbarWidth:"none" }}>
           {LISTINGS.map((item, i) => (
             <ListingCard key={item.id} item={item} delay={i} onTap={() => go(onBrowse)} />
@@ -395,7 +341,7 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
       {/* ══ WHY ═══════════════════════════════════════════════════════════ */}
       <section style={{ padding:"40px 22px 0", background:T.bg }}>
         <SHead eyebrow="Why LoopGen" title="The smarter way to trade." />
-        <div className="lp-features-grid" style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {FEATURES.map((f, i) => <FeatureCard key={f.title} item={f} delay={i} />)}
         </div>
       </section>
@@ -417,8 +363,6 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
 
       {/* ══ CTA + FOOTER ══════════════════════════════════════════════════ */}
       <CtaAndFooter onBrowse={() => go(onBrowse)} onRegister={() => go(onRegister)} />
-
-      </div>{/* end lp-root-inner */}
     </div>
   );
 }
@@ -441,40 +385,35 @@ function HeroBento({ entered, onTap }) {
 
   return (
     <div onClick={onTap} style={{ margin:"24px 22px 0" }}>
-      {/* On mobile: two stacked rows. On desktop: CSS flattens to 2x2 grid via .lp-hero-bento */}
-      <div className="lp-hero-bento" style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {/* Row 1 — tall tiles */}
-        <div className="lp-bento-row1" style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:10 }}>
-          <div className="lp-bento-tall" style={tile(0, "lp-float", { aspectRatio:"4/3" })}>
-            <LazyImg src={HERO_TILES[0].img} alt={HERO_TILES[0].tag} style={{ height:"100%", minHeight:140 }} />
-            <div style={{ position:"absolute", top:10, right:10,
-              background:"white", borderRadius:50, padding:"4px 10px",
-              fontSize:9, fontWeight:800, color:T.g,
-              boxShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>
-              ✓ Member
-            </div>
-            <div style={{ position:"absolute", bottom:10, left:10 }}>
-              <CatPill label={HERO_TILES[0].tag} />
-            </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:10, marginBottom:10 }}>
+        <div style={tile(0, "lp-float", { height:172 })}>
+          <LazyImg src={HERO_TILES[0].img} alt={HERO_TILES[0].tag} style={{ height:"100%" }} />
+          <div style={{ position:"absolute", top:10, right:10,
+            background:"white", borderRadius:50, padding:"4px 10px",
+            fontSize:9, fontWeight:800, color:T.g,
+            boxShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>
+            ✓ Member
           </div>
-          <div className="lp-bento-tall" style={tile(1, "lp-float2", { aspectRatio:"4/3" })}>
-            <LazyImg src={HERO_TILES[1].img} alt={HERO_TILES[1].tag} style={{ height:"100%", minHeight:140 }} />
-            <div style={{ position:"absolute", bottom:10, left:10 }}>
-              <CatPill label={HERO_TILES[1].tag} />
-            </div>
+          <div style={{ position:"absolute", bottom:10, left:10 }}>
+            <CatPill label={HERO_TILES[0].tag} />
           </div>
         </div>
-        {/* Row 2 — shorter tiles */}
-        <div className="lp-bento-row2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          {[2,3].map(i => (
-            <div key={i} className="lp-bento-short" style={tile(i, i%2===0?"lp-float":"lp-float2", { aspectRatio:"16/9" })}>
-              <LazyImg src={HERO_TILES[i].img} alt={HERO_TILES[i].tag} style={{ height:"100%", minHeight:90 }} />
-              <div style={{ position:"absolute", bottom:8, left:8 }}>
-                <CatPill label={HERO_TILES[i].tag} />
-              </div>
-            </div>
-          ))}
+        <div style={tile(1, "lp-float2", { height:172 })}>
+          <LazyImg src={HERO_TILES[1].img} alt={HERO_TILES[1].tag} style={{ height:"100%" }} />
+          <div style={{ position:"absolute", bottom:10, left:10 }}>
+            <CatPill label={HERO_TILES[1].tag} />
+          </div>
         </div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        {[2,3].map(i => (
+          <div key={i} style={tile(i, i%2===0?"lp-float":"lp-float2", { height:108 })}>
+            <LazyImg src={HERO_TILES[i].img} alt={HERO_TILES[i].tag} style={{ height:"100%" }} />
+            <div style={{ position:"absolute", bottom:8, left:8 }}>
+              <CatPill label={HERO_TILES[i].tag} />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -541,7 +480,7 @@ function ListingCard({ item, delay, onTap }) {
   const ref = useReveal(`d${Math.min(delay+1,4)}`);
   const [saved, setSaved] = useState(false);
   return (
-    <div ref={ref} className={`lp-reveal lp-card lp-listing-card d${Math.min(delay+1,4)}`}
+    <div ref={ref} className={`lp-reveal lp-card d${Math.min(delay+1,4)}`}
       onClick={onTap}
       style={{ flexShrink:0, width:168, background:T.surface,
         borderRadius:22, border:`1px solid ${T.border}`,
@@ -664,7 +603,7 @@ function CtaAndFooter({ onBrowse, onRegister }) {
 
   return (
     <section style={{ padding:"40px 22px 36px", background:T.bg }}>
-      <div ref={ref} className="lp-reveal lp-cta-box"
+      <div ref={ref} className="lp-reveal"
         style={{ background:"linear-gradient(150deg,#0a2415 0%,#1a6b3a 100%)",
           borderRadius:28, padding:"38px 24px",
           position:"relative", overflow:"hidden", marginBottom:32 }}>
@@ -699,9 +638,9 @@ function CtaAndFooter({ onBrowse, onRegister }) {
             checked={agreed} onChange={e => setAgreed(e.target.checked)} />
           <span style={{ fontSize:11, color:"rgba(255,255,255,0.58)", lineHeight:1.55 }}>
             I agree to the{" "}
-            <a href="https://www.loopgen.com.au/terms" style={{ color:"rgba(163,255,196,0.85)",
+            <a href="/terms" style={{ color:"rgba(163,255,196,0.85)",
               textDecoration:"none", fontWeight:700 }}>Terms</a>{" "}and{" "}
-            <a href="https://www.loopgen.com.au/privacy" style={{ color:"rgba(163,255,196,0.85)",
+            <a href="/privacy" style={{ color:"rgba(163,255,196,0.85)",
               textDecoration:"none", fontWeight:700 }}>Privacy Policy</a>
           </span>
         </label>
@@ -735,7 +674,7 @@ function CtaAndFooter({ onBrowse, onRegister }) {
             <a key={l} href={h} style={{ fontSize:11, color:T.ink3,
               textDecoration:"none", fontWeight:600 }}>{l}</a>
           ))}
-          <a href="mailto:support@loopgen.com.au"
+          <a href="mailto:loopgensupport@gmail.com"
             style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>
             Contact
           </a>
