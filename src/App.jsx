@@ -903,11 +903,11 @@ const CAT_ICONS = { All: CatAllIcon, Fashion: CatFashionIcon, Electronics: CatEl
 // ═══════════════════════════════════════════════════════
 function Phone({ children }) {
   return (
-    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"white",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+    <div className="lg-app-root" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:"white",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px;}
+        ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px;}
         input,select,textarea,button{font-family:'Plus Jakarta Sans',sans-serif;}
         body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
         button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
@@ -915,9 +915,58 @@ function Phone({ children }) {
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
-        html,body,#root{height:100%;width:100%;}
+        html,body,#root{height:100%;width:100%;margin:0;padding:0;}
+
+        /* ── Mobile (default): full-width single column ── */
+        .lg-layout { display:flex; flex-direction:column; width:100%; min-height:100vh; background:white; }
+        .lg-sidebar { display:none; }
+        .lg-content { flex:1; display:flex; flex-direction:column; position:relative; width:100%; }
+        .lg-bottom-nav { display:flex; }
+        .lg-content-scroll { padding-bottom: 88px; }
+
+        /* ── Tablet / Desktop (>= 768px): sidebar + content ── */
+        @media (min-width: 768px) {
+          .lg-app-root { background:#f3f4f6; }
+          .lg-layout {
+            flex-direction:row;
+            max-width:1100px;
+            margin:0 auto;
+            min-height:100vh;
+            background:white;
+            box-shadow:0 0 40px rgba(0,0,0,0.08);
+          }
+          .lg-sidebar {
+            display:flex;
+            flex-direction:column;
+            width:220px;
+            min-width:220px;
+            background:white;
+            border-right:1px solid #f0f1f3;
+            padding:24px 0;
+            position:sticky;
+            top:0;
+            height:100vh;
+            overflow-y:auto;
+            flex-shrink:0;
+          }
+          .lg-content {
+            flex:1;
+            min-width:0;
+            height:100vh;
+            overflow:hidden;
+          }
+          .lg-bottom-nav { display:none !important; }
+          .lg-content-scroll { padding-bottom: 24px !important; }
+          .lg-no-bottom-pad { padding-bottom:24px !important; }
+        }
+
+        /* ── Large desktop (>= 1200px): wider layout ── */
+        @media (min-width: 1200px) {
+          .lg-layout { max-width:1280px; }
+          .lg-sidebar { width:260px; min-width:260px; }
+        }
       `}</style>
-      <div className="lg-phone-inner" style={{width:"100%",flex:1,background:"white",display:"flex",flexDirection:"column",position:"relative",maxWidth:600,margin:"0 auto"}}>
+      <div className="lg-layout">
         {children}
       </div>
     </div>
@@ -938,21 +987,63 @@ function BottomNav({ active, onNav }) {
     {id:"profile", label:"Profile",  icon: a => <IcoProfile a={a}/>},
   ];
   return (
-    <div style={{position:"absolute",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #f0f1f3",display:"flex",justifyContent:"space-around",alignItems:"center",padding:"10px 4px 24px",zIndex:20,boxShadow:"0 -4px 24px rgba(0,0,0,0.07)"}}>
-      {tabs.map(t => (
-        <div key={t.id} onClick={() => onNav(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",minWidth:52,position:"relative"}}>
-          {t.id==="sell"
-            ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,marginTop:-4}}>
-                <div style={{width:58,height:58,borderRadius:18,background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",marginTop:-20,boxShadow:`0 8px 24px rgba(28,124,69,0.38)`,border:"3px solid white"}}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </div>
-                <span style={{fontSize:10,fontWeight:700,color:GREEN,letterSpacing:0.1}}>Sell</span>
-              </div>
-            : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
-          }
+    <>
+      {/* ── Desktop sidebar (hidden on mobile via CSS) ── */}
+      <div className="lg-sidebar">
+        {/* Logo */}
+        <div style={{padding:"0 20px 28px",borderBottom:"1px solid #f0f1f3",marginBottom:12}}>
+          <LoopGenLogo height={28}/>
         </div>
-      ))}
-    </div>
+        {/* Nav items */}
+        <div style={{flex:1,padding:"4px 12px"}}>
+          {tabs.map(t => (
+            <div key={t.id} onClick={() => onNav(t.id)}
+              style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:14,
+                cursor:"pointer",marginBottom:2,
+                background:active===t.id?"rgba(28,124,69,0.09)":"transparent",
+                transition:"background 0.15s"}}>
+              {t.id==="sell"
+                ? <div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </div>
+                : <div style={{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,background:active===t.id?"rgba(28,124,69,0.12)":"#f3f4f6",flexShrink:0}}>
+                    {t.icon(active===t.id)}
+                  </div>
+              }
+              <span style={{fontSize:14,fontWeight:active===t.id?700:500,
+                color:active===t.id?GREEN:"#374151",letterSpacing:0.1}}>
+                {t.label}
+              </span>
+            </div>
+          ))}
+        </div>
+        {/* Footer */}
+        <div style={{padding:"16px 20px",borderTop:"1px solid #f0f1f3",marginTop:"auto"}}>
+          <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+            <a href="https://www.loopgen.com.au/terms" style={{color:"#9ca3af",textDecoration:"none",display:"block",marginBottom:2}}>Terms</a>
+            <a href="https://www.loopgen.com.au/privacy" style={{color:"#9ca3af",textDecoration:"none",display:"block",marginBottom:2}}>Privacy</a>
+            <a href="mailto:support@loopgen.com.au" style={{color:"#9ca3af",textDecoration:"none",display:"block"}}>Contact</a>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Mobile bottom nav (hidden on desktop via CSS) ── */}
+      <div className="lg-bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #f0f1f3",justifyContent:"space-around",alignItems:"center",padding:"10px 4px 24px",zIndex:20,boxShadow:"0 -4px 24px rgba(0,0,0,0.07)"}}>
+        {tabs.map(t => (
+          <div key={t.id} onClick={() => onNav(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",minWidth:52,position:"relative"}}>
+            {t.id==="sell"
+              ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,marginTop:-4}}>
+                  <div style={{width:58,height:58,borderRadius:18,background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",marginTop:-20,boxShadow:`0 8px 24px rgba(28,124,69,0.38)`,border:"3px solid white"}}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:700,color:GREEN,letterSpacing:0.1}}>Sell</span>
+                </div>
+              : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
+            }
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -994,7 +1085,7 @@ function Toast({ msg }) {
 function ConfirmModal({ confirm, onCancel }) {
   if (!confirm) return null;
   return (
-    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200,borderRadius:52}}>
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}}>
       <div style={{background:"white",borderRadius:"24px 24px 0 0",padding:"24px 24px 36px",width:"100%",boxShadow:"0 -8px 40px rgba(0,0,0,0.18)"}}>
         <div style={{fontSize:15,fontWeight:600,color:"#111",marginBottom:20,textAlign:"center",lineHeight:1.5}}>{confirm.msg}</div>
         <div style={{display:"flex",gap:10}}>
@@ -1011,7 +1102,7 @@ function OfferModal({ modal, offerPrice, setOfferPrice, onSubmit, onClose }) {
   if (!modal) return null;
   const item = modal.item;
   return (
-    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200,borderRadius:52}}>
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}}>
       <div style={{background:"white",borderRadius:"24px 24px 0 0",padding:"24px 24px 36px",width:"100%",boxShadow:"0 -8px 40px rgba(0,0,0,0.18)"}}>
         <div style={{fontSize:16,fontWeight:800,color:"#111",marginBottom:4}}>Make an Offer</div>
         <div style={{fontSize:13,color:"#6b7280",marginBottom:20}}>
@@ -1057,7 +1148,7 @@ function ReportModal({ modal, onSubmit, onClose }) {
   if (!modal) return null;
   const reasons = ["Misleading description","Wrong category","Suspected fake item","Prohibited item","Spam / duplicate","Other"];
   return (
-    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200,borderRadius:52}}>
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}}>
       <div style={{background:"white",borderRadius:"24px 24px 0 0",padding:"24px 24px 36px",width:"100%",boxShadow:"0 -8px 40px rgba(0,0,0,0.18)"}}>
         <div style={{fontSize:16,fontWeight:800,color:"#111",marginBottom:4}}>Report Listing</div>
         <div style={{fontSize:13,color:"#6b7280",marginBottom:16}}>What's the issue with this listing?</div>
@@ -2679,7 +2770,7 @@ export default function LoopGenApp() {
     const demoSeller = DEMO_SELLERS[detail.seller_username];
     return (
       <Phone>
-        <div style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
+        <div className="lg-content-scroll" style={{flex:1,overflowY:"auto",paddingBottom:88,background:"#f7f6f3"}}>
 
           {/* ── Full-bleed image hero ── */}
           <div style={{position:"relative",height:300,overflow:"hidden",borderRadius:"0 0 28px 28px",boxShadow:"0 8px 32px rgba(0,0,0,0.14)"}}>
