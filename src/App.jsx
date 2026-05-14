@@ -986,7 +986,6 @@ function Phone({ children }) {
            target only specific UI transitions, NOT all animations globally */
         @media (prefers-reduced-motion: reduce) {
           .lg-screen-enter { animation: none !important; }
-          .home-ticker-inner { animation: none !important; }
         }
         html,body,#root{height:100%;width:100%;margin:0;padding:0;}
 
@@ -1563,7 +1562,6 @@ function HomeTicker() {
         @keyframes home-ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
         .home-ticker-inner { animation: home-ticker 36s linear infinite; will-change: transform; }
         @media (min-width: 768px) { .home-ticker-inner { animation-duration: 40s; } }
-        @media (prefers-reduced-motion: reduce) { .home-ticker-inner { animation: none; } }
       `}</style>
       <div className="home-ticker-inner" style={{
         display:"flex",

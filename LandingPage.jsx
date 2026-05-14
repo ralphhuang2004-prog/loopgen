@@ -90,10 +90,8 @@ const CSS = `
     .lp-listings-scroll { padding-right:40px !important; }
   }
 
-  /* Respect user's motion preference — suppress only the scrolling ticker,
-     not the slow gentle float animations which are subtle and non-disorienting */
+  /* Respect user's motion preference — suppress only fast/distracting transitions */
   @media (prefers-reduced-motion: reduce) {
-    .lp-ticker-inner { animation: none !important; }
     .lp-reveal { transition: opacity 0.2s ease !important; }
   }
 
