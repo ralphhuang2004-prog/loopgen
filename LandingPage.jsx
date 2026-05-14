@@ -72,28 +72,10 @@ const CSS = `
   @keyframes lp-pulse  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
   @keyframes lp-in     { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
 
-  /* Ticker strip — class-based so reduced-motion and pausing work reliably */
-  .lp-ticker-inner {
-    display: flex;
-    width: max-content;
-    animation: lp-ticker 28s linear infinite;
-    will-change: transform;
-  }
-
   /* Desktop: bottom bento tiles match top tile height; fix last card clip */
   @media (min-width: 768px) {
     .lp-bento-bottom { height:172px !important; }
     .lp-listings-scroll { padding-right:40px !important; }
-  }
-
-  /* FIX 17: Respect user's motion preference — disable animations for accessibility */
-  @media (prefers-reduced-motion: reduce) {
-    .lp-bento-bottom, [style*="lp-float"], [style*="lp-float2"] {
-      animation: none !important;
-      transition: opacity 0.2s ease !important;
-    }
-    .lp-reveal { transition: opacity 0.2s ease !important; }
-    .lp-ticker-inner { animation: none !important; }
   }
 
   .lp-shimmer {
@@ -453,7 +435,7 @@ function Ticker() {
   return (
     <div style={{ overflow:"hidden", borderTop:`1px solid ${T.border}`,
       borderBottom:`1px solid ${T.border}`, background:T.surface, padding:"9px 0" }}>
-      <div className="lp-ticker-inner">
+      <div style={{ display:"flex", width:"max-content", animation:"lp-ticker 24s linear infinite" }}>
         {doubled.map((w, i) => (
           <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:8,
             padding:"0 16px", fontSize:10, fontWeight:700, color:T.ink3,
