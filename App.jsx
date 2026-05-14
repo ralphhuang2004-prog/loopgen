@@ -982,10 +982,11 @@ function Phone({ children }) {
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
-        /* FIX 17: Disable non-essential motion for users who prefer reduced motion */
+        /* Disable non-essential motion for users who prefer reduced motion —
+           target only specific UI transitions, NOT all animations globally */
         @media (prefers-reduced-motion: reduce) {
           .lg-screen-enter { animation: none !important; }
-          * { animation-duration: 0.01ms !important; transition-duration: 0.1s !important; }
+          .home-ticker-inner { animation: none !important; }
         }
         html,body,#root{height:100%;width:100%;margin:0;padding:0;}
 

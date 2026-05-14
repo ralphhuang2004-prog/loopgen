@@ -407,9 +407,7 @@ function HeroBento({ entered, onTap }) {
     ...extra,
     opacity: entered ? 1 : 0,
     transform: entered ? "none" : "translateY(18px) scale(0.95)",
-    // transition scoped to opacity ONLY — transform is controlled by the float animation
-    // including transform here causes jitter on desktop when animation mid-frame meets transition
-    transition:`opacity 0.6s ease ${delay(n)}`,
+    transition:`opacity 0.6s ease ${delay(n)}, transform 0.6s ease ${delay(n)}`,
     animation: entered ? `${anim} ${4 + n * 0.6}s ease-in-out ${1 + n * 0.25}s infinite` : "none",
   });
 
