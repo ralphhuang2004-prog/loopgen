@@ -90,14 +90,11 @@ const CSS = `
     .lp-listings-scroll { padding-right:40px !important; }
   }
 
-  /* FIX 17: Respect user's motion preference — disable animations for accessibility */
+  /* Respect user's motion preference — suppress only the scrolling ticker,
+     not the slow gentle float animations which are subtle and non-disorienting */
   @media (prefers-reduced-motion: reduce) {
-    .lp-bento-bottom, [style*="lp-float"], [style*="lp-float2"] {
-      animation: none !important;
-      transition: opacity 0.2s ease !important;
-    }
-    .lp-reveal { transition: opacity 0.2s ease !important; }
     .lp-ticker-inner { animation: none !important; }
+    .lp-reveal { transition: opacity 0.2s ease !important; }
   }
 
   .lp-shimmer {

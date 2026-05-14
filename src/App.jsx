@@ -1043,6 +1043,15 @@ function Phone({ children }) {
         @media (min-width: 768px) {
           .lg-cat-tile { aspect-ratio: unset !important; height: 140px !important; }
           .lg-cat-tile-more { aspect-ratio: unset !important; height: 140px !important; }
+          /* Smooth hover lift on desktop category tiles — transform only, no layout shift */
+          .lg-cat-tile, .lg-cat-tile-more {
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            will-change: transform;
+          }
+          .lg-cat-tile:hover, .lg-cat-tile-more:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.38) !important;
+          }
           /* Explore / Search screen: fill the content column correctly */
           .lg-explore-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; overflow:hidden; }
           .lg-explore-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; }
