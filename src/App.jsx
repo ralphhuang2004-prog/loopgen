@@ -2041,10 +2041,13 @@ function LoopGenAppInner() {
           const raw = payload.new;
           // Map DB 'body' column to 'content' for frontend consistency
           const msg = { ...raw, content: raw.body ?? raw.content ?? "" };
-          setChatMsgs(prev => {
-            if (prev.find(m => m.id === msg.id)) return prev;
-            return [...prev, { ...msg, from_me: msg.sender_id === user?.id }];
-          });
+          const key = chatContext?.id;
+          if (!key) return; // no active chat context — ignore
+          // Dedup against localChatStore (same store ChatScreen reads from)
+          const existing = localChatStore.current[key] || [];
+          if (existing.find(m => m.id === msg.id)) return;
+          // Route into the same store ChatScreen reads — this is the fix
+          addMessageToStore(key, { ...msg, from_me: msg.sender_id === user?.id });
           setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
         })
       .subscribe();
@@ -2349,15 +2352,17 @@ function LoopGenAppInner() {
       setSellImages(prev => prev.map(url => {
         const match = uploadResults.find(r => r.blobUrl === url);
         return (match && match.publicUrl) ? match.publicUrl : url;
-      }));
+      // FIX 2: Remove any remaining blob:// URLs (failed uploads) — never show/save them
+      }).filter(url => !url.startsWith("blob:")));
       setSell(f => ({
         ...f,
         image_urls: f.image_urls.map(url => {
           const match = uploadResults.find(r => r.blobUrl === url);
           return (match && match.publicUrl) ? match.publicUrl : url;
-        }),
+        // FIX 2: Strip any remaining blob:// URLs — failed uploads must not reach DB
+        }).filter(url => url && !url.startsWith("blob:")),
       }));
-      if (failed > 0) showToast(`⚠️ ${failed} photo(s) failed to upload`);
+      if (failed > 0) showToast(`⚠️ ${failed} photo(s) failed — removed from listing`);
       else showToast(`📸 ${toAdd.length} photo(s) uploaded`);
     } catch (e) {
       showToast("Upload failed — " + e.message);
@@ -2381,7 +2386,7 @@ function LoopGenAppInner() {
         condition: sell.condition,
         description: sell.desc.slice(0, 2000),
         location: sell.location || "Australia",
-        image_urls: sell.image_urls,
+        image_urls: sell.image_urls.filter(u => u && !u.startsWith("blob:")),
         tags: sell.tags || [],
       };
 
@@ -3544,7 +3549,8 @@ function LoopGenAppInner() {
                 </div>
               );
             })()}
-            <GreenBtn onClick={()=>{
+            <GreenBtn disabled={uploadingImg} onClick={()=>{
+              if (uploadingImg) return;
               if (!sell.title.trim()) { showToast("Please add a title"); return; }
               if (!sell.price || parseFloat(sell.price) <= 0) { showToast("Please add a valid price"); return; }
               if (!sell.category) { showToast("Please select a category"); return; }
@@ -3561,7 +3567,7 @@ function LoopGenAppInner() {
                 setSell(f => ({...f, tags: filled}));
               }
               setSellStep(2);
-            }}>Continue →</GreenBtn>
+            }}>{uploadingImg ? "Uploading photos…" : "Continue →"}</GreenBtn>
           </>
         )}
         {sellStep===2 && (
@@ -3632,7 +3638,7 @@ function LoopGenAppInner() {
             })()}
             <div style={{display:"flex",gap:10,marginTop:4}}>
               <button onClick={()=>setSellStep(1)} style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Back</button>
-              <GreenBtn onClick={()=>setSellStep(3)} mt={0} style={{flex:2}}>Preview →</GreenBtn>
+              <GreenBtn disabled={uploadingImg} onClick={()=>{ if (!uploadingImg) setSellStep(3); }} mt={0} style={{flex:2}}>{uploadingImg ? "Uploading photos…" : "Preview →"}</GreenBtn>
             </div>
           </>
         )}
@@ -3656,7 +3662,7 @@ function LoopGenAppInner() {
                 ⚠️ Sign in to save your listing permanently
               </div>
             )}
-            <GreenBtn onClick={handleList} disabled={loading}>{loading?"Posting…":"🚀 Post Listing"}</GreenBtn>
+            <GreenBtn onClick={handleList} disabled={loading || uploadingImg}>{loading ? "Posting…" : uploadingImg ? "Uploading photos…" : "🚀 Post Listing"}</GreenBtn>
             <button onClick={()=>setSellStep(2)} style={{width:"100%",marginTop:10,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,cursor:"pointer",color:"#374151"}}>← Edit</button>
           </>
         )}
