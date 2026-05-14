@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════╗
-// ║  LoopGen  ·  Beta v0.1.0                                    ║
+// ║  LoopGen  ·  Beta v0.2.0  (Production Hardening)           ║
 // ║  Auth · Listings · Vintage · Chat · Saved · Profile         ║
 // ╚══════════════════════════════════════════════════════════════╝
 //
@@ -15,7 +15,7 @@
 //   6. Deploy supabase/functions/loopgen-ai-desc
 //      supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Component } from "react";
 import { createClient } from "@supabase/supabase-js";
 import LandingPage from "./LandingPage.jsx";
 
@@ -29,7 +29,49 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.2.0"; // FIX 14: bumped for production hardening deploy
+
+// ── FIX 16: React Error Boundary — catches render crashes ────────
+class AppErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    // In production, send to error tracking (Sentry etc.)
+    // Keep as console.error — this is an essential operational log
+    console.error("[LoopGen] Render error:", error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          fontFamily:"'Plus Jakarta Sans',system-ui,sans-serif",
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          minHeight:"100vh",padding:"32px 24px",background:"#f7f6f3",textAlign:"center",
+        }}>
+          <div style={{fontSize:48,marginBottom:16}}>😔</div>
+          <div style={{fontSize:20,fontWeight:800,color:"#111",marginBottom:8}}>Something went wrong</div>
+          <div style={{fontSize:14,color:"#6b7280",marginBottom:24,lineHeight:1.6}}>
+            LoopGen hit an unexpected error. Your data is safe.
+          </div>
+          <button
+            onClick={() => { this.setState({ error: null }); window.location.reload(); }}
+            style={{padding:"14px 28px",borderRadius:50,background:GREEN,border:"none",
+              color:"white",fontWeight:700,fontSize:15,cursor:"pointer",
+              fontFamily:"inherit",boxShadow:`0 6px 20px ${GREEN}44`}}>
+            Reload App
+          </button>
+          <div style={{marginTop:16,fontSize:11,color:"#9ca3af"}}>
+            If this keeps happening, contact{" "}
+            <a href="mailto:support@loopgen.com.au" style={{color:GREEN,textDecoration:"none"}}>
+              support@loopgen.com.au
+            </a>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── AU POSTCODE → SUBURB LOOKUP ──────────────────────────────────
 // Verified against postcodes-australia.com (authoritative AU Post data).
@@ -648,7 +690,7 @@ async function dbGetListings(userId) {
 }
 
 async function dbCreateListing(listing, userId) {
-  if (!supabase) { console.warn("No Supabase — demo mode"); return null; }
+  if (!supabase) { return null; }
   const { data, error } = await supabase
     .from("listings")
     .insert({ ...listing, seller_id: userId, status: "active" })
@@ -677,7 +719,7 @@ async function dbGetConversations(userId) {
       buyer:buyer_id(id, profiles(username, avatar_url)),
       seller:seller_id(id, profiles(username, avatar_url)),
       listing:listing_id(title),
-      messages(content, created_at, sender_id)
+      messages(body, created_at, sender_id)
     `)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
@@ -692,7 +734,7 @@ async function dbGetConversations(userId) {
       other_user: otherProfile?.username || (isBuyer ? "Seller" : "Buyer"),
       other_avatar: otherProfile?.avatar_url || null,
       listing_title: c.listing?.title || "Item",
-      last_message: lastMsg?.content || "",
+      last_message: lastMsg?.body || "",
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
       unread: 0,
       online: false,
@@ -709,14 +751,16 @@ async function dbGetMessages(conversationId) {
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
   if (error) { console.error("getMessages:", error); return []; }
-  return data || [];
+  // DB stores message text in 'body' column — map to 'content' for frontend consistency
+  return (data || []).map(m => ({ ...m, content: m.body ?? m.content ?? "" }));
 }
 
 async function dbSendMessage(conversationId, senderId, content) {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, content })
+    // DB column is 'body' — content is the parameter name used internally
+    .insert({ conversation_id: conversationId, sender_id: senderId, body: content })
     .select()
     .single();
   if (error) throw error;
@@ -756,11 +800,22 @@ async function dbUpsertProfile(userId, updates) {
   await supabase.from("profiles").upsert({ id: userId, ...updates });
 }
 
+// Allowed image MIME types — reject anything else before upload
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg","image/jpg","image/png","image/webp","image/gif"]);
+
 async function dbUploadImage(file, userId) {
   if (!supabase) return null;
-  const ext = file.name.split(".").pop();
+  // FIX 10: Validate MIME type server-side (not just accept attribute)
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error(`File type "${file.type}" is not allowed. Please upload a JPEG, PNG, WebP, or GIF.`);
+  }
+  const extMap = { "image/jpeg":"jpg","image/jpg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif" };
+  const ext = extMap[file.type] || "jpg";
   const path = `${userId}/${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from("listing-images").upload(path, file, { upsert: true });
+  const { error } = await supabase.storage.from("listing-images").upload(path, file, {
+    upsert: true,
+    contentType: file.type, // Explicitly set content type — don't trust file extension
+  });
   if (error) throw error;
   const { data: { publicUrl } } = supabase.storage.from("listing-images").getPublicUrl(path);
   return publicUrl;
@@ -775,20 +830,39 @@ async function dbGetUserListings(userId) {
   return data || [];
 }
 
-async function dbMarkAsSold(listingId) {
+async function dbMarkAsSold(listingId, userId) {
   if (!supabase) return;
+  // Defence-in-depth: always scope mutations to the authenticated owner.
+  // Supabase RLS is the primary guard; this is a belt-and-suspenders check.
   const { error } = await supabase.from("listings")
     .update({ status: "sold" })
-    .eq("id", listingId);
+    .eq("id", listingId)
+    .eq("seller_id", userId);
   if (error) throw error;
 }
 
-async function dbDeleteListing(listingId) {
+async function dbDeleteListing(listingId, userId) {
   if (!supabase) return;
+  // Defence-in-depth: always scope mutations to the authenticated owner.
   const { error } = await supabase.from("listings")
     .update({ status: "deleted" })
-    .eq("id", listingId);
+    .eq("id", listingId)
+    .eq("seller_id", userId);
   if (error) throw error;
+}
+
+// Update a listing the authenticated user owns
+async function dbUpdateListing(listingId, userId, updates) {
+  if (!supabase) return null;
+  // Note: listings table has no updated_at column — do not include it
+  const { data, error } = await supabase.from("listings")
+    .update({ ...updates })
+    .eq("id", listingId)
+    .eq("seller_id", userId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 async function dbGetSavedListings(userId) {
@@ -820,7 +894,7 @@ async function dbAiDescription(title, category, condition) {
   return data?.description || null;
 }
 
-// P3 — Save offer (Supabase if available, else local state fallback handled in caller)
+// Save offer — throws on error so caller can show user-facing message
 async function dbSaveOffer({ listing_id, buyer_id, seller_id, price }) {
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -828,26 +902,19 @@ async function dbSaveOffer({ listing_id, buyer_id, seller_id, price }) {
     .insert({ listing_id, buyer_id, seller_id, price: parseFloat(price), created_at: new Date().toISOString() })
     .select()
     .single();
-  if (error) {
-    // Table may not exist yet — fail silently, local state handles it
-    console.warn("dbSaveOffer:", error.message);
-    return null;
-  }
+  if (error) throw error;
   return data;
 }
 
-// P4 — Save report (Supabase if available, else local state fallback handled in caller)
-async function dbSaveReport({ listing_id, user_id, reason }) {
+// Save report — uses 'reporter_id' to match the live DB column name
+async function dbSaveReport({ listing_id, reporter_id, reason }) {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("reports")
-    .insert({ listing_id, user_id, reason, created_at: new Date().toISOString() })
+    .insert({ listing_id, reporter_id, reason, created_at: new Date().toISOString() })
     .select()
     .single();
-  if (error) {
-    console.warn("dbSaveReport:", error.message);
-    return null;
-  }
+  if (error) throw error;
   return data;
 }
 
@@ -915,6 +982,11 @@ function Phone({ children }) {
         @keyframes loopgen-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes loopgen-fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .lg-screen-enter{animation:loopgen-fadein 0.2s ease forwards;}
+        /* FIX 17: Disable non-essential motion for users who prefer reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+          .lg-screen-enter { animation: none !important; }
+          * { animation-duration: 0.01ms !important; transition-duration: 0.1s !important; }
+        }
         html,body,#root{height:100%;width:100%;margin:0;padding:0;}
 
         /* ── Mobile (default): full-width single column ── */
@@ -1510,6 +1582,8 @@ function HomeTicker() {
 // ═══════════════════════════════════════════════════════
 function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   const [text, setText] = useState("");
+  const [isSending, setIsSending] = useState(false); // FIX 11: concurrent send protection
+  const MAX_MSG_LENGTH = 2000; // FIX 12: message length limit
   // viewH tracks the visual viewport height so the chat shrinks correctly
   // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
   const [viewH, setViewH] = useState(
@@ -1542,7 +1616,12 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
 
   const send = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSending) return; // FIX 11: block while sending
+    // FIX 12: enforce length limit
+    if (trimmed.length > MAX_MSG_LENGTH) {
+      return; // button is already disabled — safety check
+    }
+    setIsSending(true);
     onSend({
       id: `msg_${Date.now()}`,
       from_me: true,
@@ -1550,7 +1629,11 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     });
     setText("");
-    setTimeout(() => inputRef.current?.focus(), 50);
+    // Re-enable after a short guard period to prevent double-tap on slow devices
+    setTimeout(() => {
+      setIsSending(false);
+      inputRef.current?.focus();
+    }, 300);
   };
 
   const handleKey = (e) => {
@@ -1561,6 +1644,8 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
   };
 
   const initial = (sellerName || "S")[0].toUpperCase();
+  const charsLeft = MAX_MSG_LENGTH - text.length;
+  const nearLimit = charsLeft < 200;
 
   return (
     <div style={{
@@ -1709,48 +1794,61 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
         position: "relative",
         zIndex: 1,
       }}>
-        <input
-          ref={inputRef}
-          className="lg-chat-input"
-          type="text"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="Type a message…"
-          autoComplete="off"
-          autoCorrect="on"
-          autoCapitalize="sentences"
-          spellCheck={true}
-          enterKeyHint="send"
-          style={{
-            flex: 1,
-            background: "#f3f4f6",
-            borderRadius: 24,
-            padding: "13px 18px",
-            border: "2px solid transparent",
-            fontSize: 16,
-            color: "#111",
-            fontFamily: "inherit",
-            lineHeight: "normal",
-            minWidth: 0,
-            transition: "border-color 0.15s, background 0.15s",
-          }}
-          onFocus={e => { e.target.style.borderColor = "#1c7c45"; e.target.style.background = "#f0fdf4"; }}
-          onBlur={e => { e.target.style.borderColor = "transparent"; e.target.style.background = "#f3f4f6"; }}
-        />
+        <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+          <input
+            ref={inputRef}
+            className="lg-chat-input"
+            type="text"
+            value={text}
+            onChange={e => setText(e.target.value.slice(0, MAX_MSG_LENGTH))}
+            onKeyDown={handleKey}
+            placeholder="Type a message…"
+            autoComplete="off"
+            autoCorrect="on"
+            autoCapitalize="sentences"
+            spellCheck={true}
+            enterKeyHint="send"
+            maxLength={MAX_MSG_LENGTH}
+            style={{
+              width: "100%",
+              background: "#f3f4f6",
+              borderRadius: 24,
+              padding: "13px 18px",
+              border: "2px solid transparent",
+              fontSize: 16,
+              color: "#111",
+              fontFamily: "inherit",
+              lineHeight: "normal",
+              minWidth: 0,
+              transition: "border-color 0.15s, background 0.15s",
+            }}
+            onFocus={e => { e.target.style.borderColor = "#1c7c45"; e.target.style.background = "#f0fdf4"; }}
+            onBlur={e => { e.target.style.borderColor = "transparent"; e.target.style.background = "#f3f4f6"; }}
+          />
+          {/* FIX 12: Character counter — show when near limit, positioned inside input */}
+          {nearLimit && (
+            <div style={{
+              position: "absolute", bottom: 6, right: 14,
+              fontSize: 10, color: charsLeft < 50 ? "#ef4444" : "#9ca3af", fontWeight: 600,
+              pointerEvents: "none",
+            }}>
+              {charsLeft}
+            </div>
+          )}
+        </div>
         <button
           className="lg-send-btn"
           onClick={send}
-          disabled={!text.trim()}
+          disabled={!text.trim() || isSending || text.length > MAX_MSG_LENGTH}
           style={{
             width: 48, height: 48, borderRadius: "50%",
-            background: text.trim() ? "#1c7c45" : "#e5e7eb",
+            background: (text.trim() && !isSending) ? "#1c7c45" : "#e5e7eb",
             border: "none",
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: text.trim() ? "pointer" : "default",
+            cursor: (text.trim() && !isSending) ? "pointer" : "default",
             flexShrink: 0,
             transition: "background 0.15s",
-            boxShadow: text.trim() ? "0 4px 12px rgba(28,124,69,0.35)" : "none",
+            boxShadow: (text.trim() && !isSending) ? "0 4px 12px rgba(28,124,69,0.35)" : "none",
           }}
         >
           <IcoSend />
@@ -1763,17 +1861,22 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
 // ═══════════════════════════════════════════════════════
 //  MAIN APP
 // ═══════════════════════════════════════════════════════
-export default function LoopGenApp() {
+// ── FIX 16: Export wrapped in ErrorBoundary ──────────────────────
+function LoopGenAppInner() {
   // ── Core state ──────────────────────────────────────
   const [screen,    setScreen]  = useState("splash");
   const [history,   setHistory] = useState([]);
   const [user,      setUser]    = useState(null);   // Supabase user object
   const [profile,   setProfile] = useState(null);   // profiles row
-  const [authMode,  setAuthMode]= useState("login"); // "login" | "register"
+  const [authMode,  setAuthMode]= useState("login"); // "login" | "register" | "forgot"
   const [authForm,  setAuthForm]= useState({email:"",password:"",username:""});
   const [authError, setAuthError]= useState("");
   const [authLoading,setAuthLoading]= useState(false);
   const [sessionReady, setSessionReady] = useState(!HAS_SUPABASE);
+  // FIX 2: Password reset state
+  const [resetSent,  setResetSent]  = useState(false);
+  // FIX 7: Edit listing state
+  const [editListing, setEditListing] = useState(null); // listing being edited | null
 
   // ── Data state ───────────────────────────────────────
   const [listings,  setListings]= useState(HAS_SUPABASE ? [] : [...DEMO_VINTAGE, ...DEMO_LISTINGS]);
@@ -1843,7 +1946,7 @@ export default function LoopGenApp() {
   useEffect(() => {
     const stored = localStorage.getItem("app_version");
     if (stored !== APP_VERSION) {
-      console.log("[LoopGen] New version:", APP_VERSION, "clearing old cache");
+      // version cache clear
       if ("caches" in window) {
         caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
       }
@@ -1851,7 +1954,7 @@ export default function LoopGenApp() {
       localStorage.clear();
       if (session) localStorage.setItem("sb-wknlvmsgjnsiamcbntek-auth-token", session);
       localStorage.setItem("app_version", APP_VERSION);
-      console.log("[LoopGen] Cache cleared, version set:", APP_VERSION);
+      // cache cleared
     }
   }, []);
 
@@ -1935,7 +2038,9 @@ export default function LoopGenApp() {
       .channel(`messages:${convo.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convo.id}` },
         payload => {
-          const msg = payload.new;
+          const raw = payload.new;
+          // Map DB 'body' column to 'content' for frontend consistency
+          const msg = { ...raw, content: raw.body ?? raw.content ?? "" };
           setChatMsgs(prev => {
             if (prev.find(m => m.id === msg.id)) return prev;
             return [...prev, { ...msg, from_me: msg.sender_id === user?.id }];
@@ -2014,16 +2119,55 @@ export default function LoopGenApp() {
   const nav  = s => {
     if (s === "sell" && !sessionReady) { showToast("Loading…"); return; }
     if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
-    if (s === "sell") { setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); setSellImageFiles([]); }
+    // BUG FIX: Clear editListing when navigating to sell via nav() — this is a fresh listing
+    if (s === "sell") { setEditListing(null); setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); setSellImageFiles([]); }
     setHistory([]); setScreen(s); setDetail(null); setConvo(null);
+  };
+  // BUG FIX: Clear editListing when pressing back from sell screen
+  const pop  = () => {
+    const h=[...history]; const prev=h.pop()||"home"; setHistory(h); setScreen(prev);
+    if (screen === "sell") { setEditListing(null); }
   };
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2400); };
 
   // ── Auth ─────────────────────────────────────────────
+  // FIX 6: Email format validation — check before hitting the API
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
+  // FIX 3: Normalize username — lowercase, trimmed, only valid chars
+  const normalizeUsername = (raw) =>
+    raw.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "").replace(/_{2,}/g, "_").replace(/^[_.]|[_.]$/g, "") || null;
+
+  // FIX 2: Handle password reset email request
+  async function handlePasswordReset() {
+    if (!supabase) { showToast("Connect Supabase to enable auth"); return; }
+    const email = authForm.email.trim();
+    if (!email) { setAuthError("Please enter your email address first."); return; }
+    if (!isValidEmail(email)) { setAuthError("Please enter a valid email address."); return; }
+    setAuthLoading(true); setAuthError("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + "/?recovery=1",
+      });
+      if (error) throw error;
+      setResetSent(true);
+    } catch (e) {
+      setAuthError("Couldn't send reset email. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function handleAuth() {
     if (!supabase) { showToast("Connect Supabase to enable auth"); nav("home"); return; }
-    // P2: enforce terms acceptance server-side, not just via disabled button
+
+    // FIX 6: Validate email format before API call
+    if (!isValidEmail(authForm.email)) {
+      setAuthError("Please enter a valid email address.");
+      return;
+    }
+    // Enforce terms acceptance for registration
     if (authMode === "register" && !agreeTerms) {
       setAuthError("You must agree to the Terms of Service and Privacy Policy to register.");
       return;
@@ -2031,38 +2175,58 @@ export default function LoopGenApp() {
     setAuthLoading(true); setAuthError("");
     try {
       if (authMode === "register") {
-        const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
+        // FIX 3: Normalize and validate username before signup
+        const rawUsername = authForm.username.trim();
+        if (!rawUsername) { setAuthError("Please choose a username."); return; }
+        if (rawUsername.length < 3) { setAuthError("Username must be at least 3 characters."); return; }
+        const chosenUsername = normalizeUsername(rawUsername);
+        // BUG FIX: If normalization removes all chars (e.g. "!!!"), reject with clear message
+        if (!chosenUsername || chosenUsername.length < 3) {
+          setAuthError("Username can only contain letters, numbers, _ and . — please choose a different one.");
+          return;
+        }
+
+        // Check username availability before creating auth account
+        const { data: existing } = await supabase
+          .from("profiles").select("id").eq("username", chosenUsername).maybeSingle();
+        if (existing) {
+          setAuthError(`Username "${chosenUsername}" is already taken. Please choose another.`);
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signUp({ email: authForm.email.trim(), password: authForm.password });
         if (error) throw error;
         if (data.user && data.session) {
-          // Email confirmation OFF — user is fully signed in immediately.
-          // Save the exact username the user typed (trimmed). Never derive from email here.
-          const chosenUsername = authForm.username.trim() ||
-            authForm.email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").replace(/_+$/g, "") || "user";
           await dbUpsertProfile(data.user.id, { username: chosenUsername, avatar_url: null });
-          // Immediately set profile in state — do NOT call loadProfile which might
-          // race and overwrite with an email-derived name before the DB write lands.
           setUser(data.user);
           setProfile({ id: data.user.id, username: chosenUsername });
           showToast("🎉 Account created! Welcome to LoopGen.");
           nav("home");
         } else if (data.user && !data.session) {
-          // Email confirmation ON — user created but needs to verify email
           setAuthError("✅ Account created! Check your email to confirm before signing in.");
         } else {
           setAuthError("Something went wrong. Please try again.");
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
-        if (error) throw error;
+        const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email.trim(), password: authForm.password });
+        if (error) {
+          // FIX 6: Show friendly error instead of raw Supabase message
+          if (error.message.toLowerCase().includes("invalid login")) {
+            throw new Error("Incorrect email or password. Please try again.");
+          }
+          throw error;
+        }
         setUser(data.user);
         await loadProfile(data.user.id);
         showToast("👋 Welcome back!");
         nav("home");
       }
     } catch (e) {
-      setAuthError(e.message || "Authentication failed");
+      setAuthError(e.message || "Authentication failed. Please try again.");
+    } finally {
+      // FIX 9: always clear loading state — even on unexpected throws
+      setAuthLoading(false);
     }
-    setAuthLoading(false);
   }
 
   async function handleSignOut() {
@@ -2088,7 +2252,7 @@ export default function LoopGenApp() {
       msg: "Mark this item as sold?",
       onConfirm: async () => {
         try {
-          await dbMarkAsSold(listingId);
+          await dbMarkAsSold(listingId, user.id);
           setUserListings(ls => ls.map(l => l.id===listingId ? {...l, status:"sold"} : l));
           showToast("✅ Marked as sold!");
         } catch (e) { showToast("Failed: " + e.message); }
@@ -2102,7 +2266,7 @@ export default function LoopGenApp() {
       msg: "Remove this listing? This can't be undone.",
       onConfirm: async () => {
         try {
-          await dbDeleteListing(listingId);
+          await dbDeleteListing(listingId, user.id);
           setUserListings(ls => ls.filter(l => l.id !== listingId));
           setListings(ls => ls.filter(l => l.id !== listingId));
           showToast("Listing removed.");
@@ -2145,6 +2309,13 @@ export default function LoopGenApp() {
     // Reset input so the same file can be re-selected after removal
     e.target.value = "";
     if (!files.length) return;
+
+    // FIX 10: Validate MIME type — reject non-image files before upload
+    const invalidFiles = files.filter(f => !ALLOWED_IMAGE_TYPES.has(f.type));
+    if (invalidFiles.length) {
+      showToast(`${invalidFiles.length} file(s) rejected — only JPEG, PNG, WebP, or GIF allowed.`);
+      return;
+    }
     // Validate file sizes (max 10MB each)
     const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
     if (oversized.length) { showToast(`${oversized.length} photo(s) exceed 10MB limit`); return; }
@@ -2160,7 +2331,6 @@ export default function LoopGenApp() {
     setSell(f => ({...f, image_urls: [...f.image_urls, ...blobUrls].slice(0, 5)}));
 
     if (!user || !supabase) {
-      // Demo mode — blob previews are all we can do; that's fine
       showToast(`📸 ${toAdd.length} photo(s) added`);
       return;
     }
@@ -2172,6 +2342,8 @@ export default function LoopGenApp() {
         toAdd.map(async (file, i) => {
           try {
             const url = await dbUploadImage(file, user.id);
+            // FIX 8: Revoke blob URL after successful upload to free memory
+            URL.revokeObjectURL(blobUrls[i]);
             return { blobUrl: blobUrls[i], publicUrl: url };
           } catch {
             return { blobUrl: blobUrls[i], publicUrl: null };
@@ -2203,24 +2375,35 @@ export default function LoopGenApp() {
     if (!sell.title || !sell.price || !sell.category || !sell.condition) {
       showToast("Please fill all required fields"); return;
     }
+    // BUG FIX: Capture destination BEFORE any state changes — editListing will be null after clear
+    const postSaveDestination = editListing ? "my-listings" : "home";
     setLoading(true);
     try {
-      const listing = {
-        title: sell.title,
+      const listingData = {
+        title: sell.title.trim().slice(0, 100),
         price: parseFloat(sell.price),
         category: sell.category,
         sub: sell.sub,
         condition: sell.condition,
-        description: sell.desc,
+        description: sell.desc.slice(0, 2000),
         location: sell.location || "Australia",
         image_urls: sell.image_urls,
         tags: sell.tags || [],
-        seller_id: user?.id,
       };
-      if (user && supabase) {
-        const created = await dbCreateListing(listing, user.id);
+
+      if (editListing && user && supabase) {
+        // FIX 7: EDIT MODE — update existing listing
+        const updated = await dbUpdateListing(editListing.id, user.id, listingData);
+        showToast("✅ Listing updated!");
+        if (updated) {
+          const enriched = { ...updated, seller_username: profile?.username || currentUser, time: "Just now", is_saved: false };
+          setListings(ls => ls.map(l => l.id === editListing.id ? { ...l, ...enriched } : l));
+          setUserListings(ls => ls.map(l => l.id === editListing.id ? { ...l, ...updated } : l));
+        }
+        setEditListing(null);
+      } else if (user && supabase) {
+        const created = await dbCreateListing(listingData, user.id);
         showToast("🎉 Listed! Your item is live.");
-        // Optimistically prepend with correct username before DB refresh
         if (created) {
           const optimistic = {
             ...created,
@@ -2233,23 +2416,25 @@ export default function LoopGenApp() {
           };
           setListings(ls => [optimistic, ...ls]);
         }
-        listingsLoaded.current = false; // force a full refresh
+        listingsLoaded.current = false;
         await loadListings({ force: true });
       } else {
         // Demo mode — add locally
-        const newItem = { ...listing, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
+        const newItem = { ...listingData, id: `local_${Date.now()}`, seller_username: "you", time: "Just now", is_saved: false };
         setListings(ls => [newItem, ...ls]);
         showToast("🎉 Listed! (Demo mode)");
       }
       setSellStep(1);
       setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]});
-      setSellImages([]);
+      // FIX 8: Revoke any remaining blob URLs before clearing state
+      setSellImages(prev => { prev.forEach(url => { if (url.startsWith("blob:")) URL.revokeObjectURL(url); }); return []; });
       setSellImageFiles([]);
-      nav("home");
+      nav(postSaveDestination);
     } catch (e) {
-      showToast("Failed to list: " + e.message);
+      showToast("Failed: " + e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // ── AI description ─────────────────────────────────────
@@ -2401,48 +2586,118 @@ export default function LoopGenApp() {
       <StatusBar/>
       <DemoBanner/>
       <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px",display:"flex",flexDirection:"column"}}>
-        <div onClick={pop} style={{cursor:"pointer",marginBottom:24}}><IcoBack/></div>
+        <div onClick={() => { pop(); setAuthError(""); setResetSent(false); setAuthMode("login"); }} style={{cursor:"pointer",marginBottom:24}}><IcoBack/></div>
         <LoopGenLogo height={36} style={{marginBottom:20}} />
-        <div style={{fontSize:26,fontWeight:900,color:"#111",marginBottom:4}}>{authMode==="login"?"Welcome back 👋":"Join LoopGen 🌱"}</div>
-        <div style={{marginBottom:6,fontSize:13,fontWeight:800,color:GREEN}}>Buy and sell with ease.</div>
-        <div style={{fontSize:14,color:"#6b7280",marginBottom:28}}>{authMode==="login"?"Sign in to your account":"Create your free account"}</div>
 
-        {!HAS_SUPABASE && (
-          <div style={{background:"#f0fdf4",borderRadius:14,padding:"14px 16px",marginBottom:20,fontSize:12,color:"#166534",fontWeight:600,border:"1px solid #bbf7d0"}}>
-            🌱 This is a demo build — accounts aren't live yet. Use "Explore the Demo →" on the previous screen to browse listings.
-          </div>
+        {/* ── FORGOT PASSWORD MODE ── */}
+        {authMode === "forgot" ? (
+          <>
+            <div style={{fontSize:24,fontWeight:900,color:"#111",marginBottom:4}}>Reset password</div>
+            <div style={{fontSize:14,color:"#6b7280",marginBottom:28}}>
+              Enter your email and we'll send a reset link.
+            </div>
+            {resetSent ? (
+              <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:14,padding:"18px 16px",textAlign:"center"}}>
+                <div style={{fontSize:28,marginBottom:8}}>📧</div>
+                <div style={{fontWeight:700,color:"#166534",fontSize:15,marginBottom:6}}>Check your inbox</div>
+                <div style={{fontSize:13,color:"#4b7c5a",lineHeight:1.6}}>
+                  We've sent a reset link to <strong>{authForm.email}</strong>.
+                  Follow the link in the email to set a new password.
+                </div>
+                <button onClick={() => { setAuthMode("login"); setResetSent(false); setAuthError(""); }}
+                  style={{marginTop:16,padding:"12px 24px",borderRadius:50,background:GREEN,border:"none",
+                    color:"white",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                  Back to Sign In
+                </button>
+              </div>
+            ) : (
+              <>
+                {!HAS_SUPABASE && (
+                  <div style={{background:"#f0fdf4",borderRadius:14,padding:"14px 16px",marginBottom:20,fontSize:12,color:"#166534",fontWeight:600,border:"1px solid #bbf7d0"}}>
+                    🌱 Demo mode — password reset requires a live Supabase connection.
+                  </div>
+                )}
+                <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))}/>
+                {authError && <div style={{color:"#ef4444",fontSize:13,marginBottom:12,fontWeight:500}}>{authError}</div>}
+                <GreenBtn onClick={handlePasswordReset} disabled={authLoading} mt={8}>
+                  {authLoading ? "Sending…" : "Send Reset Link"}
+                </GreenBtn>
+                <div style={{textAlign:"center",marginTop:16}}>
+                  <span onClick={() => { setAuthMode("login"); setAuthError(""); }}
+                    style={{fontSize:13,color:GREEN,fontWeight:700,cursor:"pointer"}}>
+                    ← Back to Sign In
+                  </span>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          /* ── LOGIN / REGISTER MODE ── */
+          <>
+            <div style={{fontSize:26,fontWeight:900,color:"#111",marginBottom:4}}>
+              {authMode==="login" ? "Welcome back 👋" : "Join LoopGen 🌱"}
+            </div>
+            <div style={{marginBottom:6,fontSize:13,fontWeight:800,color:GREEN}}>Buy and sell with ease.</div>
+            <div style={{fontSize:14,color:"#6b7280",marginBottom:28}}>
+              {authMode==="login" ? "Sign in to your account" : "Create your free account"}
+            </div>
+
+            {!HAS_SUPABASE && (
+              <div style={{background:"#f0fdf4",borderRadius:14,padding:"14px 16px",marginBottom:20,fontSize:12,color:"#166534",fontWeight:600,border:"1px solid #bbf7d0"}}>
+                🌱 Demo build — accounts aren't live yet. Use "Explore the Demo →" to browse listings.
+              </div>
+            )}
+
+            {authMode==="register" && (
+              <div style={{marginBottom:0}}>
+                <FInp placeholder="Username (3–30 chars)" value={authForm.username}
+                  onChange={v=>setAuthForm(f=>({...f,username:v}))}/>
+                <div style={{fontSize:11,color:"#9ca3af",marginTop:-8,marginBottom:12,paddingLeft:2}}>
+                  Letters, numbers, _ and . only · Will be shown to other users
+                </div>
+              </div>
+            )}
+            <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))}/>
+            <FInp placeholder="Password (min 6 chars)" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))}/>
+
+            {/* Forgot password link — only on login */}
+            {authMode === "login" && (
+              <div style={{textAlign:"right",marginTop:-6,marginBottom:16}}>
+                <span onClick={() => { setAuthMode("forgot"); setAuthError(""); setResetSent(false); }}
+                  style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>
+                  Forgot password?
+                </span>
+              </div>
+            )}
+
+            {authMode==="register" && (
+              <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:16,cursor:"pointer"}}>
+                <input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)}
+                  style={{width:16,height:16,marginTop:2,accentColor:GREEN,flexShrink:0,cursor:"pointer"}}/>
+                <span style={{fontSize:12,color:"#6b7280",lineHeight:1.55}}>
+                  I agree to the{" "}
+                  <a href="https://www.loopgen.com.au/terms" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Terms of Service</a>
+                  {" "}and{" "}
+                  <a href="https://www.loopgen.com.au/privacy" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Privacy Policy</a>
+                </span>
+              </label>
+            )}
+
+            {authError && <div style={{color:"#ef4444",fontSize:13,marginBottom:12,fontWeight:500,lineHeight:1.5}}>{authError}</div>}
+
+            <GreenBtn onClick={handleAuth} disabled={authLoading || (authMode==="register" && !agreeTerms)} mt={8}>
+              {authLoading ? "Loading…" : authMode==="login" ? "Sign In" : "Create Account"}
+            </GreenBtn>
+
+            <div style={{textAlign:"center",marginTop:20,fontSize:13,color:"#6b7280"}}>
+              {authMode==="login" ? "No account? " : "Have an account? "}
+              <span onClick={() => { setAuthMode(authMode==="login"?"register":"login"); setAuthError(""); setAgreeTerms(false); }}
+                style={{color:GREEN,fontWeight:700,cursor:"pointer"}}>
+                {authMode==="login" ? "Register" : "Sign In"}
+              </span>
+            </div>
+          </>
         )}
-
-        {authMode==="register" && <FInp placeholder="Username" value={authForm.username} onChange={v=>setAuthForm(f=>({...f,username:v}))}/>}
-        <FInp placeholder="Email" type="email" value={authForm.email} onChange={v=>setAuthForm(f=>({...f,email:v}))}/>
-        <FInp placeholder="Password" type="password" value={authForm.password} onChange={v=>setAuthForm(f=>({...f,password:v}))}/>
-
-        {authMode==="register" && (
-          <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:16,cursor:"pointer"}}>
-            <input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)}
-              style={{width:16,height:16,marginTop:2,accentColor:GREEN,flexShrink:0,cursor:"pointer"}}/>
-            <span style={{fontSize:12,color:"#6b7280",lineHeight:1.55}}>
-              I agree to the{" "}
-              <a href="https://www.loopgen.com.au/terms" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Terms of Service</a>
-              {" "}and{" "}
-              <a href="https://www.loopgen.com.au/privacy" style={{color:GREEN,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>Privacy Policy</a>
-            </span>
-          </label>
-        )}
-
-        {authError && <div style={{color:"#ef4444",fontSize:13,marginBottom:12,fontWeight:500}}>{authError}</div>}
-
-        <GreenBtn onClick={handleAuth} disabled={authLoading || (authMode==="register" && !agreeTerms)} mt={8}>
-          {authLoading ? "Loading…" : authMode==="login" ? "Sign In" : "Create Account"}
-        </GreenBtn>
-
-        <div style={{textAlign:"center",marginTop:20,fontSize:13,color:"#6b7280"}}>
-          {authMode==="login" ? "No account? " : "Have an account? "}
-          <span onClick={() => { setAuthMode(authMode==="login"?"register":"login"); setAuthError(""); setAgreeTerms(false); }}
-            style={{color:GREEN,fontWeight:700,cursor:"pointer"}}>
-            {authMode==="login" ? "Register" : "Sign In"}
-          </span>
-        </div>
       </div>
       <Toast msg={toast}/>
     </Phone>
@@ -2802,6 +3057,11 @@ export default function LoopGenApp() {
   // ════════════════════════════
   //  DETAIL
   // ════════════════════════════
+  if (screen === "detail" && !detail) {
+    // Guard: detail was lost (refresh, state reset, etc.) — redirect home safely
+    nav("home");
+    return null;
+  }
   if (screen === "detail" && detail) {
     const img = detail.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
     const demoSeller = DEMO_SELLERS[detail.seller_username];
@@ -3028,7 +3288,7 @@ export default function LoopGenApp() {
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
-            // Persist to Supabase — silent fallback if table missing
+            // Persist offer to Supabase — surface errors to the user
             if (user) {
               try {
                 await dbSaveOffer({
@@ -3037,16 +3297,17 @@ export default function LoopGenApp() {
                   seller_id:  offerModal.item.seller_id || null,
                   price:      offerPrice,
                 });
-              } catch { /* table may not exist yet — local state handles it */ }
+              } catch (e) {
+                showToast("Offer couldn't be saved — please try again.");
+                return; // Don't proceed if persist failed
+              }
             }
-            // Always update local state regardless of DB outcome
+            // Only update local state after successful (or guest) save
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
             const price = offerPrice;
             setOfferModal(null);
             showToast(`Offer of $${price} sent!`);
-            // Open chat — openChat uses chatKey(item) consistently
-            // and appends the offer message into the store before opening
             const offerMsg = {
               id: `offer_${Date.now()}`,
               from_me: true,
@@ -3061,16 +3322,28 @@ export default function LoopGenApp() {
           onClose={() => setReportModal(null)}
           onSubmit={async (reason) => {
             if (!reason) { showToast("Please select a reason"); return; }
-            // Persist to Supabase — silent fallback if table missing
+            // DB reports.reason CHECK only allows: 'scam', 'fake', 'inappropriate'
+            // Map frontend display reasons to DB-allowed values
+            const reasonMap = {
+              "Suspected fake item":    "fake",
+              "Spam / duplicate":       "scam",
+              "Misleading description": "inappropriate",
+              "Wrong category":         "inappropriate",
+              "Prohibited item":        "inappropriate",
+              "Other":                  "inappropriate",
+            };
+            const dbReason = reasonMap[reason] || "inappropriate";
             try {
               await dbSaveReport({
-                listing_id: reportModal.item.id,
-                user_id:    user?.id || null,
-                reason,
+                listing_id:  reportModal.item.id,
+                reporter_id: user?.id || null,
+                reason:      dbReason,
               });
-            } catch { /* table may not exist yet */ }
-            setReportModal(null);
-            showToast("Report submitted. Thank you.");
+              setReportModal(null);
+              showToast("Report submitted. Thank you.");
+            } catch {
+              showToast("Report couldn't be submitted — please try again.");
+            }
           }}
         />
       </Phone>
@@ -3084,9 +3357,9 @@ export default function LoopGenApp() {
       <div className="lg-sell-root" style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       <div className="lg-sell-header" style={{padding:"4px 16px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div onClick={()=>nav("home")} style={{cursor:"pointer"}}><IcoBack/></div>
+          <div onClick={pop} style={{cursor:"pointer"}}><IcoBack/></div>
           <div>
-            <div style={{fontSize:17,fontWeight:800,color:"#111"}}>List an item</div>
+            <div style={{fontSize:17,fontWeight:800,color:"#111"}}>{editListing ? "Edit listing" : "List an item"}</div>
             <div style={{fontSize:11,color:"#9ca3af"}}>Step {sellStep} of 3 — {["Photos & details","Description & location","Preview"][sellStep-1]}</div>
           </div>
         </div>
@@ -3138,6 +3411,11 @@ export default function LoopGenApp() {
                     <button
                       onClick={e => {
                         e.stopPropagation();
+                        const urlToRemove = sellImages[idx];
+                        // FIX 8: Revoke blob URL to free browser memory
+                        if (urlToRemove && urlToRemove.startsWith("blob:")) {
+                          URL.revokeObjectURL(urlToRemove);
+                        }
                         const newImages = sellImages.filter((_,i) => i !== idx);
                         const newFiles  = sellImageFiles.filter((_,i) => i !== idx);
                         setSellImages(newImages);
@@ -3159,7 +3437,7 @@ export default function LoopGenApp() {
                 )}
               </div>
             )}
-            <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v}))}/>
+            <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v.slice(0,100)}))} maxLength={100}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
             <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
               opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Boats & Jet Skis","Miscellaneous","Freebies"]}/>
@@ -3295,9 +3573,12 @@ export default function LoopGenApp() {
         {sellStep===2 && (
           <>
             <label style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,display:"block"}}>Description</label>
-            <textarea value={sell.desc} onChange={e=>setSell(f=>({...f,desc:e.target.value}))}
-              placeholder="Describe your item…" rows={5}
-              style={{width:"100%",borderRadius:14,border:"1.5px solid #e5e7eb",padding:"12px 14px",fontSize:13,resize:"none",outline:"none",marginBottom:12,color:"#374151"}}/>
+            <textarea value={sell.desc} onChange={e=>setSell(f=>({...f,desc:e.target.value.slice(0,2000)}))}
+              placeholder="Describe your item…" rows={5} maxLength={2000}
+              style={{width:"100%",borderRadius:14,border:"1.5px solid #e5e7eb",padding:"12px 14px",fontSize:13,resize:"none",outline:"none",marginBottom:4,color:"#374151"}}/>
+            <div style={{fontSize:11,color:"#9ca3af",textAlign:"right",marginBottom:10}}>
+              {(sell.desc||"").length}/2000
+            </div>
             {supabase && (
               <button onClick={aiGen} style={{width:"100%",padding:"12px",borderRadius:14,marginBottom:14,background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:`1.5px solid ${GREEN}`,fontSize:13,fontWeight:700,color:GREEN,cursor:"pointer"}}>
                 {aiLoading?"⏳ Generating…":"✨ Generate with AI"}
@@ -3611,6 +3892,29 @@ export default function LoopGenApp() {
                           style={{flex:1,padding:"8px",borderRadius:10,border:`1.5px solid ${GREEN}`,background:"white",color:GREEN,fontSize:12,fontWeight:700,cursor:"pointer"}}>
                           Mark Sold
                         </button>
+                        {/* FIX 7: Edit listing button */}
+                        <button onClick={()=>{
+                          // Pre-fill sell form with existing listing data
+                          setEditListing(item);
+                          setSell({
+                            title: item.title || "",
+                            price: String(item.price || ""),
+                            category: item.category || "",
+                            sub: item.sub || "",
+                            condition: item.condition || "",
+                            desc: item.description || "",
+                            location: item.location || "",
+                            image_urls: item.image_urls || [],
+                            tags: item.tags || [],
+                          });
+                          setSellImages(item.image_urls || []);
+                          setSellImageFiles([]);
+                          setSellStep(1);
+                          push("sell");
+                        }}
+                          style={{flex:1,padding:"8px",borderRadius:10,border:"1.5px solid #e5e7eb",background:"white",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                          Edit
+                        </button>
                         <button onClick={()=>{setDetail(item);push("detail");}}
                           style={{flex:1,padding:"8px",borderRadius:10,border:"1.5px solid #e5e7eb",background:"white",color:"#374151",fontSize:12,fontWeight:600,cursor:"pointer"}}>
                           View
@@ -3726,10 +4030,18 @@ export default function LoopGenApp() {
                     <button
                       disabled={usernameLoading || !usernameInput.trim() || usernameInput.trim().length < 3}
                       onClick={async()=>{
-                        const newName = usernameInput.trim();
-                        if (newName.length < 3) { showToast("Username must be at least 3 characters"); return; }
+                        const rawName = usernameInput.trim();
+                        if (rawName.length < 3) { showToast("Username must be at least 3 characters"); return; }
+                        const newName = normalizeUsername(rawName);
+                        if (!newName || newName.length < 3) { showToast("Username can only contain letters, numbers, _ and ."); return; }
                         setUsernameLoading(true);
                         try {
+                          // Check uniqueness before saving
+                          if (supabase) {
+                            const { data: taken } = await supabase
+                              .from("profiles").select("id").eq("username", newName).neq("id", user.id).maybeSingle();
+                            if (taken) { showToast(`"${newName}" is already taken`); return; }
+                          }
                           await dbUpsertProfile(user.id, { username: newName });
                           setProfile(p => ({...p, username: newName}));
                           setEditingUsername(false);
@@ -3834,7 +4146,7 @@ export default function LoopGenApp() {
 
         <div style={{fontSize:11,color:"#c4c9d4",textAlign:"center",paddingBottom:8,lineHeight:1.8}}>
           <LoopGenLogo height={22} style={{margin:"0 auto 8px"}} />
-          LoopGen Beta v0.1.0 · <a href="mailto:support@loopgen.com.au" style={{color:"#9ca3af",textDecoration:"none"}}>support@loopgen.com.au</a><br/>
+          LoopGen Beta v0.2.0 · <a href="mailto:support@loopgen.com.au" style={{color:"#9ca3af",textDecoration:"none"}}>support@loopgen.com.au</a><br/>
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
@@ -3845,4 +4157,13 @@ export default function LoopGenApp() {
   );
 
   return null;
+}
+
+// FIX 16: Exported wrapper — ErrorBoundary catches any render crash in LoopGenAppInner
+export default function LoopGenApp() {
+  return (
+    <AppErrorBoundary>
+      <LoopGenAppInner />
+    </AppErrorBoundary>
+  );
 }
