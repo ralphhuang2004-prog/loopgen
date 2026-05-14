@@ -1884,7 +1884,13 @@ function LoopGenAppInner() {
   const [authLoading,setAuthLoading]= useState(false);
   const [sessionReady, setSessionReady] = useState(!HAS_SUPABASE);
   // FIX 2: Password reset state
-  const [resetSent,  setResetSent]  = useState(false);
+  const [resetSent,    setResetSent]    = useState(false);
+  // FIX 2: Recovery mode — true when user arrives via password reset link
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryPwd,  setRecoveryPwd]  = useState("");
+  const [recoveryPwd2, setRecoveryPwd2] = useState("");
+  const [recoveryErr,  setRecoveryErr]  = useState("");
+  const [recoveryDone, setRecoveryDone] = useState(false);
   // FIX 7: Edit listing state
   const [editListing, setEditListing] = useState(null); // listing being edited | null
 
@@ -1998,6 +2004,19 @@ function LoopGenAppInner() {
         setProfile(null);
         setScreen(s => (s !== "auth" && s !== "splash") ? "splash" : s);
         setSessionReady(true);
+      } else if (event === "PASSWORD_RECOVERY") {
+        // User clicked the password reset link in their email.
+        // Supabase has exchanged the token for a session — now show the
+        // "set new password" UI. We stay on the auth screen.
+        setUser(session?.user ?? null);
+        setSessionReady(true);
+        setRecoveryMode(true);
+        setRecoveryPwd("");
+        setRecoveryPwd2("");
+        setRecoveryErr("");
+        setRecoveryDone(false);
+        setScreen("auth");
+        setAuthMode("forgot"); // keeps the auth screen showing
       } else if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
         // TOKEN_REFRESHED: token silently rotated, user object unchanged — ignore
         // INITIAL_SESSION: already handled by getSession() above — ignore
@@ -2147,6 +2166,36 @@ function LoopGenAppInner() {
     raw.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "").replace(/_{2,}/g, "_").replace(/^[_.]|[_.]$/g, "") || null;
 
   // FIX 2: Handle password reset email request
+  // FIX 2: Handle password reset — set new password after recovery link is clicked
+  async function handleSetNewPassword() {
+    if (!supabase) return;
+    if (!recoveryPwd || recoveryPwd.length < 6) {
+      setRecoveryErr("Password must be at least 6 characters."); return;
+    }
+    if (recoveryPwd !== recoveryPwd2) {
+      setRecoveryErr("Passwords don't match. Please try again."); return;
+    }
+    setAuthLoading(true); setRecoveryErr("");
+    try {
+      const { error } = await supabase.auth.updateUser({ password: recoveryPwd });
+      if (error) throw error;
+      setRecoveryDone(true);
+      // After 2.5s, clear recovery mode and go to home if logged in, else login
+      setTimeout(() => {
+        setRecoveryMode(false);
+        setRecoveryPwd(""); setRecoveryPwd2("");
+        if (user) { nav("home"); }
+        else { setAuthMode("login"); setScreen("auth"); }
+      }, 2500);
+    } catch (e) {
+      setRecoveryErr(e.message?.includes("same password")
+        ? "New password must be different from your current password."
+        : "Couldn't update password — please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function handlePasswordReset() {
     if (!supabase) { showToast("Connect Supabase to enable auth"); return; }
     const email = authForm.email.trim();
@@ -2511,6 +2560,7 @@ function LoopGenAppInner() {
   // openConvo: used by the chats list screen — always fetches fresh from Supabase
   const openConvo = async (c) => {
     // Show chat immediately with empty/cached messages, then load fresh
+    setConvo(c);         // FIX: triggers realtime subscription for this conversation
     openChat({ ...c, convId: c.id }, []);
     if (supabase && user && c.id && !String(c.id).startsWith("mock_")) {
       try {
@@ -2549,6 +2599,7 @@ function LoopGenAppInner() {
           title: item.title || "Item",
         };
         setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
+        setConvo(conv);  // FIX: triggers realtime subscription for this conversation
         openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
       } else {
         openChat(item, []);
@@ -2601,6 +2652,41 @@ function LoopGenAppInner() {
         {/* ── FORGOT PASSWORD MODE ── */}
         {authMode === "forgot" ? (
           <>
+            {/* ── RECOVERY MODE: user arrived via password reset link ── */}
+            {recoveryMode ? (
+              <>
+                <div style={{fontSize:24,fontWeight:900,color:"#111",marginBottom:4}}>Set new password</div>
+                <div style={{fontSize:14,color:"#6b7280",marginBottom:28}}>
+                  Choose a new password for your account.
+                </div>
+                {recoveryDone ? (
+                  <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:14,padding:"20px 16px",textAlign:"center"}}>
+                    <div style={{fontSize:32,marginBottom:8}}>✅</div>
+                    <div style={{fontWeight:700,color:"#166534",fontSize:15,marginBottom:6}}>Password updated!</div>
+                    <div style={{fontSize:13,color:"#4b7c5a",lineHeight:1.6}}>
+                      You're being signed in now…
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <FInp placeholder="New password (min 6 chars)" type="password"
+                      value={recoveryPwd} onChange={v=>{ setRecoveryPwd(v); setRecoveryErr(""); }}/>
+                    <FInp placeholder="Confirm new password" type="password"
+                      value={recoveryPwd2} onChange={v=>{ setRecoveryPwd2(v); setRecoveryErr(""); }}/>
+                    {recoveryErr && (
+                      <div style={{color:"#ef4444",fontSize:13,marginBottom:12,fontWeight:500,lineHeight:1.5}}>
+                        {recoveryErr}
+                      </div>
+                    )}
+                    <GreenBtn onClick={handleSetNewPassword} disabled={authLoading} mt={8}>
+                      {authLoading ? "Saving…" : "Set New Password"}
+                    </GreenBtn>
+                  </>
+                )}
+              </>
+            ) : (
+              /* ── STANDARD FORGOT: send reset email ── */
+              <>
             <div style={{fontSize:24,fontWeight:900,color:"#111",marginBottom:4}}>Reset password</div>
             <div style={{fontSize:14,color:"#6b7280",marginBottom:28}}>
               Enter your email and we'll send a reset link.
@@ -2639,6 +2725,7 @@ function LoopGenAppInner() {
                 </div>
               </>
             )}
+            </>)} {/* end standard forgot / end recoveryMode ternary */}
           </>
         ) : (
           /* ── LOGIN / REGISTER MODE ── */
