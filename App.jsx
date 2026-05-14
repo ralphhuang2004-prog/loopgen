@@ -954,7 +954,6 @@ function Phone({ children }) {
             min-width:0;
             height:100vh;
             overflow-y:auto;
-            overflow-x:clip;
           }
           .lg-bottom-nav { display:none !important; }
           .lg-content-scroll { padding-bottom: 24px !important; }
@@ -977,13 +976,25 @@ function Phone({ children }) {
           /* Chats screen: fill content column */
           .lg-chats-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; overflow:hidden; }
           .lg-chats-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; }
-          /* Horizontal card rows — allow full width on desktop, no clip */
-          .lg-hscroll { overflow-x:auto; overflow-y:visible; }
-          .lg-hscroll::-webkit-scrollbar { height:4px; }
-          /* Ensure last card is never clipped — add right padding via pseudo-element */
-          .lg-hscroll::after { content:''; display:block; min-width:24px; flex-shrink:0; }
-          /* Home scroll container: clip only vertically so hscroll rows aren't clipped */
-          .lg-main-scroll { overflow-x:clip; }
+          /* On desktop: convert horizontal card scroll rows into a 2-row wrap grid
+             This completely eliminates last-card clipping — no overflow-x needed */
+          .lg-hscroll {
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr) !important;
+            overflow-x: unset !important;
+            padding-right: 16px !important;
+            gap: 12px !important;
+          }
+          /* Remove the spacer divs from the grid flow */
+          .lg-hscroll > [aria-hidden="true"] { display: none !important; }
+          /* Compact cards inside grid must not have fixed width */
+          .lg-hscroll > * { width: auto !important; flex-shrink: unset !important; }
+          /* Sell screen: pin header and content to top-left, never center */
+          .lg-sell-root { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; align-items:stretch; justify-content:flex-start; }
+          .lg-sell-header { align-self:flex-start; width:100%; }
+          .lg-sell-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; align-self:stretch; }
+          /* Home scroll container */
+          .lg-main-scroll { overflow-x:hidden; }
         }
       `}</style>
       <div className="lg-layout">
@@ -3070,7 +3081,8 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
-      <div style={{padding:"4px 16px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div className="lg-sell-root" style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
+      <div className="lg-sell-header" style={{padding:"4px 16px 0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div onClick={()=>nav("home")} style={{cursor:"pointer"}}><IcoBack/></div>
           <div>
@@ -3085,7 +3097,7 @@ export default function LoopGenApp() {
         {[1,2,3].map(s => <div key={s} style={{flex:1,height:4,borderRadius:4,background:s<=sellStep?GREEN:"#e5e7eb",transition:"background 0.3s"}}/>)}
       </div>
 
-      <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px",paddingBottom:90}}>
+      <div className="lg-sell-scroll" style={{flex:1,overflowY:"auto",padding:"0 20px 20px",paddingBottom:90}}>
         {sellStep===1 && (
           <>
             {/* Photo upload — with preview strip and remove buttons */}
@@ -3374,6 +3386,7 @@ export default function LoopGenApp() {
           </>
         )}
       </div>
+      </div>{/* lg-sell-root */}
       <BottomNav active="sell" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
