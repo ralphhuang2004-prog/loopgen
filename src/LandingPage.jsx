@@ -674,7 +674,7 @@ function CtaAndFooter({ onBrowse, onRegister }) {
             <a key={l} href={h} style={{ fontSize:11, color:T.ink3,
               textDecoration:"none", fontWeight:600 }}>{l}</a>
           ))}
-          <a href="mailto:loopgensupport@gmail.com"
+          <a href="mailto:support@loopgen.com.au"
             style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>
             Contact
           </a>

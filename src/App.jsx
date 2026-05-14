@@ -953,7 +953,7 @@ function Phone({ children }) {
             flex:1;
             min-width:0;
             height:100vh;
-            overflow:hidden;
+            overflow-y:auto;
           }
           .lg-bottom-nav { display:none !important; }
           .lg-content-scroll { padding-bottom: 24px !important; }
@@ -964,6 +964,21 @@ function Phone({ children }) {
         @media (min-width: 1200px) {
           .lg-layout { max-width:1280px; }
           .lg-sidebar { width:260px; min-width:260px; }
+        }
+
+        /* ── Desktop: fix category grid tiles — prevent extreme tall aspect ratio ── */
+        @media (min-width: 768px) {
+          .lg-cat-tile { aspect-ratio: unset !important; height: 140px !important; }
+          .lg-cat-tile-more { aspect-ratio: unset !important; height: 110px !important; }
+          /* Explore / Search screen: fill the content column correctly */
+          .lg-explore-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; overflow:hidden; }
+          .lg-explore-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; }
+          /* Chats screen: fill content column */
+          .lg-chats-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; overflow:hidden; }
+          .lg-chats-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; }
+          /* Horizontal card rows — allow full width on desktop */
+          .lg-hscroll { overflow-x:auto; }
+          .lg-hscroll::-webkit-scrollbar { height:4px; }
         }
       `}</style>
       <div className="lg-layout">
@@ -2512,6 +2527,7 @@ export default function LoopGenApp() {
                       if (cat==="__more__") { setShowMoreCats(v=>!v); }
                       else { setCatF(cat); nav("explore"); }
                     }}
+                    className={cat==="__more__" ? "lg-cat-tile-more" : "lg-cat-tile"}
                     style={{borderRadius:22,overflow:"hidden",cursor:"pointer",position:"relative",
                       aspectRatio:"1/1.15",boxShadow:"0 6px 22px rgba(0,0,0,0.28)",
                       border: cat==="__more__" && showMoreCats
@@ -2572,6 +2588,7 @@ export default function LoopGenApp() {
                 ].map(({cat,label,bg,img})=>(
                   <div key={cat}
                     onClick={()=>{ setCatF(cat); setShowMoreCats(false); nav("explore"); }}
+                    className="lg-cat-tile-more"
                     style={{borderRadius:18,overflow:"hidden",cursor:"pointer",position:"relative",
                       aspectRatio:"1/1.15",background:bg,
                       boxShadow:"0 4px 14px rgba(0,0,0,0.18)",
@@ -2621,7 +2638,7 @@ export default function LoopGenApp() {
                   <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
                 </div>
               </div>
-              <div style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
+              <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:24,paddingBottom:6,scrollbarWidth:"none"}}>
                 {listingsLoading
                   ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} compact/>)
                   : vintageItems.map(item => (
@@ -2668,7 +2685,7 @@ export default function LoopGenApp() {
                 <span style={{fontSize:15,fontWeight:800,color:"#111"}}>⭐ Popular items</span>
                 <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
               </div>
-              <div style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
+              <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:24,paddingBottom:6,scrollbarWidth:"none"}}>
                 {popular.map(item => (
                   <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave} compact/>
                 ))}
@@ -2703,6 +2720,7 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
+      <div className="lg-explore-root" style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
       {/* Search */}
       <div style={{padding:"4px 16px 10px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -2732,8 +2750,8 @@ export default function LoopGenApp() {
           );
         })}
       </div>
-      {/* Results — single condition: skeleton XOR cards, never both */}
-      <div style={{flex:1,overflowY:"auto",padding:"0 16px",paddingBottom:84}}>
+      {/* Results */}
+      <div className="lg-explore-scroll" style={{flex:1,overflowY:"auto",padding:"0 16px",paddingBottom:84}}>
         {!listingsLoading && filtered.length > 0 && (
           <div style={{fontSize:12,color:"#9ca3af",fontWeight:600,marginBottom:10,paddingTop:2}}>
             {filtered.length} listing{filtered.length!==1?"s":""}{search?` for "${search}"`:catFilter!=="All"?` in ${catFilter}`:""}
@@ -2756,6 +2774,7 @@ export default function LoopGenApp() {
             ))}
           </div>
         )}
+      </div>
       </div>
       <BottomNav active="explore" onNav={nav}/>
       <Toast msg={toast}/>
@@ -3360,6 +3379,7 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
+      <div className="lg-chats-root" style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
       <div style={{padding:"4px 16px 12px",flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{fontSize:20,fontWeight:800,color:"#111"}}>Messages</div>
         {!isGuest && convos.length > 0 && (
@@ -3375,7 +3395,7 @@ export default function LoopGenApp() {
           <button onClick={()=>nav("explore")} style={{background:"transparent",border:"none",color:"#9ca3af",fontSize:13,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"8px"}}>Browse listings first →</button>
         </div>
       ) : (
-        <div style={{flex:1,overflowY:"auto",padding:"0 16px",display:"flex",flexDirection:"column",gap:8,paddingBottom:78}}>
+        <div className="lg-chats-scroll" style={{flex:1,overflowY:"auto",padding:"0 16px",display:"flex",flexDirection:"column",gap:8,paddingBottom:78}}>
           {convos.length === 0 ? (
             <div style={{textAlign:"center",padding:"52px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
               <div style={{fontSize:48}}>{String.fromCodePoint(0x1F4ED)}</div>
@@ -3405,6 +3425,7 @@ export default function LoopGenApp() {
           ))}
         </div>
       )}
+      </div>
       <BottomNav active="chats" onNav={nav}/>
       <Toast msg={toast}/>
     </Phone>
