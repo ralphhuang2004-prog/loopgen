@@ -72,6 +72,12 @@ const CSS = `
   @keyframes lp-pulse  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
   @keyframes lp-in     { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
 
+  /* Desktop: bottom bento tiles match top tile height; fix last card clip */
+  @media (min-width: 768px) {
+    .lp-bento-bottom { height:172px !important; }
+    .lp-listings-scroll { padding-right:40px !important; }
+  }
+
   .lp-shimmer {
     background:linear-gradient(90deg,#ede9e3 25%,#f5f3ef 50%,#ede9e3 75%);
     background-size:200% 100%; animation:lp-shimmer 1.4s ease infinite;
@@ -328,7 +334,7 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
       <section style={{ background:T.surface, paddingTop:40, paddingBottom:4 }}>
         <SHead eyebrow="Live now" title="Trending on LoopGen"
           action="See all" onAction={() => go(onBrowse)} pad />
-        <div style={{ display:"flex", gap:12, overflowX:"auto",
+        <div className="lp-listings-scroll" style={{ display:"flex", gap:12, overflowX:"auto",
           padding:"4px 22px 22px", scrollbarWidth:"none" }}>
           {LISTINGS.map((item, i) => (
             <ListingCard key={item.id} item={item} delay={i} onTap={() => go(onBrowse)} />
@@ -407,7 +413,7 @@ function HeroBento({ entered, onTap }) {
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
         {[2,3].map(i => (
-          <div key={i} style={tile(i, i%2===0?"lp-float":"lp-float2", { height:108 })}>
+          <div key={i} className="lp-bento-bottom" style={tile(i, i%2===0?"lp-float":"lp-float2", { height:108 })}>
             <LazyImg src={HERO_TILES[i].img} alt={HERO_TILES[i].tag} style={{ height:"100%" }} />
             <div style={{ position:"absolute", bottom:8, left:8 }}>
               <CatPill label={HERO_TILES[i].tag} />

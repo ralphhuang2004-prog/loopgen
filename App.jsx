@@ -954,6 +954,7 @@ function Phone({ children }) {
             min-width:0;
             height:100vh;
             overflow-y:auto;
+            overflow-x:clip;
           }
           .lg-bottom-nav { display:none !important; }
           .lg-content-scroll { padding-bottom: 24px !important; }
@@ -969,16 +970,20 @@ function Phone({ children }) {
         /* ── Desktop: fix category grid tiles — prevent extreme tall aspect ratio ── */
         @media (min-width: 768px) {
           .lg-cat-tile { aspect-ratio: unset !important; height: 140px !important; }
-          .lg-cat-tile-more { aspect-ratio: unset !important; height: 110px !important; }
+          .lg-cat-tile-more { aspect-ratio: unset !important; height: 140px !important; }
           /* Explore / Search screen: fill the content column correctly */
           .lg-explore-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; overflow:hidden; }
           .lg-explore-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; }
           /* Chats screen: fill content column */
           .lg-chats-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; overflow:hidden; }
           .lg-chats-scroll { flex:1; overflow-y:auto; min-height:0; padding-bottom:24px !important; }
-          /* Horizontal card rows — allow full width on desktop */
-          .lg-hscroll { overflow-x:auto; }
+          /* Horizontal card rows — allow full width on desktop, no clip */
+          .lg-hscroll { overflow-x:auto; overflow-y:visible; }
           .lg-hscroll::-webkit-scrollbar { height:4px; }
+          /* Ensure last card is never clipped — add right padding via pseudo-element */
+          .lg-hscroll::after { content:''; display:block; min-width:24px; flex-shrink:0; }
+          /* Home scroll container: clip only vertically so hscroll rows aren't clipped */
+          .lg-main-scroll { overflow-x:clip; }
         }
       `}</style>
       <div className="lg-layout">
@@ -2439,7 +2444,7 @@ export default function LoopGenApp() {
     <Phone>
       <StatusBar/>
       <DemoBanner/>
-      <div style={{flex:1,overflowY:"auto",paddingBottom:84}}>
+      <div className="lg-main-scroll" style={{flex:1,overflowY:"auto",paddingBottom:84}}>
 
         {/* ── TOP NAV BAR ── */}
         <div style={{padding:"8px 16px 10px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f5f5f5"}}>
@@ -2638,13 +2643,14 @@ export default function LoopGenApp() {
                   <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
                 </div>
               </div>
-              <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:24,paddingBottom:6,scrollbarWidth:"none"}}>
+              <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
                 {listingsLoading
                   ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} compact/>)
                   : vintageItems.map(item => (
                       <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave} compact/>
                     ))
                 }
+                <div style={{flexShrink:0,width:16}} aria-hidden="true"/>
               </div>
             </div>
           );
@@ -2685,10 +2691,11 @@ export default function LoopGenApp() {
                 <span style={{fontSize:15,fontWeight:800,color:"#111"}}>⭐ Popular items</span>
                 <span onClick={()=>nav("explore")} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
               </div>
-              <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:24,paddingBottom:6,scrollbarWidth:"none"}}>
+              <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
                 {popular.map(item => (
                   <ListingCard key={item.id} item={item} onTap={openDetail} onSave={toggleSave} compact/>
                 ))}
+                <div style={{flexShrink:0,width:16}} aria-hidden="true"/>
               </div>
             </div>
           );
