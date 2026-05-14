@@ -2115,18 +2115,12 @@ function LoopGenAppInner() {
 
   // ── Navigation ───────────────────────────────────────
   const push = s => { setHistory(h => [...h, screen]); setScreen(s); };
-  const pop  = () => { const h=[...history]; const prev=h.pop()||"home"; setHistory(h); setScreen(prev); };
+  const pop  = () => { const h=[...history]; const prev=h.pop()||"home"; setHistory(h); setScreen(prev); if (screen === "sell") { setEditListing(null); } };
   const nav  = s => {
     if (s === "sell" && !sessionReady) { showToast("Loading…"); return; }
     if (s === "sell" && !user) { showToast("Sign in to sell items"); push("auth"); return; }
-    // BUG FIX: Clear editListing when navigating to sell via nav() — this is a fresh listing
     if (s === "sell") { setEditListing(null); setSellStep(1); setSell({title:"",price:"",category:"",sub:"",condition:"",desc:"",location:"",image_urls:[],tags:[]}); setSellImages([]); setSellImageFiles([]); }
     setHistory([]); setScreen(s); setDetail(null); setConvo(null);
-  };
-  // BUG FIX: Clear editListing when pressing back from sell screen
-  const pop  = () => {
-    const h=[...history]; const prev=h.pop()||"home"; setHistory(h); setScreen(prev);
-    if (screen === "sell") { setEditListing(null); }
   };
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2400); };
