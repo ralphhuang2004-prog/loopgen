@@ -1551,11 +1551,13 @@ function HomeTicker() {
     }}>
       <style>{`
         @keyframes home-ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+        .home-ticker-inner { animation: home-ticker 36s linear infinite; will-change: transform; }
+        @media (min-width: 768px) { .home-ticker-inner { animation-duration: 40s; } }
+        @media (prefers-reduced-motion: reduce) { .home-ticker-inner { animation: none; } }
       `}</style>
-      <div style={{
+      <div className="home-ticker-inner" style={{
         display:"flex",
         width:"max-content",
-        animation:"home-ticker 24s linear infinite",
       }}>
         {doubled.map((w, i) => (
           <span key={i} style={{
