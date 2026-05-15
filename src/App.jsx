@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.2.0"; // FIX 14: bumped for production hardening deploy
+const APP_VERSION = "2.3.0"; // bumped for beta deploy — realtime fix, password recovery, RLS hardening
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
