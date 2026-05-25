@@ -735,6 +735,7 @@ async function dbGetConversations(userId) {
       other_avatar: otherProfile?.avatar_url || null,
       listing_title: c.listing?.title || "Item",
       last_message: lastMsg?.body || "",
+      last_sender_id: lastMsg?.sender_id || null,
       last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
       unread: 0,
       online: false,
@@ -2122,11 +2123,16 @@ function LoopGenAppInner() {
           const msg = { ...raw, content: raw.body ?? raw.content ?? "" };
           const key = chatContext?.id;
           if (!key) return; // no active chat context — ignore
+          // DEDUP FIX: If this message was sent by the current user, skip the realtime add.
+          // The sender already sees an optimistic copy (added immediately on send).
+          // Adding the DB echo would cause every sent message to appear twice.
+          // The receiver (different user.id) still receives it normally via realtime.
+          if (msg.sender_id === user?.id) return;
           // Dedup against localChatStore (same store ChatScreen reads from)
           const existing = localChatStore.current[key] || [];
           if (existing.find(m => m.id === msg.id)) return;
-          // Route into the same store ChatScreen reads — this is the fix
-          addMessageToStore(key, { ...msg, from_me: msg.sender_id === user?.id });
+          // Route into the same store ChatScreen reads
+          addMessageToStore(key, { ...msg, from_me: false });
           setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
         })
       .subscribe();
@@ -2660,10 +2666,12 @@ function LoopGenAppInner() {
             content: initialMessage,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           };
-          // Add to local store immediately for instant display
           const key = chatKey(enriched);
           const store = localChatStore.current;
-          store[key] = [...(store[key] || []), ...(msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }))), localMsg];
+          // DEDUP FIX: Replace store with DB messages + ONE optimistic local message.
+          // Do NOT append to existing store — existing may already contain an old copy.
+          const dbMsgs = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+          store[key] = [...dbMsgs, localMsg];
           // Persist to DB with the correct conversation UUID
           try {
             await dbSendMessage(conv.id, user.id, initialMessage);
@@ -3157,7 +3165,7 @@ function LoopGenAppInner() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3225,7 +3233,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>
-      <BottomNav active="explore" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3843,7 +3851,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>{/* lg-sell-root */}
-      <BottomNav active="sell" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3936,7 +3944,7 @@ function LoopGenAppInner() {
         </div>
       )}
       </div>
-      <BottomNav active="chats" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4044,7 +4052,7 @@ function LoopGenAppInner() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4141,7 +4149,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4188,7 +4196,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4359,7 +4367,7 @@ function LoopGenAppInner() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
