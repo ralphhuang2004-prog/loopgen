@@ -906,6 +906,24 @@ async function dbSaveOffer({ listing_id, buyer_id, seller_id, price }) {
   return data;
 }
 
+// Fetch pending offers for a seller — used for notification badge and offers list
+async function dbGetPendingOffers(sellerId) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("offers")
+    .select(`*, listing:listing_id(title, image_urls), buyer:buyer_id(id, profiles(username))`)
+    .eq("seller_id", sellerId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("dbGetPendingOffers:", error); return []; }
+  return (data || []).map(o => ({
+    ...o,
+    listing_title: o.listing?.title || "Item",
+    listing_image: o.listing?.image_urls?.[0] || null,
+    buyer_username: o.buyer?.profiles?.username || "Buyer",
+  }));
+}
+
 // Save report — uses 'reporter_id' to match the live DB column name
 async function dbSaveReport({ listing_id, reporter_id, reason }) {
   if (!supabase) return null;
@@ -1090,14 +1108,25 @@ function StatusBar() {
   return null;
 }
 
-function BottomNav({ active, onNav }) {
+function BottomNav({ active, onNav, msgCount = 0, offerCount = 0 }) {
   const tabs = [
     {id:"home",    label:"Home",     icon: a => <IcoHome a={a}/>},
     {id:"explore", label:"Search",   icon: a => <IcoExplore a={a}/>},
     {id:"sell",    label:"Sell",     icon: null},
-    {id:"chats",   label:"Messages", icon: a => <IcoChats a={a}/>},
+    {id:"chats",   label:"Messages", icon: a => <IcoChats a={a}/>, badge: msgCount + offerCount},
     {id:"profile", label:"Profile",  icon: a => <IcoProfile a={a}/>},
   ];
+  const Badge = ({ count }) => count > 0 ? (
+    <div style={{
+      position:"absolute", top:0, right:0,
+      background:"#ef4444", color:"white",
+      borderRadius:"50%", minWidth:16, height:16,
+      fontSize:10, fontWeight:700,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:"0 3px", lineHeight:1,
+      border:"1.5px solid white", zIndex:1,
+    }}>{count > 9 ? "9+" : count}</div>
+  ) : null;
   return (
     <>
       {/* ── Desktop sidebar (hidden on mobile via CSS) ── */}
@@ -1118,13 +1147,15 @@ function BottomNav({ active, onNav }) {
                 ? <div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </div>
-                : <div style={{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,background:active===t.id?"rgba(28,124,69,0.12)":"#f3f4f6",flexShrink:0}}>
+                : <div style={{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,background:active===t.id?"rgba(28,124,69,0.12)":"#f3f4f6",flexShrink:0,position:"relative"}}>
                     {t.icon(active===t.id)}
+                    <Badge count={t.badge||0}/>
                   </div>
               }
               <span style={{fontSize:14,fontWeight:active===t.id?700:500,
                 color:active===t.id?GREEN:"#374151",letterSpacing:0.1}}>
                 {t.label}
+                {t.badge > 0 && <span style={{marginLeft:6,background:"#ef4444",color:"white",borderRadius:50,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{t.badge > 9 ? "9+" : t.badge}</span>}
               </span>
             </div>
           ))}
@@ -1150,7 +1181,12 @@ function BottomNav({ active, onNav }) {
                   </div>
                   <span style={{fontSize:10,fontWeight:700,color:GREEN,letterSpacing:0.1}}>Sell</span>
                 </div>
-              : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s"}}>{t.icon(active===t.id)}</div><span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span></>
+              : <><div style={{width:44,height:34,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,background:active===t.id?"rgba(28,124,69,0.09)":"transparent",transition:"background 0.2s",position:"relative"}}>
+                    {t.icon(active===t.id)}
+                    <Badge count={t.badge||0}/>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:active===t.id?700:500,color:active===t.id?GREEN:"#b0b7c3",letterSpacing:0.1}}>{t.label}</span>
+                </>
             }
           </div>
         ))}
@@ -1891,6 +1927,8 @@ function LoopGenAppInner() {
   const [recoveryPwd2, setRecoveryPwd2] = useState("");
   const [recoveryErr,  setRecoveryErr]  = useState("");
   const [recoveryDone, setRecoveryDone] = useState(false);
+  // Pending offers received as seller — drives notification badge
+  const [pendingOffers, setPendingOffers] = useState([]);
   // FIX 7: Edit listing state
   const [editListing, setEditListing] = useState(null); // listing being edited | null
 
@@ -2045,6 +2083,8 @@ function LoopGenAppInner() {
     }
     if (screen === "chats" && user) {
       loadConversations();
+      // Also refresh pending offers received as seller
+      dbGetPendingOffers(user.id).then(setPendingOffers);
     }
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
@@ -2052,11 +2092,21 @@ function LoopGenAppInner() {
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When a real user logs in/out, force-refresh listings with their saved state
+  // Also pre-load conversations and pending offers so badge shows immediately on home screen
   useEffect(() => {
     if (!HAS_SUPABASE) return; // demo mode never needs this
     listingsLoaded.current = false;
     if (screen === "home" || screen === "explore") {
       loadListings({ force: true });
+    }
+    // Pre-load conversations and pending offers so badge is visible immediately after login
+    if (user) {
+      loadConversations();
+      dbGetPendingOffers(user.id).then(setPendingOffers);
+    } else {
+      // Logged out — clear notification state
+      setConvos([]);
+      setPendingOffers([]);
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2137,12 +2187,14 @@ function LoopGenAppInner() {
 
   async function loadProfileData() {
     if (!user) return;
-    const [ul, sl] = await Promise.all([
+    const [ul, sl, offers] = await Promise.all([
       dbGetUserListings(user.id),
       dbGetSavedListings(user.id),
+      dbGetPendingOffers(user.id),
     ]);
     setUserListings(ul);
     setSavedListings(sl);
+    setPendingOffers(offers);
   }
 
   // ── Navigation ───────────────────────────────────────
@@ -2574,7 +2626,7 @@ function LoopGenAppInner() {
     }
   };
 
-  const openSellerChat = async (item) => {
+  const openSellerChat = async (item, initialMessage = null) => {
     // Block seller messaging their own listing — check both Supabase id and username (demo mode)
     if (user) {
       const ownById = item.seller_id && item.seller_id === user.id;
@@ -2599,8 +2651,36 @@ function LoopGenAppInner() {
           title: item.title || "Item",
         };
         setConvos(cs => cs.find(c => c.id === conv.id) ? cs : [enriched, ...cs]);
-        setConvo(conv);  // FIX: triggers realtime subscription for this conversation
-        openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
+        setConvo(conv);  // triggers realtime subscription for this conversation
+        // If an initial message was provided (e.g. from offer submission), send it to DB
+        if (initialMessage) {
+          const localMsg = {
+            id: `msg_${Date.now()}`,
+            from_me: true,
+            content: initialMessage,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          // Add to local store immediately for instant display
+          const key = chatKey(enriched);
+          const store = localChatStore.current;
+          store[key] = [...(store[key] || []), ...(msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }))), localMsg];
+          // Persist to DB with the correct conversation UUID
+          try {
+            await dbSendMessage(conv.id, user.id, initialMessage);
+          } catch (e) {
+            console.error("[LoopGen] Offer message save failed:", e);
+            showToast("Offer sent but message couldn't save — check connection.");
+          }
+          setChatContext({
+            id: key,
+            convId: conv.id,
+            sellerName: enriched.seller_username,
+            listingTitle: enriched.title,
+          });
+          push("chat");
+        } else {
+          openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
+        }
       } else {
         openChat(item, []);
       }
@@ -3077,7 +3157,7 @@ function LoopGenAppInner() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav}/>
+      <BottomNav active="home" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3145,7 +3225,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>
-      <BottomNav active="explore" onNav={nav}/>
+      <BottomNav active="explore" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3404,13 +3484,11 @@ function LoopGenAppInner() {
             const price = offerPrice;
             setOfferModal(null);
             showToast(`Offer of $${price} sent!`);
-            const offerMsg = {
-              id: `offer_${Date.now()}`,
-              from_me: true,
-              content: `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`,
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            };
-            openChat(item, [offerMsg]);
+            // FIX: Use openSellerChat so a real DB conversation is created/found
+            // and the convId is the actual conversation UUID (not the listing UUID).
+            // The offer message is then sent as a real DB message the seller can read.
+            const offerMsgContent = `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`;
+            await openSellerChat(item, offerMsgContent);
           }}
         />
         <ReportModal
@@ -3765,7 +3843,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>{/* lg-sell-root */}
-      <BottomNav active="sell" onNav={nav}/>
+      <BottomNav active="sell" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3780,10 +3858,44 @@ function LoopGenAppInner() {
       <div className="lg-chats-root" style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
       <div style={{padding:"4px 16px 12px",flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{fontSize:20,fontWeight:800,color:"#111"}}>Messages</div>
-        {!isGuest && convos.length > 0 && (
-          <span style={{fontSize:12,color:"#9ca3af",fontWeight:500}}>{convos.length} conversation{convos.length!==1?"s":""}</span>
+        {!isGuest && (convos.length > 0 || pendingOffers.length > 0) && (
+          <span style={{fontSize:12,color:"#9ca3af",fontWeight:500}}>
+            {convos.length} conversation{convos.length!==1?"s":""}
+            {pendingOffers.length > 0 && ` · ${pendingOffers.length} offer${pendingOffers.length!==1?"s":""}`}
+          </span>
         )}
       </div>
+
+      {/* Pending offers banner — shown to sellers with outstanding offers */}
+      {!isGuest && pendingOffers.length > 0 && (
+        <div style={{margin:"0 16px 12px",background:"linear-gradient(135deg,#fff7ed,#fef3c7)",border:"1.5px solid #fcd34d",borderRadius:16,padding:"12px 14px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:16}}>💰</span>
+            <span style={{fontWeight:700,fontSize:13,color:"#92400e"}}>
+              {pendingOffers.length} pending offer{pendingOffers.length!==1?"s":""} on your listings
+            </span>
+          </div>
+          {pendingOffers.slice(0,3).map(o => (
+            <div key={o.id} style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.listing_title}</div>
+                <div style={{fontSize:11,color:"#6b7280"}}>
+                  <span style={{fontWeight:600,color:"#059669"}}>${o.price}</span>
+                  {" from "}
+                  <span style={{fontWeight:600}}>{o.buyer_username}</span>
+                  {" · "}{timeSince(o.created_at)}
+                </div>
+              </div>
+              <span style={{fontSize:10,fontWeight:700,background:"#fef3c7",color:"#92400e",padding:"3px 8px",borderRadius:50,flexShrink:0,marginLeft:8}}>Pending</span>
+            </div>
+          ))}
+          {pendingOffers.length > 3 && (
+            <div style={{fontSize:11,color:"#92400e",fontWeight:600,textAlign:"center",marginTop:4}}>
+              +{pendingOffers.length - 3} more offer{pendingOffers.length-3!==1?"s":""}
+            </div>
+          )}
+        </div>
+      )}
       {isGuest ? (
         <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 28px",gap:16}}>
           <div style={{fontSize:52}}>{String.fromCodePoint(0x1F4AC)}</div>
@@ -3824,7 +3936,7 @@ function LoopGenAppInner() {
         </div>
       )}
       </div>
-      <BottomNav active="chats" onNav={nav}/>
+      <BottomNav active="chats" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3932,7 +4044,7 @@ function LoopGenAppInner() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4029,7 +4141,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4076,7 +4188,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4247,7 +4359,7 @@ function LoopGenAppInner() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.length > 0 ? convos.filter(c => c.last_message).length : 0} offerCount={pendingOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
