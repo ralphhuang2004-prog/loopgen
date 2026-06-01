@@ -712,33 +712,51 @@ async function dbToggleSave(listingId, userId, isSaved) {
 
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
+
+  // Step 1: fetch conversations — simple query, no FK-dependent nested joins
+  // The buyer:buyer_id(...) nested join requires a FK from conversations.buyer_id
+  // to auth.users.id which does not exist in the live DB, causing an error
+  // that falls back to DEMO_CONVOS. Fetch conversations and profiles separately.
   const { data, error } = await supabase
     .from("conversations")
-    .select(`
-      *,
-      buyer:buyer_id(id, profiles(username, avatar_url)),
-      seller:seller_id(id, profiles(username, avatar_url)),
-      listing:listing_id(title),
-      messages(body, created_at, sender_id)
-    `)
+    .select(`*, messages(body, created_at, sender_id)`)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
+
   if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
-  return (data || []).map(c => {
-    // Determine which participant is the "other" person
-    const isBuyer = c.buyer_id === userId;
-    const otherProfile = isBuyer ? c.seller?.profiles : c.buyer?.profiles;
-    const lastMsg = (c.messages || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+  if (!data || data.length === 0) return [];
+
+  // Step 2: collect all participant UUIDs and fetch their profiles in one query
+  const participantIds = [
+    ...new Set(data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))
+  ];
+  let profileMap = {};
+  if (participantIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", participantIds);
+    (profiles || []).forEach(p => { profileMap[p.id] = p; });
+  }
+
+  // Step 3: map to the shape the UI expects
+  return data.map(c => {
+    const isBuyer   = c.buyer_id === userId;
+    const otherId   = isBuyer ? c.seller_id : c.buyer_id;
+    const otherProf = profileMap[otherId];
+    const lastMsg   = (c.messages || [])
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
     return {
       ...c,
-      other_user: otherProfile?.username || (isBuyer ? "Seller" : "Buyer"),
-      other_avatar: otherProfile?.avatar_url || null,
-      listing_title: c.listing?.title || "Item",
-      last_message: lastMsg?.body || "",
-      last_sender_id: lastMsg?.sender_id || null,
-      last_time: lastMsg ? timeSince(lastMsg.created_at) : "",
-      unread: 0,
-      online: false,
+      convId:        c.id,
+      other_user:    otherProf?.username    || (isBuyer ? "Seller" : "Buyer"),
+      other_avatar:  otherProf?.avatar_url  || null,
+      listing_title: c.listing_title        || "Item",
+      last_message:  lastMsg?.body          || "",
+      last_sender_id: lastMsg?.sender_id    || null,
+      last_time:     lastMsg ? timeSince(lastMsg.created_at) : "",
+      unread:        0,
+      online:        false,
     };
   });
 }
@@ -772,15 +790,31 @@ async function dbSendMessage(conversationId, senderId, content) {
 
 async function dbGetOrCreateConversation(listingId, buyerId, sellerId) {
   if (!supabase) return null;
-  // Check existing — use maybeSingle() so no error is thrown when no row exists
+  // Check existing by listing + buyer (seller_id not required — may have been null initially)
   const { data: existing } = await supabase
     .from("conversations")
     .select("*")
     .eq("listing_id", listingId)
     .eq("buyer_id", buyerId)
     .maybeSingle();
-  if (existing) return existing;
-  // Create new
+
+  if (existing) {
+    // SELLER VISIBILITY FIX: if seller_id is null or wrong, update it now.
+    // A conversation with null seller_id is invisible to the seller under RLS.
+    // Filling it in is safe — no data removed, just restores the missing FK.
+    if (existing.seller_id !== sellerId && sellerId) {
+      const { data: updated, error: uErr } = await supabase
+        .from("conversations")
+        .update({ seller_id: sellerId })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (!uErr && updated) return updated;
+    }
+    return existing;
+  }
+
+  // Create new conversation with both buyer and seller IDs
   const { data, error } = await supabase
     .from("conversations")
     .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
@@ -910,18 +944,38 @@ async function dbSaveOffer({ listing_id, buyer_id, seller_id, price }) {
 // Fetch pending offers for a seller — used for notification badge and offers list
 async function dbGetPendingOffers(sellerId) {
   if (!supabase) return [];
+  // Use simple select — FK-dependent nested joins (buyer:buyer_id, listing:listing_id)
+  // fail if those FKs don't exist in the live DB, returning [] silently.
   const { data, error } = await supabase
     .from("offers")
-    .select(`*, listing:listing_id(title, image_urls), buyer:buyer_id(id, profiles(username))`)
+    .select("*")
     .eq("seller_id", sellerId)
     .eq("status", "pending")
     .order("created_at", { ascending: false });
   if (error) { console.error("dbGetPendingOffers:", error); return []; }
-  return (data || []).map(o => ({
+  if (!data || data.length === 0) return [];
+
+  // Fetch listing titles and buyer usernames separately
+  const listingIds = [...new Set(data.map(o => o.listing_id).filter(Boolean))];
+  const buyerIds   = [...new Set(data.map(o => o.buyer_id).filter(Boolean))];
+  let listingMap = {}, profileMap = {};
+
+  if (listingIds.length > 0) {
+    const { data: listings } = await supabase
+      .from("listings").select("id, title, image_urls").in("id", listingIds);
+    (listings || []).forEach(l => { listingMap[l.id] = l; });
+  }
+  if (buyerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles").select("id, username").in("id", buyerIds);
+    (profiles || []).forEach(p => { profileMap[p.id] = p; });
+  }
+
+  return data.map(o => ({
     ...o,
-    listing_title: o.listing?.title || "Item",
-    listing_image: o.listing?.image_urls?.[0] || null,
-    buyer_username: o.buyer?.profiles?.username || "Buyer",
+    listing_title:  listingMap[o.listing_id]?.title           || "Item",
+    listing_image:  listingMap[o.listing_id]?.image_urls?.[0] || null,
+    buyer_username: profileMap[o.buyer_id]?.username          || "Buyer",
   }));
 }
 
