@@ -1247,7 +1247,7 @@ function ConfirmModal({ confirm, onCancel }) {
 }
 
 // ── P1: Offer Modal ───────────────────────────────────────────────────────────
-function OfferModal({ modal, offerPrice, setOfferPrice, onSubmit, onClose }) {
+function OfferModal({ modal, offerPrice, setOfferPrice, onSubmit, onClose, submitting = false }) {
   if (!modal) return null;
   const item = modal.item;
   return (
@@ -1264,6 +1264,7 @@ function OfferModal({ modal, offerPrice, setOfferPrice, onSubmit, onClose }) {
             placeholder="Your offer amount"
             value={offerPrice}
             onChange={e => setOfferPrice(e.target.value)}
+            disabled={submitting}
             style={{flex:1,border:"none",background:"transparent",fontSize:18,fontWeight:700,color:"#111",outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}
             autoFocus
           />
@@ -1272,18 +1273,19 @@ function OfferModal({ modal, offerPrice, setOfferPrice, onSubmit, onClose }) {
           Your offer will be sent to the seller. They can accept, decline, or counter.
         </div>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose} style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,fontSize:14,cursor:"pointer",color:"#374151"}}>
+          <button onClick={onClose} disabled={submitting}
+            style={{flex:1,padding:"14px",borderRadius:14,border:"1.5px solid #e5e7eb",background:"white",fontWeight:600,fontSize:14,cursor:submitting?"default":"pointer",color:"#374151",opacity:submitting?0.5:1}}>
             Cancel
           </button>
           <button
-            disabled={!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0}
+            disabled={submitting || !offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0}
             onClick={onSubmit}
             style={{flex:2,padding:"14px",borderRadius:14,border:"none",
               background:GREEN,color:"white",fontWeight:700,fontSize:14,
-              cursor: (offerPrice && parseFloat(offerPrice) > 0) ? "pointer" : "default",
+              cursor: (submitting || !offerPrice || parseFloat(offerPrice) <= 0) ? "default" : "pointer",
               fontFamily:"'Plus Jakarta Sans',sans-serif",
-              opacity: offerPrice && parseFloat(offerPrice) > 0 ? 1 : 0.45}}>
-            Send Offer
+              opacity: (submitting || !offerPrice || parseFloat(offerPrice) <= 0) ? 0.55 : 1}}>
+            {submitting ? "Sending…" : "Send Offer"}
           </button>
         </div>
       </div>
@@ -1969,6 +1971,7 @@ function LoopGenAppInner() {
   const [offerModal, setOfferModal] = useState(null); // { item } | null
   const [offerPrice, setOfferPrice] = useState("");
   const [offerSent,  setOfferSent]  = useState({}); // { [listingId]: price }
+  const [offerSubmitting, setOfferSubmitting] = useState(false); // blocks double-tap
   // P1 — Report listing
   const [reportModal, setReportModal] = useState(null); // { item } | null
   // P5 — Terms agreement for register
@@ -2043,6 +2046,10 @@ function LoopGenAppInner() {
         setProfile(null);
         setScreen(s => (s !== "auth" && s !== "splash") ? "splash" : s);
         setSessionReady(true);
+        // Clear all chat state — prevents leaking between accounts
+        localChatStore.current = {};
+        setChatContext(null);
+        setConvo(null);
       } else if (event === "PASSWORD_RECOVERY") {
         // User clicked the password reset link in their email.
         // Supabase has exchanged the token for a session — now show the
@@ -2105,9 +2112,12 @@ function LoopGenAppInner() {
       loadConversations();
       dbGetPendingOffers(user.id).then(setPendingOffers);
     } else {
-      // Logged out — clear notification state
+      // Logged out — clear ALL notification and chat state
       setConvos([]);
       setPendingOffers([]);
+      localChatStore.current = {};
+      setChatContext(null);
+      setConvo(null);
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2687,7 +2697,19 @@ function LoopGenAppInner() {
           });
           push("chat");
         } else {
-          openChat(enriched, msgs.map(m => ({ ...m, from_me: m.sender_id === user.id })));
+          // No initialMessage — opening an existing conversation.
+          // REPLACE the store with fresh DB messages so any stale optimistic
+          // local messages (msg_DATE IDs) don't persist alongside DB UUIDs.
+          const key = chatKey(enriched);
+          const dbMsgs = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+          localChatStore.current[key] = dbMsgs;
+          setChatContext({
+            id: key,
+            convId: conv.id,
+            sellerName: enriched.seller_username,
+            listingTitle: enriched.title,
+          });
+          push("chat");
         }
       } else {
         openChat(item, []);
@@ -3467,12 +3489,14 @@ function LoopGenAppInner() {
           modal={offerModal}
           offerPrice={offerPrice}
           setOfferPrice={setOfferPrice}
-          onClose={() => setOfferModal(null)}
+          submitting={offerSubmitting}
+          onClose={() => { if (!offerSubmitting) { setOfferModal(null); setOfferPrice(""); } }}
           onSubmit={async () => {
+            if (offerSubmitting) return; // block double-tap
             if (!offerPrice || isNaN(parseFloat(offerPrice)) || parseFloat(offerPrice) <= 0) {
               showToast("Enter a valid offer amount"); return;
             }
-            // Persist offer to Supabase — surface errors to the user
+            setOfferSubmitting(true);
             if (user) {
               try {
                 await dbSaveOffer({
@@ -3483,20 +3507,19 @@ function LoopGenAppInner() {
                 });
               } catch (e) {
                 showToast("Offer couldn't be saved — please try again.");
-                return; // Don't proceed if persist failed
+                setOfferSubmitting(false);
+                return;
               }
             }
-            // Only update local state after successful (or guest) save
             setOfferSent(prev => ({...prev, [offerModal.item.id]: offerPrice}));
             const item = offerModal.item;
             const price = offerPrice;
             setOfferModal(null);
+            setOfferPrice("");
             showToast(`Offer of $${price} sent!`);
-            // FIX: Use openSellerChat so a real DB conversation is created/found
-            // and the convId is the actual conversation UUID (not the listing UUID).
-            // The offer message is then sent as a real DB message the seller can read.
             const offerMsgContent = `Hi! I'd like to make an offer of $${price} for your ${item.title || "item"}. Is this price okay?`;
             await openSellerChat(item, offerMsgContent);
+            setOfferSubmitting(false);
           }}
         />
         <ReportModal
