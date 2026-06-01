@@ -988,7 +988,23 @@ async function dbGetPendingOffers(sellerId) {
   }));
 }
 
-// Save report — uses 'reporter_id' to match the live DB column name
+// Update offer status — seller accepts/declines, buyer withdraws
+// Only allows the values the DB CHECK constraint permits
+async function dbUpdateOfferStatus(offerId, newStatus, userId) {
+  if (!supabase) return null;
+  const allowed = ["pending", "accepted", "declined", "withdrawn"];
+  if (!allowed.includes(newStatus)) throw new Error(`Invalid status: ${newStatus}`);
+  const { data, error } = await supabase
+    .from("offers")
+    .update({ status: newStatus })
+    .eq("id", offerId)
+    // Defence-in-depth: only the buyer or seller of this offer can update it
+    .or(`seller_id.eq.${userId},buyer_id.eq.${userId}`)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
 async function dbSaveReport({ listing_id, reporter_id, reason }) {
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -1692,7 +1708,7 @@ function HomeTicker() {
 //  CHAT SCREEN — controlled: messages live in parent store
 //  props: sellerName, listingTitle, messages[], onSend(msg), onBack
 // ═══════════════════════════════════════════════════════
-function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
+function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, selectedOffer, isSeller, onAcceptOffer }) {
   const [text, setText] = useState("");
   const [isSending, setIsSending] = useState(false); // FIX 11: concurrent send protection
   const MAX_MSG_LENGTH = 2000; // FIX 12: message length limit
@@ -1830,6 +1846,49 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack }) {
           )}
         </div>
       </div>
+
+      {/* ── Accept Offer banner — only shown to seller for pending offers ── */}
+      {isSeller && selectedOffer && selectedOffer.status === "pending" && (
+        <div style={{
+          background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",
+          borderBottom:"1.5px solid #bbf7d0",
+          padding:"10px 16px",
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          flexShrink:0,
+        }}>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:"#166534"}}>
+              💰 Offer received: <span style={{color:"#059669"}}>${selectedOffer.price}</span>
+            </div>
+            <div style={{fontSize:11,color:"#4b7c5a"}}>
+              From {selectedOffer.buyer_username || "Buyer"} · {timeSince(selectedOffer.created_at)}
+            </div>
+          </div>
+          <button
+            onClick={() => onAcceptOffer && onAcceptOffer(selectedOffer)}
+            style={{
+              padding:"8px 16px", borderRadius:50,
+              background:"#16a34a", border:"none",
+              color:"white", fontWeight:700, fontSize:12,
+              cursor:"pointer", fontFamily:"'Plus Jakarta Sans',sans-serif",
+              boxShadow:"0 2px 8px rgba(22,163,74,0.35)",
+              flexShrink:0, marginLeft:12,
+            }}>
+            Accept
+          </button>
+        </div>
+      )}
+      {isSeller && selectedOffer && selectedOffer.status === "accepted" && (
+        <div style={{
+          background:"#f0fdf4", borderBottom:"1.5px solid #bbf7d0",
+          padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexShrink:0,
+        }}>
+          <span style={{fontSize:12}}>✅</span>
+          <span style={{fontSize:12,fontWeight:700,color:"#166534"}}>
+            You accepted this offer for ${selectedOffer.price}
+          </span>
+        </div>
+      )}
 
       {/* ── Message list ── */}
       <div className="lg-messages" style={{
@@ -1995,6 +2054,7 @@ function LoopGenAppInner() {
   const [recoveryDone, setRecoveryDone] = useState(false);
   // Pending offers received as seller — drives notification badge
   const [pendingOffers, setPendingOffers] = useState([]);
+  const [showAllOffers, setShowAllOffers] = useState(false); // expand/collapse offer banner
   // FIX 7: Edit listing state
   const [editListing, setEditListing] = useState(null); // listing being edited | null
 
@@ -2006,7 +2066,7 @@ function LoopGenAppInner() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMsgs,  setChatMsgs]= useState([]);
   // chatContext: drives ChatScreen — includes messages directly to avoid async race
-  // { id, sellerName, listingTitle }
+  // { id, sellerName, listingTitle, selectedOffer }
   const [chatContext, setChatContext] = useState(null);
   // localChatStore: source of truth, keyed by chat id (survives navigation)
   // We use a ref so reads are always synchronous, and trigger re-renders via chatContext
@@ -2729,7 +2789,7 @@ function LoopGenAppInner() {
       const key = chatKey(enriched);
       localChatStore.current[key] = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
       setConvo(conv);
-      setChatContext({ id: key, convId: conv.id, sellerName: enriched.other_user, listingTitle: enriched.listing_title });
+      setChatContext({ id: key, convId: conv.id, sellerName: enriched.other_user, listingTitle: enriched.listing_title, selectedOffer: offer });
       push("chat");
     } catch (e) {
       console.error("openBuyerChat:", e);
@@ -3992,16 +4052,26 @@ function LoopGenAppInner() {
         )}
       </div>
 
-      {/* Pending offers banner — shown to sellers with outstanding offers */}
+      {/* Pending offers banner — expandable, all offers accessible */}
       {!isGuest && pendingOffers.length > 0 && (
         <div style={{margin:"0 16px 12px",background:"linear-gradient(135deg,#fff7ed,#fef3c7)",border:"1.5px solid #fcd34d",borderRadius:16,padding:"12px 14px",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:16}}>💰</span>
-            <span style={{fontWeight:700,fontSize:13,color:"#92400e"}}>
-              {pendingOffers.length} pending offer{pendingOffers.length!==1?"s":""} on your listings
-            </span>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>💰</span>
+              <span style={{fontWeight:700,fontSize:13,color:"#92400e"}}>
+                {pendingOffers.length} pending offer{pendingOffers.length!==1?"s":""} on your listings
+              </span>
+            </div>
+            {pendingOffers.length > 3 && (
+              <button onClick={()=>setShowAllOffers(v=>!v)}
+                style={{fontSize:11,fontWeight:700,color:"#92400e",background:"transparent",
+                  border:"none",cursor:"pointer",padding:"2px 6px",textDecoration:"underline",
+                  fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {showAllOffers ? "Show less" : `+${pendingOffers.length-3} more`}
+              </button>
+            )}
           </div>
-          {pendingOffers.slice(0,3).map(o => (
+          {(showAllOffers ? pendingOffers : pendingOffers.slice(0,3)).map(o => (
             <div key={o.id}
               onClick={() => openBuyerChat(o)}
               style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:6,
@@ -4022,11 +4092,6 @@ function LoopGenAppInner() {
               </div>
             </div>
           ))}
-          {pendingOffers.length > 3 && (
-            <div style={{fontSize:11,color:"#92400e",fontWeight:600,textAlign:"center",marginTop:4}}>
-              +{pendingOffers.length - 3} more offer{pendingOffers.length-3!==1?"s":""}
-            </div>
-          )}
         </div>
       )}
       {isGuest ? (
@@ -4082,6 +4147,26 @@ function LoopGenAppInner() {
       sellerName={chatContext?.sellerName || "Seller"}
       listingTitle={chatContext?.listingTitle || ""}
       messages={localChatStore.current[chatContext?.id] || []}
+      selectedOffer={chatContext?.selectedOffer || null}
+      isSeller={!!(chatContext?.selectedOffer && chatContext.selectedOffer.seller_id === user?.id)}
+      onAcceptOffer={async (offer) => {
+        if (!offer || offer.status !== "pending") return;
+        try {
+          await dbUpdateOfferStatus(offer.id, "accepted", user.id);
+          // System message in chat so both parties see it
+          const sysMsg = `✅ Offer accepted: $${offer.price} for ${offer.listing_title || chatContext?.listingTitle || "item"}.`;
+          if (chatContext?.convId) {
+            await dbSendMessage(chatContext.convId, user.id, sysMsg);
+          }
+          // Update local chatContext so button disappears immediately
+          setChatContext(ctx => ctx ? { ...ctx, selectedOffer: { ...ctx.selectedOffer, status: "accepted" } } : ctx);
+          // Refresh pending offers so count drops
+          if (user) dbGetPendingOffers(user.id).then(setPendingOffers);
+          showToast("✅ Offer accepted! The buyer has been notified.");
+        } catch (e) {
+          showToast("Couldn't accept offer — please try again.");
+        }
+      }}
       onSend={async (msg) => {
         // 1. Show immediately in local store
         addMessageToStore(chatContext?.id, msg);
