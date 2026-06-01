@@ -723,21 +723,30 @@ async function dbGetConversations(userId) {
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("updated_at", { ascending: false });
 
-  if (error) { console.error("getConversations:", error); return DEMO_CONVOS; }
+  if (error) { console.error("getConversations:", error); return []; }
   if (!data || data.length === 0) return [];
 
-  // Step 2: collect all participant UUIDs and fetch their profiles in one query
+  // Step 2: collect all participant UUIDs and listing IDs, fetch in parallel
   const participantIds = [
     ...new Set(data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))
   ];
-  let profileMap = {};
-  if (participantIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url")
-      .in("id", participantIds);
-    (profiles || []).forEach(p => { profileMap[p.id] = p; });
-  }
+  const listingIds = [...new Set(data.map(c => c.listing_id).filter(Boolean))];
+  let profileMap = {}, listingMap = {};
+
+  await Promise.all([
+    participantIds.length > 0 ? supabase
+      .from("profiles").select("id, username, avatar_url")
+      .in("id", participantIds)
+      .then(({ data: profiles }) => {
+        (profiles || []).forEach(p => { profileMap[p.id] = p; });
+      }) : Promise.resolve(),
+    listingIds.length > 0 ? supabase
+      .from("listings").select("id, title")
+      .in("id", listingIds)
+      .then(({ data: listings }) => {
+        (listings || []).forEach(l => { listingMap[l.id] = l; });
+      }) : Promise.resolve(),
+  ]);
 
   // Step 3: map to the shape the UI expects
   return data.map(c => {
@@ -751,7 +760,7 @@ async function dbGetConversations(userId) {
       convId:        c.id,
       other_user:    otherProf?.username    || (isBuyer ? "Seller" : "Buyer"),
       other_avatar:  otherProf?.avatar_url  || null,
-      listing_title: c.listing_title        || "Item",
+      listing_title: listingMap[c.listing_id]?.title || "Item",
       last_message:  lastMsg?.body          || "",
       last_sender_id: lastMsg?.sender_id    || null,
       last_time:     lastMsg ? timeSince(lastMsg.created_at) : "",
@@ -2696,6 +2705,38 @@ function LoopGenAppInner() {
     }
   };
 
+  // openBuyerChat: called when SELLER taps an offer/conversation to view the buyer's messages.
+  // Does NOT have the "own listing" guard — sellers are expected to view their own listings' chats.
+  // Finds/creates the conversation between this listing's buyer and the current seller.
+  const openBuyerChat = async (offer) => {
+    if (!supabase || !user) return;
+    try {
+      const conv = await dbGetOrCreateConversation(
+        offer.listing_id,
+        offer.buyer_id,  // buyer is the other party
+        user.id          // current user IS the seller
+      );
+      if (!conv) return;
+      const msgs = await dbGetMessages(conv.id);
+      const enriched = {
+        ...conv,
+        convId:          conv.id,
+        seller_username: profile?.username || "Seller",
+        other_user:      offer.buyer_username || "Buyer",
+        listing_title:   offer.listing_title  || "Item",
+        title:           offer.listing_title  || "Item",
+      };
+      const key = chatKey(enriched);
+      localChatStore.current[key] = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
+      setConvo(conv);
+      setChatContext({ id: key, convId: conv.id, sellerName: enriched.other_user, listingTitle: enriched.listing_title });
+      push("chat");
+    } catch (e) {
+      console.error("openBuyerChat:", e);
+      showToast("Couldn't open conversation — please try again.");
+    }
+  };
+
   const openSellerChat = async (item, initialMessage = null) => {
     // Block seller messaging their own listing — check both Supabase id and username (demo mode)
     if (user) {
@@ -3961,7 +4002,11 @@ function LoopGenAppInner() {
             </span>
           </div>
           {pendingOffers.slice(0,3).map(o => (
-            <div key={o.id} style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div key={o.id}
+              onClick={() => openBuyerChat(o)}
+              style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:6,
+                display:"flex",justifyContent:"space-between",alignItems:"center",
+                cursor:"pointer"}}>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.listing_title}</div>
                 <div style={{fontSize:11,color:"#6b7280"}}>
@@ -3971,7 +4016,10 @@ function LoopGenAppInner() {
                   {" · "}{timeSince(o.created_at)}
                 </div>
               </div>
-              <span style={{fontSize:10,fontWeight:700,background:"#fef3c7",color:"#92400e",padding:"3px 8px",borderRadius:50,flexShrink:0,marginLeft:8}}>Pending</span>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
+                <span style={{fontSize:10,fontWeight:700,background:"#fef3c7",color:"#92400e",padding:"3px 8px",borderRadius:50}}>Pending</span>
+                <span style={{fontSize:11,color:"#9ca3af"}}>›</span>
+              </div>
             </div>
           ))}
           {pendingOffers.length > 3 && (
