@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.0"; // bumped for beta deploy — realtime fix, password recovery, RLS hardening
+const APP_VERSION = "2.3.1"; // buyer accepted-offer notification, expandable offers banner
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -1005,6 +1005,39 @@ async function dbUpdateOfferStatus(offerId, newStatus, userId) {
   if (error) throw error;
   return data;
 }
+// Fetch accepted offers for a buyer — drives buyer-side notification banner
+async function dbGetAcceptedOffersForBuyer(buyerId) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("offers")
+    .select("*")
+    .eq("buyer_id", buyerId)
+    .eq("status", "accepted")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("dbGetAcceptedOffersForBuyer:", error); return []; }
+  if (!data || data.length === 0) return [];
+  const listingIds = [...new Set(data.map(o => o.listing_id).filter(Boolean))];
+  const sellerIds  = [...new Set(data.map(o => o.seller_id).filter(Boolean))];
+  let listingMap = {}, profileMap = {};
+  await Promise.all([
+    listingIds.length > 0 ? supabase
+      .from("listings").select("id, title")
+      .in("id", listingIds)
+      .then(({ data: ls }) => { (ls||[]).forEach(l => { listingMap[l.id] = l; }); })
+      : Promise.resolve(),
+    sellerIds.length > 0 ? supabase
+      .from("profiles").select("id, username")
+      .in("id", sellerIds)
+      .then(({ data: ps }) => { (ps||[]).forEach(p => { profileMap[p.id] = p; }); })
+      : Promise.resolve(),
+  ]);
+  return data.map(o => ({
+    ...o,
+    listing_title:   listingMap[o.listing_id]?.title   || "Item",
+    seller_username: profileMap[o.seller_id]?.username || "Seller",
+  }));
+}
+
 async function dbSaveReport({ listing_id, reporter_id, reason }) {
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -2053,8 +2086,10 @@ function LoopGenAppInner() {
   const [recoveryErr,  setRecoveryErr]  = useState("");
   const [recoveryDone, setRecoveryDone] = useState(false);
   // Pending offers received as seller — drives notification badge
-  const [pendingOffers, setPendingOffers] = useState([]);
-  const [showAllOffers, setShowAllOffers] = useState(false); // expand/collapse offer banner
+  const [pendingOffers,   setPendingOffers]   = useState([]);
+  const [acceptedOffers,  setAcceptedOffers]  = useState([]); // buyer-side accepted offers
+  const [showAllOffers,   setShowAllOffers]   = useState(false);
+  const [showAllAccepted, setShowAllAccepted] = useState(false);
   // FIX 7: Edit listing state
   const [editListing, setEditListing] = useState(null); // listing being edited | null
 
@@ -2173,6 +2208,7 @@ function LoopGenAppInner() {
         localChatStore.current = {};
         setChatContext(null);
         setConvo(null);
+        setAcceptedOffers([]);
       } else if (event === "PASSWORD_RECOVERY") {
         // User clicked the password reset link in their email.
         // Supabase has exchanged the token for a session — now show the
@@ -2214,8 +2250,8 @@ function LoopGenAppInner() {
     }
     if (screen === "chats" && user) {
       loadConversations();
-      // Also refresh pending offers received as seller
       dbGetPendingOffers(user.id).then(setPendingOffers);
+      dbGetAcceptedOffersForBuyer(user.id).then(setAcceptedOffers);
     }
     if ((screen === "profile" || screen === "my-listings" || screen === "saved-items") && user) {
       loadProfileData();
@@ -2234,10 +2270,12 @@ function LoopGenAppInner() {
     if (user) {
       loadConversations();
       dbGetPendingOffers(user.id).then(setPendingOffers);
+      dbGetAcceptedOffersForBuyer(user.id).then(setAcceptedOffers);
     } else {
       // Logged out — clear ALL notification and chat state
       setConvos([]);
       setPendingOffers([]);
+      setAcceptedOffers([]);
       localChatStore.current = {};
       setChatContext(null);
       setConvo(null);
@@ -3342,7 +3380,7 @@ function LoopGenAppInner() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3410,7 +3448,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>
-      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4029,7 +4067,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>{/* lg-sell-root */}
-      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4094,6 +4132,58 @@ function LoopGenAppInner() {
           ))}
         </div>
       )}
+
+      {/* Buyer accepted offers banner — only shown when current user is buyer of accepted offer */}
+      {!isGuest && acceptedOffers.length > 0 && (
+        <div style={{margin:"0 16px 12px",background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:"1.5px solid #86efac",borderRadius:16,padding:"12px 14px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>✅</span>
+              <span style={{fontWeight:700,fontSize:13,color:"#166534"}}>
+                {acceptedOffers.length === 1 ? "Your offer was accepted!" : `${acceptedOffers.length} offers accepted!`}
+              </span>
+            </div>
+            {acceptedOffers.length > 3 && (
+              <button onClick={()=>setShowAllAccepted(v=>!v)}
+                style={{fontSize:11,fontWeight:700,color:"#166534",background:"transparent",
+                  border:"none",cursor:"pointer",padding:"2px 6px",textDecoration:"underline",
+                  fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {showAllAccepted ? "Show less" : `+${acceptedOffers.length-3} more`}
+              </button>
+            )}
+          </div>
+          {(showAllAccepted ? acceptedOffers : acceptedOffers.slice(0,3)).map(o => (
+            <div key={o.id}
+              onClick={async () => {
+                // Buyer taps accepted offer → open the conversation as buyer
+                // Use openSellerChat (buyer calling seller) — item shape: id=listing_id, seller_id
+                await openSellerChat({
+                  id: o.listing_id,
+                  seller_id: o.seller_id,
+                  seller_username: o.seller_username,
+                  title: o.listing_title,
+                });
+              }}
+              style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:6,
+                display:"flex",justifyContent:"space-between",alignItems:"center",
+                cursor:"pointer"}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.listing_title}</div>
+                <div style={{fontSize:11,color:"#6b7280"}}>
+                  <span style={{fontWeight:600,color:"#166534"}}>${o.price} accepted</span>
+                  {" by "}
+                  <span style={{fontWeight:600}}>{o.seller_username}</span>
+                  {" · "}{timeSince(o.created_at)}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
+                <span style={{fontSize:10,fontWeight:700,background:"#dcfce7",color:"#166534",padding:"3px 8px",borderRadius:50}}>Accepted</span>
+                <span style={{fontSize:11,color:"#9ca3af"}}>›</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {isGuest ? (
         <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 28px",gap:16}}>
           <div style={{fontSize:52}}>{String.fromCodePoint(0x1F4AC)}</div>
@@ -4134,7 +4224,7 @@ function LoopGenAppInner() {
         </div>
       )}
       </div>
-      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4160,8 +4250,11 @@ function LoopGenAppInner() {
           }
           // Update local chatContext so button disappears immediately
           setChatContext(ctx => ctx ? { ...ctx, selectedOffer: { ...ctx.selectedOffer, status: "accepted" } } : ctx);
-          // Refresh pending offers so count drops
-          if (user) dbGetPendingOffers(user.id).then(setPendingOffers);
+          // Refresh seller's pending offers (count drops) and buyer's accepted offers
+          if (user) {
+            dbGetPendingOffers(user.id).then(setPendingOffers);
+            dbGetAcceptedOffersForBuyer(user.id).then(setAcceptedOffers);
+          }
           showToast("✅ Offer accepted! The buyer has been notified.");
         } catch (e) {
           showToast("Couldn't accept offer — please try again.");
@@ -4262,7 +4355,7 @@ function LoopGenAppInner() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4359,7 +4452,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4406,7 +4499,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4577,7 +4670,7 @@ function LoopGenAppInner() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
