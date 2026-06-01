@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.1"; // buyer accepted-offer notification, expandable offers banner
+const APP_VERSION = "2.3.2"; // unified message notifications, conversations realtime, unread indicators
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -721,7 +721,9 @@ async function dbGetConversations(userId) {
     .from("conversations")
     .select(`*, messages(body, created_at, sender_id)`)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .order("created_at", { referencedTable: "messages", ascending: false })
+    .limit(1, { referencedTable: "messages" });
 
   if (error) { console.error("getConversations:", error); return []; }
   if (!data || data.length === 0) return [];
@@ -2142,7 +2144,8 @@ function LoopGenAppInner() {
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const listingsLoaded = useRef(false);
-  const realtimeSub = useRef(null);
+  const realtimeSub     = useRef(null);
+  const convRealtimeSub = useRef(null); // tracks conversation-level updates for badge refresh
   const authInitialised = useRef(false); // guards against double-init on mount
 
   // ── T2: Auto-merge tags when title/category/condition change ────────────────
@@ -2309,6 +2312,37 @@ function LoopGenAppInner() {
       .subscribe();
     return () => { realtimeSub.current?.unsubscribe(); };
   }, [convo, user]);
+
+  // ── Conversations realtime — refreshes badge + preview for recipient ──────
+  // Fires when any conversation the current user participates in is updated
+  // (i.e. when dbSendMessage updates conversations.updated_at)
+  // This means the badge lights up on the HOME screen without needing to open Messages.
+  useEffect(() => {
+    if (!supabase || !user?.id) {
+      convRealtimeSub.current?.unsubscribe();
+      convRealtimeSub.current = null;
+      return;
+    }
+    // Unsubscribe any previous subscription
+    convRealtimeSub.current?.unsubscribe();
+    convRealtimeSub.current = supabase
+      .channel(`convs:${user.id}`)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "conversations" },
+        (payload) => {
+          const c = payload.new;
+          // Only care about conversations this user is part of
+          if (c.buyer_id !== user.id && c.seller_id !== user.id) return;
+          // Refresh conversation list and badge counts
+          loadConversations();
+        }
+      )
+      .subscribe();
+    return () => {
+      convRealtimeSub.current?.unsubscribe();
+      convRealtimeSub.current = null;
+    };
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Data loaders ─────────────────────────────────────
   async function loadListings({ force = false } = {}) {
@@ -4201,26 +4235,33 @@ function LoopGenAppInner() {
               <div style={{fontSize:13,color:"#9ca3af",lineHeight:1.6}}>Find something you like and tap<br/>"Message Seller" to start a chat</div>
               <button onClick={()=>nav("explore")} style={{marginTop:4,padding:"13px 24px",borderRadius:50,background:GREEN,border:"none",color:"white",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:`0 6px 18px ${GREEN}44`}}>Browse Listings</button>
             </div>
-          ) : convos.map(c => (
+          ) : convos.map(c => {
+            const hasIncoming = c.last_message && c.last_sender_id && c.last_sender_id !== user?.id;
+            return (
             <div key={c.id} onClick={() => openConvo(c)}
-              style={{background:"white",borderRadius:18,padding:"14px 15px",display:"flex",gap:12,alignItems:"center",boxShadow:"0 1px 8px rgba(0,0,0,0.06)",cursor:"pointer",minHeight:70}}>
+              style={{background:"white",borderRadius:18,padding:"14px 15px",display:"flex",gap:12,alignItems:"center",
+                boxShadow: hasIncoming ? "0 2px 12px rgba(28,124,69,0.13)" : "0 1px 8px rgba(0,0,0,0.06)",
+                cursor:"pointer",minHeight:70,
+                border: hasIncoming ? `1.5px solid ${GREEN}33` : "1.5px solid transparent"}}>
               <div style={{position:"relative",flexShrink:0}}>
                 <div style={{width:50,height:50,borderRadius:"50%",background:`linear-gradient(135deg,${GREEN},#22c55e)`,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:18}}>
                   {(c.other_user||"U")[0].toUpperCase()}
                 </div>
-                {c.online && <div style={{position:"absolute",bottom:1,right:1,width:12,height:12,background:"#22c55e",borderRadius:"50%",border:"2px solid white"}}/>}
+                {/* Green dot = incoming unread message */}
+                {hasIncoming && <div style={{position:"absolute",top:0,right:0,width:12,height:12,background:"#ef4444",borderRadius:"50%",border:"2px solid white"}}/>}
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontWeight:700,fontSize:14,color:"#111"}}>{c.other_user}</span>
-                  <span style={{fontSize:11,color:"#9ca3af"}}>{c.last_time || c.time}</span>
+                  <span style={{fontWeight: hasIncoming ? 800 : 700,fontSize:14,color:"#111"}}>{c.other_user}</span>
+                  <span style={{fontSize:11,color: hasIncoming ? GREEN : "#9ca3af",fontWeight: hasIncoming ? 700 : 400}}>{c.last_time || c.time}</span>
                 </div>
                 <div style={{fontSize:11,color:GREEN,marginTop:1,fontWeight:600}}>Re: {c.listing_title || c.item}</div>
-                <div style={{fontSize:12,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{c.last_message || c.last}</div>
+                <div style={{fontSize:12,color: hasIncoming ? "#374151" : "#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1,fontWeight: hasIncoming ? 600 : 400}}>{c.last_message || c.last}</div>
               </div>
-              {(c.unread>0) && <div style={{background:GREEN,color:"white",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{c.unread}</div>}
+              {hasIncoming && <div style={{width:10,height:10,borderRadius:"50%",background:"#ef4444",flexShrink:0}}/>}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       </div>
