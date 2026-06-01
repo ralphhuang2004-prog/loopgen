@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.2"; // unified message notifications, conversations realtime, unread indicators
+const APP_VERSION = "2.3.3"; // fix dbGetConversations broken nested select — conversations now load correctly
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -713,61 +713,71 @@ async function dbToggleSave(listingId, userId, isSaved) {
 async function dbGetConversations(userId) {
   if (!supabase) return DEMO_CONVOS;
 
-  // Step 1: fetch conversations — simple query, no FK-dependent nested joins
-  // The buyer:buyer_id(...) nested join requires a FK from conversations.buyer_id
-  // to auth.users.id which does not exist in the live DB, causing an error
-  // that falls back to DEMO_CONVOS. Fetch conversations and profiles separately.
+  // Step 1: fetch conversations — plain select, no nested joins of any kind.
+  // Nested embedded resource ordering (.order/.limit with referencedTable) is
+  // not supported in Supabase JS v2 for one-to-many embeds and caused the query
+  // to return an error, resulting in convos = [] ("0 conversations").
   const { data, error } = await supabase
     .from("conversations")
-    .select(`*, messages(body, created_at, sender_id)`)
+    .select("*")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-    .order("updated_at", { ascending: false })
-    .order("created_at", { referencedTable: "messages", ascending: false })
-    .limit(1, { referencedTable: "messages" });
+    .order("updated_at", { ascending: false });
 
-  if (error) { console.error("getConversations:", error); return []; }
+  if (error) { console.error("[LoopGen] getConversations error:", error.message); return []; }
   if (!data || data.length === 0) return [];
 
-  // Step 2: collect all participant UUIDs and listing IDs, fetch in parallel
-  const participantIds = [
-    ...new Set(data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))
-  ];
+  const convIds    = data.map(c => c.id);
+  const partIds    = [...new Set(data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))];
   const listingIds = [...new Set(data.map(c => c.listing_id).filter(Boolean))];
-  let profileMap = {}, listingMap = {};
+  let profileMap = {}, listingMap = {}, lastMsgMap = {};
 
+  // Step 2: fetch profiles, listing titles, and latest message per conversation
+  // — all in parallel, all plain queries with no FK-dependent joins
   await Promise.all([
-    participantIds.length > 0 ? supabase
+    partIds.length > 0 ? supabase
       .from("profiles").select("id, username, avatar_url")
-      .in("id", participantIds)
-      .then(({ data: profiles }) => {
-        (profiles || []).forEach(p => { profileMap[p.id] = p; });
-      }) : Promise.resolve(),
+      .in("id", partIds)
+      .then(({ data: ps }) => { (ps||[]).forEach(p => { profileMap[p.id] = p; }); })
+      : Promise.resolve(),
+
     listingIds.length > 0 ? supabase
       .from("listings").select("id, title")
       .in("id", listingIds)
-      .then(({ data: listings }) => {
-        (listings || []).forEach(l => { listingMap[l.id] = l; });
-      }) : Promise.resolve(),
+      .then(({ data: ls }) => { (ls||[]).forEach(l => { listingMap[l.id] = l; }); })
+      : Promise.resolve(),
+
+    // Fetch ALL messages for these conversations ordered desc, then keep only
+    // the first-seen per conversation_id (= the latest message for each conv)
+    convIds.length > 0 ? supabase
+      .from("messages")
+      .select("id, conversation_id, sender_id, body, created_at")
+      .in("conversation_id", convIds)
+      .order("created_at", { ascending: false })
+      .then(({ data: msgs }) => {
+        (msgs||[]).forEach(m => {
+          if (!lastMsgMap[m.conversation_id]) lastMsgMap[m.conversation_id] = m;
+        });
+      })
+      : Promise.resolve(),
   ]);
 
-  // Step 3: map to the shape the UI expects
+  // Step 3: assemble enriched conversation objects
   return data.map(c => {
     const isBuyer   = c.buyer_id === userId;
     const otherId   = isBuyer ? c.seller_id : c.buyer_id;
     const otherProf = profileMap[otherId];
-    const lastMsg   = (c.messages || [])
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    const lastMsg   = lastMsgMap[c.id] || null;
     return {
       ...c,
-      convId:        c.id,
-      other_user:    otherProf?.username    || (isBuyer ? "Seller" : "Buyer"),
-      other_avatar:  otherProf?.avatar_url  || null,
-      listing_title: listingMap[c.listing_id]?.title || "Item",
-      last_message:  lastMsg?.body          || "",
+      convId:         c.id,
+      other_user:     otherProf?.username   || (isBuyer ? "Seller" : "Buyer"),
+      other_avatar:   otherProf?.avatar_url || null,
+      listing_title:  listingMap[c.listing_id]?.title || "Item",
+      last_message:   lastMsg?.body         || "",
       last_sender_id: lastMsg?.sender_id    || null,
-      last_time:     lastMsg ? timeSince(lastMsg.created_at) : "",
-      unread:        0,
-      online:        false,
+      last_time:      lastMsg ? timeSince(lastMsg.created_at) : "",
+      unread:         0,
+      online:         false,
     };
   });
 }
