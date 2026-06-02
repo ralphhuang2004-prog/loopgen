@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.8"; // unread fix: string-equality updated_at comparison via isConvoUnread()
+const APP_VERSION = "2.4.0"; // marketplace lifecycle: reserved/backup offers, archive chat, decline/withdraw
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -898,6 +898,24 @@ async function dbMarkAsSold(listingId, userId) {
   if (error) throw error;
 }
 
+// Mark listing reserved when seller accepts an offer — requires migration_v240_reserved.sql
+async function dbSetListingReserved(listingId, userId) {
+  if (!supabase) return;
+  const { error } = await supabase.from("listings")
+    .update({ status: "reserved" })
+    .eq("id", listingId).eq("seller_id", userId);
+  if (error) console.error("[LoopGen] dbSetListingReserved:", error.message);
+}
+
+// Return reserved/sold listing to active (deal falls through or mistake)
+async function dbSetListingActive(listingId, userId) {
+  if (!supabase) return;
+  const { error } = await supabase.from("listings")
+    .update({ status: "active" })
+    .eq("id", listingId).eq("seller_id", userId);
+  if (error) throw error;
+}
+
 async function dbDeleteListing(listingId, userId) {
   if (!supabase) return;
   // Defence-in-depth: always scope mutations to the authenticated owner.
@@ -1754,7 +1772,7 @@ function HomeTicker() {
 //  CHAT SCREEN — controlled: messages live in parent store
 //  props: sellerName, listingTitle, messages[], onSend(msg), onBack
 // ═══════════════════════════════════════════════════════
-function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, selectedOffer, isSeller, onAcceptOffer }) {
+function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, selectedOffer, isSeller, onAcceptOffer, onDeclineOffer, onWithdrawOffer }) {
   const [text, setText] = useState("");
   const [isSending, setIsSending] = useState(false); // FIX 11: concurrent send protection
   const MAX_MSG_LENGTH = 2000; // FIX 12: message length limit
@@ -1893,7 +1911,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, select
         </div>
       </div>
 
-      {/* ── Accept Offer banner — only shown to seller for pending offers ── */}
+      {/* ── Accept/Decline Offer banner — seller only, pending offer ── */}
       {isSeller && selectedOffer && selectedOffer.status === "pending" && (
         <div style={{
           background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",
@@ -1910,29 +1928,65 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, select
               From {selectedOffer.buyer_username || "Buyer"} · {timeSince(selectedOffer.created_at)}
             </div>
           </div>
-          <button
-            onClick={() => onAcceptOffer && onAcceptOffer(selectedOffer)}
-            style={{
-              padding:"8px 16px", borderRadius:50,
-              background:"#16a34a", border:"none",
-              color:"white", fontWeight:700, fontSize:12,
-              cursor:"pointer", fontFamily:"'Plus Jakarta Sans',sans-serif",
-              boxShadow:"0 2px 8px rgba(22,163,74,0.35)",
-              flexShrink:0, marginLeft:12,
-            }}>
-            Accept
-          </button>
+          <div style={{display:"flex",gap:8,flexShrink:0,marginLeft:12}}>
+            <button
+              onClick={() => onDeclineOffer && onDeclineOffer(selectedOffer)}
+              style={{padding:"8px 14px",borderRadius:50,background:"white",
+                border:"1.5px solid #d1d5db",color:"#6b7280",fontWeight:700,fontSize:12,
+                cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Decline
+            </button>
+            <button
+              onClick={() => onAcceptOffer && onAcceptOffer(selectedOffer)}
+              style={{padding:"8px 14px",borderRadius:50,background:"#16a34a",border:"none",
+                color:"white",fontWeight:700,fontSize:12,cursor:"pointer",
+                fontFamily:"'Plus Jakarta Sans',sans-serif",
+                boxShadow:"0 2px 8px rgba(22,163,74,0.35)"}}>
+              Accept
+            </button>
+          </div>
         </div>
       )}
+      {/* ── Accepted state banner — seller view ── */}
       {isSeller && selectedOffer && selectedOffer.status === "accepted" && (
-        <div style={{
-          background:"#f0fdf4", borderBottom:"1.5px solid #bbf7d0",
-          padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexShrink:0,
-        }}>
+        <div style={{background:"#f0fdf4",borderBottom:"1.5px solid #bbf7d0",
+          padding:"8px 16px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           <span style={{fontSize:12}}>✅</span>
           <span style={{fontSize:12,fontWeight:700,color:"#166534"}}>
             You accepted this offer for ${selectedOffer.price}
           </span>
+        </div>
+      )}
+      {/* ── Declined state banner — seller view ── */}
+      {isSeller && selectedOffer && selectedOffer.status === "declined" && (
+        <div style={{background:"#fef2f2",borderBottom:"1.5px solid #fecaca",
+          padding:"8px 16px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <span style={{fontSize:12}}>❌</span>
+          <span style={{fontSize:12,fontWeight:600,color:"#991b1b"}}>You declined this offer</span>
+        </div>
+      )}
+      {/* ── Buyer: withdraw pending offer ── */}
+      {!isSeller && selectedOffer && selectedOffer.status === "pending" && (
+        <div style={{background:"#fffbeb",borderBottom:"1.5px solid #fde68a",
+          padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",
+          flexShrink:0}}>
+          <div style={{fontSize:12,color:"#92400e"}}>
+            <span style={{fontWeight:700}}>Your offer: ${selectedOffer.price}</span>
+            <span style={{color:"#a16207"}}> · Pending</span>
+          </div>
+          <button onClick={() => onWithdrawOffer && onWithdrawOffer(selectedOffer)}
+            style={{padding:"6px 12px",borderRadius:50,background:"white",
+              border:"1.5px solid #d1d5db",color:"#6b7280",fontWeight:600,fontSize:11,
+              cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            Withdraw
+          </button>
+        </div>
+      )}
+      {/* ── Buyer: withdrawn state ── */}
+      {!isSeller && selectedOffer && selectedOffer.status === "withdrawn" && (
+        <div style={{background:"#f9fafb",borderBottom:"1.5px solid #e5e7eb",
+          padding:"8px 16px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <span style={{fontSize:12,color:"#9ca3af"}}>↩ You withdrew this offer</span>
         </div>
       )}
 
@@ -2230,6 +2284,8 @@ function LoopGenAppInner() {
         setChatContext(null);
         setConvo(null);
         setAcceptedOffers([]);
+        setReadAcceptedOffers({});
+        setArchivedConvos({});
       } else if (event === "PASSWORD_RECOVERY") {
         // User clicked the password reset link in their email.
         // Supabase has exchanged the token for a session — now show the
@@ -2293,12 +2349,16 @@ function LoopGenAppInner() {
       dbGetPendingOffers(user.id).then(setPendingOffers);
       dbGetAcceptedOffersForBuyer(user.id).then(setAcceptedOffers);
       setReadMap(loadReadMap(user.id)); // restore per-user read state
+      setReadAcceptedOffers(loadReadAcceptedOffers(user.id));
+      setArchivedConvos(loadArchivedConvos(user.id));
     } else {
       // Logged out — clear ALL notification and chat state
       setConvos([]);
       setPendingOffers([]);
       setAcceptedOffers([]);
       setReadMap({});
+      setReadAcceptedOffers({});
+      setArchivedConvos({});
       localChatStore.current = {};
       setChatContext(null);
       setConvo(null);
@@ -2353,6 +2413,8 @@ function LoopGenAppInner() {
           const c = payload.new;
           // Only care about conversations this user is part of
           if (c.buyer_id !== user.id && c.seller_id !== user.id) return;
+          // Auto-unarchive: new message means recipient should see this conv again
+          if (archivedConvos[c.id]) unarchiveConvo(c.id);
           // Refresh conversation list and badge counts
           loadConversations();
         }
@@ -2455,6 +2517,69 @@ function LoopGenAppInner() {
     if (!read) return true; // never opened
     const result = read.lastSeenUpdatedAt !== c.updated_at;
     return result;
+  }
+
+  // ── Accepted-offer read state ─────────────────────────
+  // Tracks which accepted offer notifications the buyer has seen.
+  // Persisted to localStorage — no DB change needed.
+  const [readAcceptedOffers, setReadAcceptedOffers] = useState({});
+  // Archive state — hides conversations from inbox for current user only (no DB change)
+  const [archivedConvos, setArchivedConvos] = useState({});
+
+  function loadReadAcceptedOffers(userId) {
+    if (!userId) return {};
+    try {
+      return JSON.parse(localStorage.getItem(`loopgen_read_accepted_${userId}`) || "{}");
+    } catch { return {}; }
+  }
+
+  function markAcceptedOfferRead(offerId) {
+    if (!user?.id || !offerId) return;
+    const storageKey = `loopgen_read_accepted_${user.id}`;
+    const current = loadReadAcceptedOffers(user.id);
+    if (current[offerId]) return; // already marked
+    const updated = { ...current, [offerId]: true };
+    try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch { /* quota */ }
+    setReadAcceptedOffers(updated);
+  }
+
+  // Mark all accepted offers for a given listing+buyer as read.
+  // Called when the buyer opens the related chat, so the badge clears
+  // even if they navigate to the chat without tapping the offer banner.
+  function markAcceptedOffersForConvRead(conv) {
+    if (!user?.id || !conv) return;
+    acceptedOffers.forEach(o => {
+      if (o.listing_id === conv.listing_id && o.buyer_id === user.id) {
+        markAcceptedOfferRead(o.id);
+      }
+    });
+  }
+
+  // ── Archive helpers ───────────────────────────────────
+  // Hides a conversation from the current user's inbox only.
+  // Does NOT touch the DB — other participant still sees the chat.
+  // A new incoming message automatically unarchives.
+  function loadArchivedConvos(userId) {
+    if (!userId) return {};
+    try { return JSON.parse(localStorage.getItem(`loopgen_archived_${userId}`) || "{}"); }
+    catch { return {}; }
+  }
+
+  function archiveConvo(convId) {
+    if (!user?.id || !convId) return;
+    const key = `loopgen_archived_${user.id}`;
+    const updated = { ...loadArchivedConvos(user.id), [convId]: true };
+    try { localStorage.setItem(key, JSON.stringify(updated)); } catch { /* quota */ }
+    setArchivedConvos(updated);
+  }
+
+  function unarchiveConvo(convId) {
+    if (!user?.id || !convId) return;
+    const key = `loopgen_archived_${user.id}`;
+    const current = loadArchivedConvos(user.id);
+    const { [convId]: _, ...rest } = current;
+    try { localStorage.setItem(key, JSON.stringify(rest)); } catch { /* quota */ }
+    setArchivedConvos(rest);
   }
 
   async function loadProfileData() {
@@ -2894,8 +3019,10 @@ function LoopGenAppInner() {
         const store = localChatStore.current;
         store[key] = msgs;
         setChatContext(ctx => ctx ? { ...ctx, convId: c.id } : ctx);
-        // Mark read with full conv object so updated_at is captured exactly
+        // Mark conversation as read — removes badge/dot immediately
         markConvoRead(c);
+        // Also mark any related accepted offer notifications as read
+        markAcceptedOffersForConvRead(c);
       } catch (e) { console.error("openConvo fetch error:", e); }
     }
   };
@@ -2927,6 +3054,8 @@ function LoopGenAppInner() {
       setChatContext({ id: key, convId: conv.id, sellerName: enriched.other_user, listingTitle: enriched.listing_title, selectedOffer: offer });
       // Mark read with full conv object so updated_at is captured exactly
       markConvoRead(conv);
+      // Also mark any accepted offer notifications for this listing as read
+      markAcceptedOffersForConvRead(conv);
       push("chat");
     } catch (e) {
       console.error("openBuyerChat:", e);
@@ -2997,6 +3126,8 @@ function LoopGenAppInner() {
           localChatStore.current[key] = dbMsgs;
           // Mark read with full conv object so updated_at is captured exactly
           markConvoRead(conv);
+          // Also mark any accepted offer notifications for this listing as read
+          markAcceptedOffersForConvRead(conv);
           setChatContext({
             id: key,
             convId: conv.id,
@@ -3481,7 +3612,7 @@ function LoopGenAppInner() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3549,7 +3680,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>
-      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3756,6 +3887,13 @@ function LoopGenAppInner() {
                   fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   📋 Your listing
                 </div>
+              ) : detail.status === "sold" ? (
+                <div style={{flex:1,padding:"14px 8px",borderRadius:16,
+                  border:"1.5px solid #e5e7eb",background:"#f9fafb",
+                  color:"#9ca3af",fontWeight:600,fontSize:13,
+                  display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  🔒 This item has been sold
+                </div>
               ) : (
                 <>
                   <button onClick={() => openSellerChat(detail)}
@@ -3765,6 +3903,14 @@ function LoopGenAppInner() {
                       fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                     💬 Message Seller
                   </button>
+                  {detail.status === "reserved" ? (
+                    <div style={{flex:1,padding:"14px 8px",borderRadius:16,
+                      border:"1.5px solid #f59e0b",background:"#fffbeb",
+                      color:"#92400e",fontWeight:600,fontSize:12,
+                      display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center"}}>
+                      🔒 Reserved — your offer is a backup
+                    </div>
+                  ) : (
                   <button onClick={() => { setOfferPrice(""); setOfferModal({item:detail}); }}
                     style={{flex:1,padding:"14px 8px",borderRadius:16,
                       border:"none",background:GREEN,color:"white",
@@ -3773,6 +3919,7 @@ function LoopGenAppInner() {
                       fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                     {offerSent[detail.id] ? `Offer: $${offerSent[detail.id]}` : "Make Offer"}
                   </button>
+                  )}
                 </>
               )}
             </div>
@@ -4168,7 +4315,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>{/* lg-sell-root */}
-      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4256,8 +4403,9 @@ function LoopGenAppInner() {
           {(showAllAccepted ? acceptedOffers : acceptedOffers.slice(0,3)).map(o => (
             <div key={o.id}
               onClick={async () => {
-                // Buyer taps accepted offer → open the conversation as buyer
-                // Use openSellerChat (buyer calling seller) — item shape: id=listing_id, seller_id
+                // Mark this accepted offer notification as read — removes from badge count
+                markAcceptedOfferRead(o.id);
+                // Open the conversation as buyer
                 await openSellerChat({
                   id: o.listing_id,
                   seller_id: o.seller_id,
@@ -4302,7 +4450,7 @@ function LoopGenAppInner() {
               <div style={{fontSize:13,color:"#9ca3af",lineHeight:1.6}}>Find something you like and tap<br/>"Message Seller" to start a chat</div>
               <button onClick={()=>nav("explore")} style={{marginTop:4,padding:"13px 24px",borderRadius:50,background:GREEN,border:"none",color:"white",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:`0 6px 18px ${GREEN}44`}}>Browse Listings</button>
             </div>
-          ) : convos.map(c => {
+          ) : convos.filter(c => !archivedConvos[c.id]).map(c => {
             // Single source of truth — same helper used by badge and all indicators
             const hasIncoming = isConvoUnread(c);
             return (
@@ -4326,14 +4474,22 @@ function LoopGenAppInner() {
                 <div style={{fontSize:11,color:GREEN,marginTop:1,fontWeight:600}}>Re: {c.listing_title || c.item}</div>
                 <div style={{fontSize:12,color: hasIncoming ? "#374151" : "#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1,fontWeight: hasIncoming ? 600 : 400}}>{c.last_message || c.last}</div>
               </div>
-              {hasIncoming && <div style={{width:10,height:10,borderRadius:"50%",background:"#ef4444",flexShrink:0}}/>}
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                {hasIncoming && <div style={{width:10,height:10,borderRadius:"50%",background:"#ef4444"}}/>}
+                <button
+                  onClick={e => { e.stopPropagation(); archiveConvo(c.id); }}
+                  title="Hide conversation"
+                  style={{background:"transparent",border:"none",cursor:"pointer",color:"#d1d5db",
+                    fontSize:16,lineHeight:1,padding:"2px 4px",borderRadius:6}}
+                >⋯</button>
+              </div>
             </div>
             );
           })}
         </div>
       )}
       </div>
-      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4352,6 +4508,9 @@ function LoopGenAppInner() {
         if (!offer || offer.status !== "pending") return;
         try {
           await dbUpdateOfferStatus(offer.id, "accepted", user.id);
+          // Mark listing as reserved — other offers become backup offers
+          // (requires migration_v240_reserved.sql to have been run)
+          if (offer.listing_id) await dbSetListingReserved(offer.listing_id, user.id);
           // System message in chat so both parties see it
           const sysMsg = `✅ Offer accepted: $${offer.price} for ${offer.listing_title || chatContext?.listingTitle || "item"}.`;
           if (chatContext?.convId) {
@@ -4368,6 +4527,27 @@ function LoopGenAppInner() {
         } catch (e) {
           showToast("Couldn't accept offer — please try again.");
         }
+      }}
+      onDeclineOffer={async (offer) => {
+        if (!offer || offer.status !== "pending") return;
+        try {
+          await dbUpdateOfferStatus(offer.id, "declined", user.id);
+          const sysMsg = `❌ Offer of $${offer.price} was declined.`;
+          if (chatContext?.convId) await dbSendMessage(chatContext.convId, user.id, sysMsg);
+          setChatContext(ctx => ctx ? { ...ctx, selectedOffer: { ...ctx.selectedOffer, status: "declined" } } : ctx);
+          if (user) dbGetPendingOffers(user.id).then(setPendingOffers);
+          showToast("Offer declined.");
+        } catch (e) { showToast("Couldn't decline offer — please try again."); }
+      }}
+      onWithdrawOffer={async (offer) => {
+        if (!offer || offer.status !== "pending") return;
+        try {
+          await dbUpdateOfferStatus(offer.id, "withdrawn", user.id);
+          const sysMsg = `↩ Offer of $${offer.price} was withdrawn by buyer.`;
+          if (chatContext?.convId) await dbSendMessage(chatContext.convId, user.id, sysMsg);
+          setChatContext(ctx => ctx ? { ...ctx, selectedOffer: { ...ctx.selectedOffer, status: "withdrawn" } } : ctx);
+          showToast("Offer withdrawn.");
+        } catch (e) { showToast("Couldn't withdraw offer — please try again."); }
       }}
       onSend={async (msg) => {
         // 1. Show immediately in local store
@@ -4464,7 +4644,7 @@ function LoopGenAppInner() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4494,15 +4674,21 @@ function LoopGenAppInner() {
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {userListings.map(item => {
               const img = item.image_urls?.[0] || "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80";
-              const isSold = item.status === "sold";
+              const isSold     = item.status === "sold";
+              const isReserved = item.status === "reserved";
               return (
-                <div key={item.id} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.08)",display:"flex",opacity:isSold?0.75:1}}>
+                <div key={item.id} style={{background:"white",borderRadius:22,overflow:"hidden",boxShadow:"0 3px 14px rgba(0,0,0,0.08)",display:"flex",opacity:(isSold||isReserved)?0.85:1}}>
                   <div style={{position:"relative",flexShrink:0,width:100,height:100}}>
                     <img src={img} alt={item.title} style={{width:"100%",height:"100%",objectFit:"cover"}}
                       onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&q=80"}}/>
                     {isSold && (
                       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{color:"white",fontWeight:800,fontSize:11,background:"#ef4444",padding:"3px 8px",borderRadius:8}}>SOLD</span>
+                      </div>
+                    )}
+                    {isReserved && !isSold && (
+                      <div style={{position:"absolute",inset:0,background:"rgba(245,158,11,0.35)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{color:"white",fontWeight:800,fontSize:11,background:"#f59e0b",padding:"3px 8px",borderRadius:8}}>RESERVED</span>
                       </div>
                     )}
                   </div>
@@ -4514,6 +4700,7 @@ function LoopGenAppInner() {
                         <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{item.condition} · {timeSince(item.created_at)}</div>
                       </div>
                       {isSold && <span style={{fontSize:10,fontWeight:700,color:"#ef4444",background:"#fef2f2",padding:"3px 8px",borderRadius:8,flexShrink:0}}>SOLD</span>}
+                      {isReserved && !isSold && <span style={{fontSize:10,fontWeight:700,color:"#92400e",background:"#fef3c7",padding:"3px 8px",borderRadius:8,flexShrink:0}}>RESERVED</span>}
                     </div>
                     {!isSold && (
                       <div style={{display:"flex",gap:7,marginTop:10}}>
@@ -4561,7 +4748,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4608,7 +4795,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4779,7 +4966,7 @@ function LoopGenAppInner() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
