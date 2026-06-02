@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.4"; // defensive inbox scope filter — only participant conversations shown
+const APP_VERSION = "2.3.5"; // BUG-P1-01: clear convos/pendingOffers on SIGNED_OUT; BUG-P2-02: chat safe-area-bottom
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -2006,6 +2006,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, select
         background: "white",
         borderTop: "1px solid #f0f1f3",
         padding: "10px 12px",
+        paddingBottom: "max(env(safe-area-inset-bottom, 0px), 10px)",
         display: "flex", gap: 10, alignItems: "center",
         flexShrink: 0,
         position: "relative",
@@ -2218,7 +2219,10 @@ function LoopGenAppInner() {
         setProfile(null);
         setScreen(s => (s !== "auth" && s !== "splash") ? "splash" : s);
         setSessionReady(true);
-        // Clear all chat state — prevents leaking between accounts
+        // Clear all state immediately — prevents any flash of previous user's data
+        // during fast account switching before the [user] effect fires
+        setConvos([]);
+        setPendingOffers([]);
         localChatStore.current = {};
         setChatContext(null);
         setConvo(null);
