@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.3"; // fix dbGetConversations broken nested select — conversations now load correctly
+const APP_VERSION = "2.3.4"; // defensive inbox scope filter — only participant conversations shown
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -711,12 +711,11 @@ async function dbToggleSave(listingId, userId, isSaved) {
 }
 
 async function dbGetConversations(userId) {
+  // Never return demo conversations for a real logged-in user
   if (!supabase) return DEMO_CONVOS;
+  if (!userId) return [];
 
-  // Step 1: fetch conversations — plain select, no nested joins of any kind.
-  // Nested embedded resource ordering (.order/.limit with referencedTable) is
-  // not supported in Supabase JS v2 for one-to-many embeds and caused the query
-  // to return an error, resulting in convos = [] ("0 conversations").
+  // Step 1: fetch conversations scoped to this user only
   const { data, error } = await supabase
     .from("conversations")
     .select("*")
@@ -726,13 +725,17 @@ async function dbGetConversations(userId) {
   if (error) { console.error("[LoopGen] getConversations error:", error.message); return []; }
   if (!data || data.length === 0) return [];
 
-  const convIds    = data.map(c => c.id);
-  const partIds    = [...new Set(data.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))];
-  const listingIds = [...new Set(data.map(c => c.listing_id).filter(Boolean))];
+  // Defensive client-side scope filter — belt-and-suspenders after the DB query.
+  // Ensures no conversation leaks through regardless of RLS or query edge cases.
+  const scoped = data.filter(c => c.buyer_id === userId || c.seller_id === userId);
+  if (scoped.length === 0) return [];
+
+  const convIds    = scoped.map(c => c.id);
+  const partIds    = [...new Set(scoped.flatMap(c => [c.buyer_id, c.seller_id]).filter(Boolean))];
+  const listingIds = [...new Set(scoped.map(c => c.listing_id).filter(Boolean))];
   let profileMap = {}, listingMap = {}, lastMsgMap = {};
 
   // Step 2: fetch profiles, listing titles, and latest message per conversation
-  // — all in parallel, all plain queries with no FK-dependent joins
   await Promise.all([
     partIds.length > 0 ? supabase
       .from("profiles").select("id, username, avatar_url")
@@ -746,8 +749,6 @@ async function dbGetConversations(userId) {
       .then(({ data: ls }) => { (ls||[]).forEach(l => { listingMap[l.id] = l; }); })
       : Promise.resolve(),
 
-    // Fetch ALL messages for these conversations ordered desc, then keep only
-    // the first-seen per conversation_id (= the latest message for each conv)
     convIds.length > 0 ? supabase
       .from("messages")
       .select("id, conversation_id, sender_id, body, created_at")
@@ -761,8 +762,8 @@ async function dbGetConversations(userId) {
       : Promise.resolve(),
   ]);
 
-  // Step 3: assemble enriched conversation objects
-  return data.map(c => {
+  // Step 3: assemble enriched conversation objects from scoped rows only
+  return scoped.map(c => {
     const isBuyer   = c.buyer_id === userId;
     const otherId   = isBuyer ? c.seller_id : c.buyer_id;
     const otherProf = profileMap[otherId];
