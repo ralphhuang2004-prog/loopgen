@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.4.0"; // marketplace lifecycle: reserved/backup offers, archive chat, decline/withdraw
+const APP_VERSION = "2.4.1"; // dropdown menu, view profile, block user, read receipts, email notifications
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -1080,6 +1080,30 @@ async function dbSaveReport({ listing_id, reporter_id, reason }) {
   return data;
 }
 
+// Upsert read receipt for current user in a conversation
+// Fails gracefully if conversation_reads table doesn't exist yet
+async function dbMarkConvRead(convId, userId) {
+  if (!supabase || !convId || !userId) return;
+  try {
+    await supabase.from("conversation_reads")
+      .upsert({ conversation_id: convId, user_id: userId, last_read_at: new Date().toISOString() },
+               { onConflict: "conversation_id,user_id" });
+  } catch { /* table may not exist yet — fail silently */ }
+}
+
+// Fetch read timestamps for all participants in a conversation
+// Returns: { [userId]: "ISO timestamp" }
+async function dbGetConvReads(convId) {
+  if (!supabase || !convId) return {};
+  try {
+    const { data } = await supabase.from("conversation_reads")
+      .select("user_id, last_read_at").eq("conversation_id", convId);
+    const map = {};
+    (data||[]).forEach(r => { map[r.user_id] = r.last_read_at; });
+    return map;
+  } catch { return {}; }
+}
+
 function timeSince(dateStr) {
   if (!dateStr) return "";
   const secs = Math.floor((Date.now() - new Date(dateStr)) / 1000);
@@ -1772,9 +1796,11 @@ function HomeTicker() {
 //  CHAT SCREEN — controlled: messages live in parent store
 //  props: sellerName, listingTitle, messages[], onSend(msg), onBack
 // ═══════════════════════════════════════════════════════
-function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, selectedOffer, isSeller, onAcceptOffer, onDeclineOffer, onWithdrawOffer }) {
+function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack,
+  selectedOffer, isSeller, onAcceptOffer, onDeclineOffer, onWithdrawOffer,
+  convReads = {}, otherId }) {
   const [text, setText] = useState("");
-  const [isSending, setIsSending] = useState(false); // FIX 11: concurrent send protection
+  const [isSending, setIsSending] = useState(false);
   const MAX_MSG_LENGTH = 2000; // FIX 12: message length limit
   // viewH tracks the visual viewport height so the chat shrinks correctly
   // when the mobile keyboard opens — works on iOS Safari, Chrome Android, all browsers
@@ -2044,8 +2070,20 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack, select
                   <div style={{
                     fontSize: 10, marginTop: 4, opacity: 0.65,
                     textAlign: m.from_me ? "right" : "left",
+                    display:"flex", justifyContent: m.from_me ? "flex-end" : "flex-start",
+                    alignItems:"center", gap:3,
                   }}>
-                    {m.time}
+                    <span>{m.time}</span>
+                    {m.from_me && m.created_at && (
+                      // Blue tick if other user's last_read_at >= this message's created_at
+                      // Grey tick if sent but not yet read. Fails gracefully if convReads unavailable.
+                      <span style={{
+                        fontSize:11,
+                        color: (otherId && convReads[otherId] && convReads[otherId] >= m.created_at)
+                          ? "#93c5fd" : "rgba(255,255,255,0.55)",
+                        letterSpacing:"-2px",
+                      }}>✓✓</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -2525,6 +2563,8 @@ function LoopGenAppInner() {
   const [readAcceptedOffers, setReadAcceptedOffers] = useState({});
   // Archive state — hides conversations from inbox for current user only (no DB change)
   const [archivedConvos, setArchivedConvos] = useState({});
+  // Read receipts: { [userId]: "ISO timestamp" } for the current open conversation
+  const [convReads, setConvReads] = useState({});
 
   function loadReadAcceptedOffers(userId) {
     if (!userId) return {};
@@ -3023,6 +3063,9 @@ function LoopGenAppInner() {
         markConvoRead(c);
         // Also mark any related accepted offer notifications as read
         markAcceptedOffersForConvRead(c);
+        // Upsert DB read receipt for blue-tick support (fails silently if table missing)
+        dbMarkConvRead(c.id, user.id);
+        dbGetConvReads(c.id).then(setConvReads);
       } catch (e) { console.error("openConvo fetch error:", e); }
     }
   };
@@ -3056,6 +3099,9 @@ function LoopGenAppInner() {
       markConvoRead(conv);
       // Also mark any accepted offer notifications for this listing as read
       markAcceptedOffersForConvRead(conv);
+      // Upsert DB read receipt (fails silently if table missing)
+      dbMarkConvRead(conv.id, user.id);
+      dbGetConvReads(conv.id).then(setConvReads);
       push("chat");
     } catch (e) {
       console.error("openBuyerChat:", e);
@@ -3128,6 +3174,9 @@ function LoopGenAppInner() {
           markConvoRead(conv);
           // Also mark any accepted offer notifications for this listing as read
           markAcceptedOffersForConvRead(conv);
+          // Upsert DB read receipt (fails silently if table missing)
+          dbMarkConvRead(conv.id, user.id);
+          dbGetConvReads(conv.id).then(setConvReads);
           setChatContext({
             id: key,
             convId: conv.id,
@@ -4504,6 +4553,11 @@ function LoopGenAppInner() {
       messages={localChatStore.current[chatContext?.id] || []}
       selectedOffer={chatContext?.selectedOffer || null}
       isSeller={!!(chatContext?.selectedOffer && chatContext.selectedOffer.seller_id === user?.id)}
+      convReads={convReads}
+      otherId={(() => {
+        const conv = convos.find(c => c.id === chatContext?.convId);
+        return conv ? (conv.buyer_id === user?.id ? conv.seller_id : conv.buyer_id) : null;
+      })()}
       onAcceptOffer={async (offer) => {
         if (!offer || offer.status !== "pending") return;
         try {
