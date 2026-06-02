@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.3.6"; // local read-state: badge clears when conversation is opened
+const APP_VERSION = "2.3.7"; // fix unread state: reliable Date.ms comparison, immediate React state update
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -2426,16 +2426,19 @@ function LoopGenAppInner() {
     } catch { return {}; }
   }
 
-  function markConvoRead(convId, latestMsgTime) {
+  function markConvoRead(convId) {
     if (!user?.id || !convId) return;
-    const key = `loopgen_read_${user.id}`;
+    // Store the current wall-clock time as the "read at" timestamp.
+    // Using Date.now() (numeric ms) avoids ISO string format mismatches
+    // between JS and Postgres timestamp formats which caused comparisons to fail.
+    const now = Date.now();
+    const storageKey = `loopgen_read_${user.id}`;
     const current = loadReadMap(user.id);
-    // Only update if this timestamp is newer than what we already have
-    if (!current[convId] || latestMsgTime > current[convId]) {
-      const updated = { ...current, [convId]: latestMsgTime };
-      try { localStorage.setItem(key, JSON.stringify(updated)); } catch { /* quota */ }
-      setReadMap(updated);
-    }
+    const updated = { ...current, [convId]: now };
+    try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch { /* quota */ }
+    // Update React state immediately — this is what makes the dot/badge
+    // disappear instantly without waiting for a re-render trigger elsewhere.
+    setReadMap(updated);
   }
 
   async function loadProfileData() {
@@ -2875,9 +2878,8 @@ function LoopGenAppInner() {
         const store = localChatStore.current;
         store[key] = msgs;
         setChatContext(ctx => ctx ? { ...ctx, convId: c.id } : ctx);
-        // Mark conversation as read — removes badge/dot for this conversation
-        const latest = fetched[fetched.length - 1]?.created_at;
-        if (latest) markConvoRead(c.id, latest);
+        // Mark conversation as read — removes badge/dot immediately
+        markConvoRead(c.id);
       } catch (e) { console.error("openConvo fetch error:", e); }
     }
   };
@@ -2907,9 +2909,8 @@ function LoopGenAppInner() {
       localChatStore.current[key] = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
       setConvo(conv);
       setChatContext({ id: key, convId: conv.id, sellerName: enriched.other_user, listingTitle: enriched.listing_title, selectedOffer: offer });
-      // Mark conversation as read — removes badge/dot for this conversation
-      const latest = msgs[msgs.length - 1]?.created_at;
-      if (latest) markConvoRead(conv.id, latest);
+      // Mark conversation as read — removes badge/dot immediately
+      markConvoRead(conv.id);
       push("chat");
     } catch (e) {
       console.error("openBuyerChat:", e);
@@ -2978,9 +2979,8 @@ function LoopGenAppInner() {
           const key = chatKey(enriched);
           const dbMsgs = msgs.map(m => ({ ...m, from_me: m.sender_id === user.id }));
           localChatStore.current[key] = dbMsgs;
-          // Mark conversation as read — removes badge/dot for this conversation
-          const latest = msgs[msgs.length - 1]?.created_at;
-          if (latest) markConvoRead(conv.id, latest);
+          // Mark conversation as read — removes badge/dot immediately
+          markConvoRead(conv.id);
           setChatContext({
             id: key,
             convId: conv.id,
@@ -3465,7 +3465,7 @@ function LoopGenAppInner() {
         </div>
 
       </div>
-      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -3533,7 +3533,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>
-      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="explore" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4152,7 +4152,7 @@ function LoopGenAppInner() {
         )}
       </div>
       </div>{/* lg-sell-root */}
-      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="sell" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4288,14 +4288,18 @@ function LoopGenAppInner() {
             </div>
           ) : convos.map(c => {
             // A conversation has an incoming unread message only when:
-            // 1. The last message was sent by someone else
-            // 2. That message's timestamp is newer than when the user last opened this chat
-            const lastTime = c.last_time ? c.updated_at : null;
-            const readAt   = readMap[c.id];
-            const isUnread = c.last_message && c.last_sender_id &&
+            // 1. The last message was sent by someone else (direction check)
+            // 2. The conversation was updated AFTER the user last opened it
+            // readMap[c.id] is Date.now() (ms) stored when the chat was opened.
+            // new Date(c.updated_at).getTime() converts DB timestamp to ms for reliable comparison.
+            const readAt   = readMap[c.id]; // numeric ms, or undefined
+            const updatedMs = c.updated_at ? new Date(c.updated_at).getTime() : 0;
+            const hasIncoming = !!(
+              c.last_message &&
+              c.last_sender_id &&
               c.last_sender_id !== user?.id &&
-              (!readAt || (c.updated_at && c.updated_at > readAt));
-            const hasIncoming = isUnread;
+              (!readAt || updatedMs > readAt)
+            );
             return (
             <div key={c.id} onClick={() => openConvo(c)}
               style={{background:"white",borderRadius:18,padding:"14px 15px",display:"flex",gap:12,alignItems:"center",
@@ -4324,7 +4328,7 @@ function LoopGenAppInner() {
         </div>
       )}
       </div>
-      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="chats" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4455,7 +4459,7 @@ function LoopGenAppInner() {
           </div>
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4552,7 +4556,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
@@ -4599,7 +4603,7 @@ function LoopGenAppInner() {
           </div>
         )}
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <Toast msg={toast}/>
     </Phone>
   );
@@ -4770,7 +4774,7 @@ function LoopGenAppInner() {
           LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)
         </div>
       </div>
-      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && c.updated_at > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
+      <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => c.last_message && c.last_sender_id && c.last_sender_id !== user?.id && (!readMap[c.id] || (c.updated_at && new Date(c.updated_at).getTime() > readMap[c.id]))).length} offerCount={pendingOffers.length + acceptedOffers.length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
     </Phone>
