@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.4.1"; // dropdown menu, view profile, block user, read receipts, email notifications
+const APP_VERSION = "2.4.2"; // read receipt tick fix: always visible, Date.parse comparison, created_at on optimistic msgs
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -793,7 +793,14 @@ async function dbGetMessages(conversationId) {
     .order("created_at", { ascending: true });
   if (error) { console.error("getMessages:", error); return []; }
   // DB stores message text in 'body' column — map to 'content' for frontend consistency
-  return (data || []).map(m => ({ ...m, content: m.body ?? m.content ?? "" }));
+  // Also add 'time' field so ticks always render (DB messages only have created_at, not time)
+  return (data || []).map(m => ({
+    ...m,
+    content: m.body ?? m.content ?? "",
+    time: m.time || (m.created_at
+      ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : ""),
+  }));
 }
 
 async function dbSendMessage(conversationId, senderId, content) {
@@ -1844,6 +1851,7 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack,
       id: `msg_${Date.now()}`,
       from_me: true,
       content: trimmed,
+      created_at: new Date().toISOString(),
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     });
     setText("");
@@ -2066,26 +2074,32 @@ function ChatScreen({ sellerName, listingTitle, messages, onSend, onBack,
                 wordBreak: "break-word",
               }}>
                 {m.content}
-                {m.time && (
-                  <div style={{
-                    fontSize: 10, marginTop: 4, opacity: 0.65,
-                    textAlign: m.from_me ? "right" : "left",
-                    display:"flex", justifyContent: m.from_me ? "flex-end" : "flex-start",
-                    alignItems:"center", gap:3,
-                  }}>
-                    <span>{m.time}</span>
-                    {m.from_me && m.created_at && (
-                      // Blue tick if other user's last_read_at >= this message's created_at
-                      // Grey tick if sent but not yet read. Fails gracefully if convReads unavailable.
-                      <span style={{
-                        fontSize:11,
-                        color: (otherId && convReads[otherId] && convReads[otherId] >= m.created_at)
-                          ? "#93c5fd" : "rgba(255,255,255,0.55)",
-                        letterSpacing:"-2px",
-                      }}>✓✓</span>
-                    )}
-                  </div>
-                )}
+                {/* Timestamp + tick row — always rendered for outgoing messages */}
+                <div style={{
+                  fontSize: 10, marginTop: 4,
+                  display: "flex",
+                  justifyContent: m.from_me ? "flex-end" : "flex-start",
+                  alignItems: "center",
+                  gap: 3,
+                  opacity: 0.75,
+                }}>
+                  {m.time && <span>{m.time}</span>}
+                  {m.from_me && (
+                    // Grey ✓✓ = sent/saved
+                    // Blue ✓✓ = recipient's last_read_at is >= this message's created_at
+                    // Falls back gracefully: no convReads or no created_at → always grey
+                    <span style={{
+                      fontSize: 11,
+                      letterSpacing: "-2px",
+                      color: (
+                        otherId &&
+                        convReads[otherId] &&
+                        m.created_at &&
+                        Date.parse(convReads[otherId]) >= Date.parse(m.created_at)
+                      ) ? "#93c5fd" : "rgba(255,255,255,0.7)",
+                    }}>✓✓</span>
+                  )}
+                </div>
               </div>
             </div>
           ))
@@ -2411,8 +2425,14 @@ function LoopGenAppInner() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convo.id}` },
         payload => {
           const raw = payload.new;
-          // Map DB 'body' column to 'content' for frontend consistency
-          const msg = { ...raw, content: raw.body ?? raw.content ?? "" };
+          // Map DB 'body' → 'content', add 'time' for tick/timestamp display
+          const msg = {
+            ...raw,
+            content: raw.body ?? raw.content ?? "",
+            time: raw.created_at
+              ? new Date(raw.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : "",
+          };
           const key = chatContext?.id;
           if (!key) return; // no active chat context — ignore
           // DEDUP FIX: If this message was sent by the current user, skip the realtime add.
@@ -3141,6 +3161,7 @@ function LoopGenAppInner() {
             id: `msg_${Date.now()}`,
             from_me: true,
             content: initialMessage,
+            created_at: new Date().toISOString(),
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           };
           const key = chatKey(enriched);
