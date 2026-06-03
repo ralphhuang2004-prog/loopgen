@@ -29,7 +29,7 @@ const supabase = HAS_SUPABASE ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ── CONSTANTS ────────────────────────────────────────────────────
 const GREEN = "#1c7c45";
-const APP_VERSION = "2.4.2"; // read receipt tick fix: always visible, Date.parse comparison, created_at on optimistic msgs
+const APP_VERSION = "2.4.3"; // P1: reserved in My Listings; P2: withdraw refreshes pendingOffers
 
 // ── FIX 16: React Error Boundary — catches render crashes ────────
 class AppErrorBoundary extends Component {
@@ -889,7 +889,7 @@ async function dbGetUserListings(userId) {
   if (!supabase) return [];
   const { data } = await supabase.from("listings").select("*")
     .eq("seller_id", userId)
-    .in("status", ["active","sold"])
+    .in("status", ["active", "reserved", "sold"])  // reserved added — P1 fix
     .order("created_at", { ascending: false });
   return data || [];
 }
@@ -4621,6 +4621,8 @@ function LoopGenAppInner() {
           const sysMsg = `↩ Offer of $${offer.price} was withdrawn by buyer.`;
           if (chatContext?.convId) await dbSendMessage(chatContext.convId, user.id, sysMsg);
           setChatContext(ctx => ctx ? { ...ctx, selectedOffer: { ...ctx.selectedOffer, status: "withdrawn" } } : ctx);
+          // Refresh seller's pending offers so count drops immediately — P2 fix
+          if (user) dbGetPendingOffers(user.id).then(setPendingOffers);
           showToast("Offer withdrawn.");
         } catch (e) { showToast("Couldn't withdraw offer — please try again."); }
       }}
