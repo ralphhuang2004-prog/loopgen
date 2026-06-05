@@ -411,12 +411,6 @@ function HeroBento({ entered, onTap }) {
       <div style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:10, marginBottom:10 }}>
         <div style={tile(0, "lp-float", { height:172 })}>
           <LazyImg src={HERO_TILES[0].img} alt={HERO_TILES[0].tag} style={{ height:"100%" }} />
-          <div style={{ position:"absolute", top:10, right:10,
-            background:"white", borderRadius:50, padding:"4px 10px",
-            fontSize:9, fontWeight:800, color:T.g,
-            boxShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>
-            ✓ Member
-          </div>
           <div style={{ position:"absolute", bottom:10, left:10 }}>
             <CatPill label={HERO_TILES[0].tag} />
           </div>
