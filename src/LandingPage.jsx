@@ -45,7 +45,7 @@ const HERO_TILES = [
   { img:"https://images.unsplash.com/photo-1581591524425-c7e0978865fc?w=500&q=80", tag:"Cameras"  },
   { img:"https://images.unsplash.com/photo-1603048588665-791ca8aea617?w=500&q=80", tag:"Vinyl"    },
   { img:"https://images.unsplash.com/photo-1531525645387-7f14be1bdbbd?w=500&q=80", tag:"Gaming"   },
-  { img:"https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=500&q=80",    tag:"Kitchen"  },
+  { img:"https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&q=80",   tag:"Sneakers" },
 ];
 
 const STEPS = [
