@@ -27,7 +27,7 @@ const BENTO_TILES = [
   {
     // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
     // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
-    img:     "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    img:     "https://images.unsplash.com/photo-1523205771623-e0faa4d2813d?w=900&q=85",
     overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
@@ -45,7 +45,7 @@ const BENTO_TILES = [
   {
     // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
     // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
-    img:     "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=900&q=85",
+    img:     "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=900&q=85",
     overlay: "rgba(0,0,0,0.22)",
     word:    "LOCAL",
     sub:     "Made closer to home",
@@ -71,7 +71,7 @@ const DISCOVERY_CARDS = [
     headline: "Find stories\nworth owning.",
     sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
     // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
-    img:      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    img:      "https://images.unsplash.com/photo-1523205771623-e0faa4d2813d?w=900&q=85",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
@@ -80,7 +80,7 @@ const DISCOVERY_CARDS = [
     headline: "Upgrade without\npaying retail.",
     sub:      "Consoles \u00b7 Audio \u00b7 Gadgets",
     // Nintendo Switch OLED + Sony headphones on minimal desk — bright background
-    img:      "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=900&q=85",
+    img:      "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=900&q=85",
     overlay:  "rgba(0,0,0,0.14)",
     accent:   "#a78bfa",
   },
