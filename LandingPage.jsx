@@ -27,7 +27,7 @@ const BENTO_TILES = [
   {
     // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
     // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
-    img:     "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    img:     "https://source.unsplash.com/900x600/?vintage-polaroid-camera,vinyl,film,analog",
     overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
@@ -36,19 +36,19 @@ const BENTO_TILES = [
   {
     // Rolex Submariner on stone/concrete surface — bright natural light, collector vibe
     // Matches reference exactly: watch face clearly legible, stone background, premium feel
-    img:     "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=900&q=85",
-    overlay: "rgba(0,0,0,0.20)",
+    img:     "https://source.unsplash.com/900x600/?rare-vintage-watch,luxury-watch,collector",
+    overlay: "rgba(0,0,0,0.18)",
     word:    "RARE",
-    sub:     "One of a kind",
+    sub:     "Collector-grade find",
     anim:    "lp-float2",
   },
   {
     // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
     // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
-    img:     "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=900&q=85",
-    overlay: "rgba(0,0,0,0.22)",
+    img:     "https://source.unsplash.com/900x600/?australian-aboriginal-art,indigenous-art,ceramics,plant",
+    overlay: "rgba(0,0,0,0.18)",
     word:    "LOCAL",
-    sub:     "Made closer to home",
+    sub:     "Australian-made finds",
     anim:    "lp-float",
   },
   {
@@ -71,7 +71,7 @@ const DISCOVERY_CARDS = [
     headline: "Find stories\nworth owning.",
     sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
     // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
-    img:      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    img:      "https://source.unsplash.com/900x600/?vintage-polaroid-camera,old-camera,vinyl-records",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
@@ -666,9 +666,16 @@ function DiscoveryCard({ card, index, onBrowse }) {
             {card.headline}
           </div>
           <div style={{
-            fontSize:10, fontWeight:500,
-            color:"rgba(255,255,255,0.75)",
+            display:"inline-block",
+            fontSize:10, fontWeight:700,
+            color:"rgba(255,255,255,0.92)",
             letterSpacing:"0.03em",
+            background:"rgba(0,0,0,0.38)",
+            backdropFilter:"blur(6px)",
+            border:"1px solid rgba(255,255,255,0.18)",
+            borderRadius:999,
+            padding:"4px 8px",
+            textShadow:"0 1px 4px rgba(0,0,0,0.45)",
           }}>
             {card.sub}
           </div>
