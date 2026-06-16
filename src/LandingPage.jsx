@@ -27,7 +27,7 @@ const BENTO_TILES = [
   {
     // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
     // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
-    img:     "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=1200&q=85",
+    img:     "/images/landing/hero-vintage.jpg",
     overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
