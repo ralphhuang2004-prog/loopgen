@@ -27,7 +27,7 @@ const BENTO_TILES = [
   {
     // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
     // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
-    img:     "https://images.unsplash.com/photo-1505685296765-3a2736de412f?w=900&q=85",
+    img:     "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
     overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
@@ -45,7 +45,7 @@ const BENTO_TILES = [
   {
     // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
     // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
-    img:     "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=900&q=85",
+    img:     "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=900&q=85",
     overlay: "rgba(0,0,0,0.22)",
     word:    "LOCAL",
     sub:     "Made closer to home",
@@ -54,7 +54,7 @@ const BENTO_TILES = [
   {
     // Camera + watch + vinyl + sunglasses flatlay on dark wood — Kinfolk editorial
     // Matches reference: multiple curated objects on dark surface, magazine quality
-    img:     "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=900&q=85",
+    img:     "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=900&q=85",
     overlay: "rgba(0,0,0,0.22)",
     word:    "CURATED",
     sub:     "Chosen with intention",
@@ -71,7 +71,7 @@ const DISCOVERY_CARDS = [
     headline: "Find stories\nworth owning.",
     sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
     // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
-    img:      "https://images.unsplash.com/photo-1505685296765-3a2736de412f?w=900&q=85",
+    img:      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
@@ -80,7 +80,7 @@ const DISCOVERY_CARDS = [
     headline: "Upgrade without\npaying retail.",
     sub:      "Consoles \u00b7 Audio \u00b7 Gadgets",
     // Nintendo Switch OLED + Sony headphones on minimal desk — bright background
-    img:      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900&q=85",
+    img:      "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=900&q=85",
     overlay:  "rgba(0,0,0,0.14)",
     accent:   "#a78bfa",
   },
@@ -89,7 +89,7 @@ const DISCOVERY_CARDS = [
     headline: "Pieces that make\nspaces yours.",
     sub:      "Furniture \u00b7 Art \u00b7 Lighting",
     // Green dome lamp + Bauhaus poster + plant in modern apartment — matches reference exactly
-    img:      "https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=900&q=85",
+    img:      "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=900&q=85",
     overlay:  "rgba(0,0,0,0.10)",
     accent:   "#fbbf24",
   },
@@ -98,7 +98,7 @@ const DISCOVERY_CARDS = [
     headline: "Stand out.\nDon\u2019t blend in.",
     sub:      "Sneakers \u00b7 Streetwear \u00b7 Bags",
     // New Balance sneakers + tote bag + Stussy tee + denim flatlay — young streetwear
-    img:      "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=900&q=85",
+    img:      "https://images.unsplash.com/photo-1523398002811-999ca8dec234?w=900&q=85",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#f472b6",
   },
