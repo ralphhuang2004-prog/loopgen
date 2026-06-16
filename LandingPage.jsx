@@ -27,8 +27,8 @@ const BENTO_TILES = [
   {
     // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
     // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
-    img:     "https://source.unsplash.com/900x620/?polaroid-camera,instant-film,retro-photography&sig=loopgen-hero-vintage",
-    overlay: "rgba(0,0,0,0.18)",
+    img:     "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
     anim:    "lp-float",
@@ -36,26 +36,26 @@ const BENTO_TILES = [
   {
     // Rolex Submariner on stone/concrete surface — bright natural light, collector vibe
     // Matches reference exactly: watch face clearly legible, stone background, premium feel
-    img:     "https://source.unsplash.com/900x620/?vintage-mechanical-watch,luxury-watch,collector-watch&sig=loopgen-hero-rare",
-    overlay: "rgba(0,0,0,0.18)",
+    img:     "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=900&q=85",
+    overlay: "rgba(0,0,0,0.20)",
     word:    "RARE",
-    sub:     "Collector-grade finds",
+    sub:     "One of a kind",
     anim:    "lp-float2",
   },
   {
     // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
     // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
-    img:     "https://source.unsplash.com/900x620/?australian-aboriginal-art,indigenous-art,ceramics&sig=loopgen-hero-local",
-    overlay: "rgba(0,0,0,0.18)",
+    img:     "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "LOCAL",
-    sub:     "Australian-made treasures",
+    sub:     "Made closer to home",
     anim:    "lp-float",
   },
   {
     // Camera + watch + vinyl + sunglasses flatlay on dark wood — Kinfolk editorial
     // Matches reference: multiple curated objects on dark surface, magazine quality
-    img:     "https://source.unsplash.com/900x620/?editorial-flatlay,watch,sunglasses,coffee,vinyl&sig=loopgen-hero-curated",
-    overlay: "rgba(0,0,0,0.18)",
+    img:     "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "CURATED",
     sub:     "Chosen with intention",
     anim:    "lp-float2",
@@ -71,7 +71,7 @@ const DISCOVERY_CARDS = [
     headline: "Find stories\nworth owning.",
     sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
     // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
-    img:      "https://source.unsplash.com/900x620/?vinyl-records,record-player,album-collection&sig=loopgen-discover-vintage",
+    img:      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
@@ -80,8 +80,8 @@ const DISCOVERY_CARDS = [
     headline: "Upgrade without\npaying retail.",
     sub:      "Consoles \u00b7 Audio \u00b7 Gadgets",
     // Nintendo Switch OLED + Sony headphones on minimal desk — bright background
-    img:      "https://source.unsplash.com/900x620/?nintendo-switch,headphones,gaming-desk&sig=loopgen-discover-tech",
-    overlay:  "rgba(0,0,0,0.13)",
+    img:      "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.14)",
     accent:   "#a78bfa",
   },
   {
@@ -89,8 +89,8 @@ const DISCOVERY_CARDS = [
     headline: "Pieces that make\nspaces yours.",
     sub:      "Furniture \u00b7 Art \u00b7 Lighting",
     // Green dome lamp + Bauhaus poster + plant in modern apartment — matches reference exactly
-    img:      "https://source.unsplash.com/900x620/?bauhaus-poster,green-lamp,modern-apartment&sig=loopgen-discover-home",
-    overlay:  "rgba(0,0,0,0.11)",
+    img:      "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.10)",
     accent:   "#fbbf24",
   },
   {
@@ -98,7 +98,7 @@ const DISCOVERY_CARDS = [
     headline: "Stand out.\nDon\u2019t blend in.",
     sub:      "Sneakers \u00b7 Streetwear \u00b7 Bags",
     // New Balance sneakers + tote bag + Stussy tee + denim flatlay — young streetwear
-    img:      "https://source.unsplash.com/900x620/?new-balance-sneakers,streetwear,denim-flatlay&sig=loopgen-discover-fashion",
+    img:      "https://images.unsplash.com/photo-1523398002811-999ca8dec234?w=900&q=85",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#f472b6",
   },
@@ -629,7 +629,7 @@ function DiscoveryCard({ card, index, onBrowse }) {
         <div style={{
           position:"absolute", top:12, left:12,
           background:"rgba(0,0,0,0.65)",
-          backdropFilter:"blur(8px)",
+          backdropFilter:"blur(6px)",
           borderRadius:50, padding:"4px 10px",
           fontSize:9, fontWeight:800, color:"white",
           letterSpacing:"0.10em", textTransform:"uppercase",
@@ -666,16 +666,9 @@ function DiscoveryCard({ card, index, onBrowse }) {
             {card.headline}
           </div>
           <div style={{
-            display:"inline-block",
-            fontSize:10, fontWeight:700,
-            color:"rgba(255,255,255,0.92)",
+            fontSize:10, fontWeight:500,
+            color:"rgba(255,255,255,0.75)",
             letterSpacing:"0.03em",
-            background:"rgba(0,0,0,0.42)",
-            backdropFilter:"blur(8px)",
-            border:"1px solid rgba(255,255,255,0.18)",
-            borderRadius:999,
-            padding:"4px 8px",
-            textShadow:"0 1px 4px rgba(0,0,0,0.45)",
           }}>
             {card.sub}
           </div>
