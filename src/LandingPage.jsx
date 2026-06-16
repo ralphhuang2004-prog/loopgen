@@ -25,39 +25,39 @@ const T = {
 // Subtitles shown on all tiles including bottom row.
 const BENTO_TILES = [
   {
-    // Bright vintage collector desk: camera, vinyl and analogue memories.
-    // Less dark than previous version so the product is visible on mobile.
-    img:     "https://images.unsplash.com/photo-1607462109225-6b64ae2dd3cb?w=1200&q=88&auto=format&fit=crop",
-    overlay: "rgba(0,0,0,0.18)",
+    // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
+    // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
+    img:     "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
     anim:    "lp-float",
   },
   {
-    // Premium watch close-up for rarity and collector value.
-    // Replaces sneaker / fashion feel with rare-object appeal.
-    img:     "https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=1200&q=88&auto=format&fit=crop",
-    overlay: "rgba(0,0,0,0.16)",
+    // Rolex Submariner on stone/concrete surface — bright natural light, collector vibe
+    // Matches reference exactly: watch face clearly legible, stone background, premium feel
+    img:     "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=900&q=85",
+    overlay: "rgba(0,0,0,0.20)",
     word:    "RARE",
     sub:     "One of a kind",
     anim:    "lp-float2",
   },
   {
-    // Local maker / Australian art direction: artwork, ceramics, greenery, warm home styling.
-    // Replaces car/sofa imagery; feels young, local, creative and marketplace-relevant.
-    img:     "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=1200&q=88&auto=format&fit=crop",
-    overlay: "rgba(0,0,0,0.14)",
+    // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
+    // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
+    img:     "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "LOCAL",
-    sub:     "Art. Makers. Nearby.",
+    sub:     "Made closer to home",
     anim:    "lp-float",
   },
   {
-    // Curated collector flatlay: watch / camera / everyday premium objects.
-    // Avoids single luxury-ad image; feels like a styled editorial collection.
-    img:     "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=1200&q=88&auto=format&fit=crop",
-    overlay: "rgba(0,0,0,0.16)",
+    // Camera + watch + vinyl + sunglasses flatlay on dark wood — Kinfolk editorial
+    // Matches reference: multiple curated objects on dark surface, magazine quality
+    img:     "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "CURATED",
-    sub:     "Picked with taste",
+    sub:     "Chosen with intention",
     anim:    "lp-float2",
   },
 ];
@@ -70,36 +70,36 @@ const DISCOVERY_CARDS = [
     label:    "Vintage",
     headline: "Find stories\nworth owning.",
     sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
-    // Bright analogue setup: camera, vinyl, small collectible details.
-    img:      "https://images.unsplash.com/photo-1607462109225-6b64ae2dd3cb?w=900&q=88&auto=format&fit=crop",
-    overlay:  "rgba(0,0,0,0.10)",
+    // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
+    img:      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
   {
     label:    "Tech",
     headline: "Upgrade without\npaying retail.",
     sub:      "Consoles \u00b7 Audio \u00b7 Gadgets",
-    // Youthful gaming/audio setup, brighter and more marketplace-friendly.
-    img:      "https://images.unsplash.com/photo-1612287230202-1ff1d85d1bdf?w=900&q=88&auto=format&fit=crop",
-    overlay:  "rgba(0,0,0,0.12)",
+    // Nintendo Switch OLED + Sony headphones on minimal desk — bright background
+    img:      "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.14)",
     accent:   "#a78bfa",
   },
   {
     label:    "Home",
     headline: "Pieces that make\nspaces yours.",
     sub:      "Furniture \u00b7 Art \u00b7 Lighting",
-    // Interior styling with art/decor feeling; keeps the younger Pinterest mood.
-    img:      "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=900&q=88&auto=format&fit=crop",
-    overlay:  "rgba(0,0,0,0.08)",
+    // Green dome lamp + Bauhaus poster + plant in modern apartment — matches reference exactly
+    img:      "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.10)",
     accent:   "#fbbf24",
   },
   {
     label:    "Fashion",
     headline: "Stand out.\nDon\u2019t blend in.",
     sub:      "Sneakers \u00b7 Streetwear \u00b7 Bags",
-    // Streetwear flatlay direction rather than luxury-ad fashion.
-    img:      "https://images.unsplash.com/photo-1490114538077-0a7f8cb49891?w=900&q=88&auto=format&fit=crop",
-    overlay:  "rgba(0,0,0,0.10)",
+    // New Balance sneakers + tote bag + Stussy tee + denim flatlay — young streetwear
+    img:      "https://images.unsplash.com/photo-1523398002811-999ca8dec234?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.12)",
     accent:   "#f472b6",
   },
 ];
