@@ -26,33 +26,40 @@ const T = {
 // overlay: rgba scrim applied over photo for text readability (45-55% opacity).
 const BENTO_TILES = [
   {
-    // Vintage Polaroid camera on wooden surface — communicates "vintage" instantly
+    // Vintage Polaroid camera on warm wooden surface — kept image, overlay reduced
+    // from 0.52 → 0.34 so the camera body reads clearly against the wood grain
     img:     "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&q=80",
-    overlay: "rgba(10,16,28,0.52)",
+    overlay: "rgba(10,16,28,0.34)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
     anim:    "lp-float",
   },
   {
-    // Air Jordan 4 sneaker — iconic, rare, immediately recognisable
-    img:     "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
-    overlay: "rgba(20,8,32,0.50)",
+    // Luxury mechanical watch close-up on dark surface — communicates rare,
+    // collector, high-value find. Clearly distinct from the Fashion category.
+    // Dark background keeps the premium collector feel; dial detail reads at small size.
+    img:     "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=800&q=80",
+    overlay: "rgba(8,6,14,0.42)",
     word:    "RARE",
     sub:     "One of a kind",
     anim:    "lp-float2",
   },
   {
-    // Mid-century sofa in warm interior — local home goods marketplace feel
-    img:     "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80",
-    overlay: "rgba(8,20,8,0.52)",
+    // Handcrafted ceramics and pottery arranged on natural surface — artisan,
+    // local, handmade. Communicates local community marketplace rather than
+    // generic furniture retail. Warm earthy tones suit Australia's aesthetic.
+    img:     "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=800&q=80",
+    overlay: "rgba(14,10,6,0.42)",
     word:    "LOCAL",
     sub:     "Near you",
     anim:    "lp-float",
   },
   {
-    // Neatly arranged menswear flatlay — premium second-hand curation
-    img:     "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80",
-    overlay: "rgba(20,8,8,0.50)",
+    // Premium lifestyle flatlay — vintage camera, watch, leather goods arranged
+    // with editorial precision on a clean surface. Communicates curation,
+    // intention and taste — exactly the "hand-picked finds" message.
+    img:     "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=800&q=80",
+    overlay: "rgba(10,8,6,0.44)",
     word:    "CURATED",
     sub:     "Hand-picked finds",
     anim:    "lp-float2",
