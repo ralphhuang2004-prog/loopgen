@@ -20,91 +20,86 @@ const T = {
   sand:    "#ede9e3",
 };
 
-// ─── Hero bento tiles — real marketplace photography with dark overlay ────────
-// Each tile: { img, overlay, word, sub, anim }
-// Images: Unsplash, landscape-oriented, professional marketplace photography.
-// overlay: rgba scrim applied over photo for text readability (45-55% opacity).
+// ─── Hero bento tiles — reference-matched photography ────────────────────────
+// Overlay: 20-25% per reference image (bright, editorial, not dark luxury).
+// Subtitles shown on all tiles including bottom row.
 const BENTO_TILES = [
   {
-    // Vintage Polaroid camera on warm wooden surface — kept image, overlay reduced
-    // from 0.52 → 0.34 so the camera body reads clearly against the wood grain
-    img:     "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&q=80",
-    overlay: "rgba(10,16,28,0.34)",
+    // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
+    // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
+    img:     "https://images.unsplash.com/photo-1607462109225-6b64ae2dd3cb?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
     anim:    "lp-float",
   },
   {
-    // Luxury mechanical watch close-up on dark surface — communicates rare,
-    // collector, high-value find. Clearly distinct from the Fashion category.
-    // Dark background keeps the premium collector feel; dial detail reads at small size.
-    img:     "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=800&q=80",
-    overlay: "rgba(8,6,14,0.42)",
+    // Rolex Submariner on stone/concrete surface — bright natural light, collector vibe
+    // Matches reference exactly: watch face clearly legible, stone background, premium feel
+    img:     "https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=900&q=85",
+    overlay: "rgba(0,0,0,0.20)",
     word:    "RARE",
     sub:     "One of a kind",
     anim:    "lp-float2",
   },
   {
-    // Handcrafted ceramics and pottery arranged on natural surface — artisan,
-    // local, handmade. Communicates local community marketplace rather than
-    // generic furniture retail. Warm earthy tones suit Australia's aesthetic.
-    img:     "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=800&q=80",
-    overlay: "rgba(14,10,6,0.42)",
+    // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
+    // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
+    img:     "https://images.unsplash.com/photo-1555652736-e92021d28a10?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "LOCAL",
-    sub:     "Near you",
+    sub:     "Made closer to home",
     anim:    "lp-float",
   },
   {
-    // Premium lifestyle flatlay — vintage camera, watch, leather goods arranged
-    // with editorial precision on a clean surface. Communicates curation,
-    // intention and taste — exactly the "hand-picked finds" message.
-    img:     "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=800&q=80",
-    overlay: "rgba(10,8,6,0.44)",
+    // Camera + watch + vinyl + sunglasses flatlay on dark wood — Kinfolk editorial
+    // Matches reference: multiple curated objects on dark surface, magazine quality
+    img:     "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=900&q=85",
+    overlay: "rgba(0,0,0,0.22)",
     word:    "CURATED",
-    sub:     "Hand-picked finds",
+    sub:     "Chosen with intention",
     anim:    "lp-float2",
   },
 ];
 
-// ─── Discovery section cards — real marketplace photography ──────────────────
-// Each card: { label, headline, sub, img, overlay, accent }
-// Images: Unsplash, professional photography matching each category.
-// overlay: dark scrim for text contrast. accent: bottom-edge colour line.
+// ─── Discovery section cards — reference-matched photography ─────────────────
+// Overlay: 10-15% per reference (much brighter than bento, editorial Pinterest feel).
+// No accent line in reference — removed. Arrow button added to match reference.
 const DISCOVERY_CARDS = [
   {
     label:    "Vintage",
     headline: "Find stories\nworth owning.",
     sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
-    // Canon AE-1 film camera — quintessential vintage marketplace item
-    img:      "https://images.unsplash.com/photo-1481533315888-c6af40fe44de?w=800&q=80",
-    overlay:  "rgba(8,12,24,0.55)",
+    // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
+    img:      "https://images.unsplash.com/photo-1607462109225-6b64ae2dd3cb?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
   {
     label:    "Tech",
     headline: "Upgrade without\npaying retail.",
     sub:      "Consoles \u00b7 Audio \u00b7 Gadgets",
-    // Nintendo Switch gaming console — clean product shot
-    img:      "https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?w=800&q=80",
-    overlay:  "rgba(8,8,28,0.55)",
+    // Nintendo Switch OLED + Sony headphones on minimal desk — bright background
+    img:      "https://images.unsplash.com/photo-1612287230202-1ff1d85d1bdf?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.14)",
     accent:   "#a78bfa",
   },
   {
     label:    "Home",
     headline: "Pieces that make\nspaces yours.",
     sub:      "Furniture \u00b7 Art \u00b7 Lighting",
-    // Warm Scandi living room with furniture — aspirational home goods
-    img:      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
-    overlay:  "rgba(16,10,2,0.52)",
+    // Green dome lamp + Bauhaus poster + plant in modern apartment — matches reference exactly
+    img:      "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.10)",
     accent:   "#fbbf24",
   },
   {
     label:    "Fashion",
     headline: "Stand out.\nDon\u2019t blend in.",
     sub:      "Sneakers \u00b7 Streetwear \u00b7 Bags",
-    // Colourful sneakers laid flat — fashion marketplace energy
-    img:      "https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=800&q=80",
-    overlay:  "rgba(18,4,14,0.52)",
+    // New Balance sneakers + tote bag + Stussy tee + denim flatlay — young streetwear
+    img:      "https://images.unsplash.com/photo-1490114538077-0a7f8cb49891?w=900&q=85",
+    overlay:  "rgba(0,0,0,0.12)",
     accent:   "#f472b6",
   },
 ];
@@ -144,7 +139,7 @@ const CSS = `
   @media (min-width:768px) { .lp-ticker-inner { animation-duration:40s; } }
 
   @media (min-width:768px) {
-    .lp-bento-bottom { height:172px !important; }
+    .lp-bento-bottom { height:200px !important; }
     .lp-disco-grid   { grid-template-columns:repeat(4,1fr) !important; }
   }
 
@@ -192,15 +187,15 @@ const CSS = `
   .lp-btn-s:active { background:#f0ede8; }
 
   .lp-disco-card {
-    position:relative; border-radius:24px; overflow:hidden; cursor:pointer;
+    position:relative; border-radius:16px; overflow:hidden; cursor:pointer;
     transition:transform 0.22s ease, box-shadow 0.22s ease;
     -webkit-tap-highlight-color:transparent;
   }
-  .lp-disco-card:active { transform:scale(0.96); }
+  .lp-disco-card:active { transform:scale(0.97); }
   @media (hover:hover) {
-    .lp-disco-card:hover { transform:translateY(-6px) scale(1.02);
-      box-shadow:0 20px 48px rgba(0,0,0,0.32) !important; }
-    .lp-disco-card:hover img { transform:scale(1.06); }
+    .lp-disco-card:hover { transform:scale(1.03);
+      box-shadow:0 12px 32px rgba(0,0,0,0.18) !important; }
+    .lp-disco-card:hover img { transform:scale(1.04); }
   }
 
   /* Bento tile photo zoom on hover */
@@ -454,26 +449,27 @@ function HeroBento({ entered, onTap }) {
   return (
     <div onClick={onTap} style={{ margin:"24px 22px 0" }}>
 
-      {/* Top row — two tall tiles */}
-      <div style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:10, marginBottom:10 }}>
+      {/* Top row — two tall tiles. 1fr 1fr matches reference (equal widths). */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
         {[0,1].map(n => (
-          <BentoTile key={n} tile={BENTO_TILES[n]} style={tile(n, { height:172 })} large />
+          <BentoTile key={n} tile={BENTO_TILES[n]} style={tile(n, { height:200 })} />
         ))}
       </div>
 
-      {/* Bottom row — two short tiles */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+      {/* Bottom row — same height as top row per reference */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
         {[2,3].map(n => (
           <BentoTile key={n} tile={BENTO_TILES[n]}
-            style={tile(n, { height:108 })} className="lp-bento-bottom" small />
+            style={tile(n, { height:200 })} className="lp-bento-bottom" />
         ))}
       </div>
     </div>
   );
 }
 
-// Single editorial tile — real photo + dark overlay + word typography
-function BentoTile({ tile, style, className, large, small }) {
+// Single bento tile — real photo + light overlay + editorial typography + arrow button
+// All tiles identical treatment per reference image (no small/large distinction)
+function BentoTile({ tile, style, className }) {
   return (
     <div style={style} className={`${className || ""} lp-btile-wrap`}>
       {/* Marketplace photo — lazy loaded, covers tile, zooms on hover */}
@@ -485,58 +481,54 @@ function BentoTile({ tile, style, className, large, small }) {
         onError={e => { e.target.style.display = "none"; }}
       />
 
-      {/* Dark overlay for text readability */}
+      {/* Light overlay — 20-25% per reference (bright, not dark luxury) */}
       <div style={{ position:"absolute", inset:0, background:tile.overlay }} />
 
-      {/* Subtle dot texture over photo */}
-      <div style={{
-        position:"absolute", inset:0, pointerEvents:"none",
-        backgroundImage:"radial-gradient(circle,rgba(255,255,255,0.05) 1px,transparent 1px)",
-        backgroundSize:"18px 18px",
-      }} />
-
-      {/* Bottom scrim — deepens toward text */}
+      {/* Bottom scrim — gradient for text legibility only at bottom third */}
       <div style={{
         position:"absolute", bottom:0, left:0, right:0,
-        height:"65%",
-        background:"linear-gradient(to top,rgba(0,0,0,0.72) 0%,transparent 100%)",
+        height:"55%",
+        background:"linear-gradient(to top,rgba(0,0,0,0.68) 0%,rgba(0,0,0,0.20) 60%,transparent 100%)",
       }} />
 
-      {/* Editorial word label */}
+      {/* Text block — bottom-left, always shown */}
       <div style={{
-        position:"absolute", bottom: small ? 8 : 14, left: small ? 10 : 14, right:8,
+        position:"absolute", bottom:12, left:14, right:48,
       }}>
         <div style={{
-          fontSize:  small ? 12 : 18,
+          fontSize:  20,
           fontWeight: 900,
           color:      "white",
-          letterSpacing: small ? "0.14em" : "0.18em",
+          letterSpacing: "0.04em",
           textTransform: "uppercase",
-          lineHeight: 1,
-          marginBottom: small ? 0 : 4,
-          textShadow: "0 1px 8px rgba(0,0,0,0.7)",
-          animation: "lp-word-in 0.5s ease both",
+          lineHeight: 1.1,
+          marginBottom: 3,
+          textShadow: "0 1px 6px rgba(0,0,0,0.5)",
         }}>
           {tile.word}
         </div>
-        {!small && (
-          <div style={{
-            fontSize: 10, fontWeight:600, color:"rgba(255,255,255,0.65)",
-            letterSpacing:"0.06em", lineHeight:1.3,
-          }}>
-            {tile.sub}
-          </div>
-        )}
+        <div style={{
+          fontSize: 11, fontWeight:500, color:"rgba(255,255,255,0.82)",
+          letterSpacing:"0.01em", lineHeight:1.3,
+          textShadow:"0 1px 4px rgba(0,0,0,0.5)",
+        }}>
+          {tile.sub}
+        </div>
       </div>
 
-      {/* Top-left accent dot */}
+      {/* Arrow button — bottom-right, matches reference */}
       <div style={{
-        position:"absolute", top:12, left:12,
-        width: small ? 6 : 8, height: small ? 6 : 8,
-        borderRadius:"50%",
-        background: "rgba(255,255,255,0.55)",
-        boxShadow: "0 0 0 3px rgba(255,255,255,0.15)",
-      }} />
+        position:"absolute", bottom:12, right:12,
+        width:32, height:32, borderRadius:"50%",
+        background:"white",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        boxShadow:"0 2px 8px rgba(0,0,0,0.15)",
+      }}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="#0f0f0f"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
     </div>
   );
 }
@@ -601,16 +593,16 @@ function DiscoveryCard({ card, index, onBrowse }) {
       tabIndex={0}
       aria-label={`Explore ${card.label}`}
       onKeyDown={e => e.key === "Enter" && onBrowse()}
-      style={{ boxShadow:"0 8px 32px rgba(0,0,0,0.22)" }}
+      style={{ boxShadow:"0 4px 16px rgba(0,0,0,0.12)" }}
     >
-      {/* Card face — fixed height, clips photo */}
+      {/* Card face — taller per reference (220px), clips photo */}
       <div style={{
-        height:   190,
+        height:   220,
         position: "relative",
         overflow: "hidden",
       }}>
 
-        {/* Marketplace photo — lazy loaded, zooms on hover via .lp-disco-card */}
+        {/* Photo — lazy loaded, bright per reference (10-15% overlay) */}
         <img
           src={card.img}
           alt={card.label}
@@ -624,63 +616,63 @@ function DiscoveryCard({ card, index, onBrowse }) {
           onError={e => { e.target.style.display = "none"; }}
         />
 
-        {/* Dark overlay for text readability */}
+        {/* Very light overlay — 10-15% per reference */}
         <div style={{ position:"absolute", inset:0, background:card.overlay }} />
 
-        {/* Dot texture */}
+        {/* Bottom scrim — only bottom 50% for text legibility */}
         <div style={{
-          position:"absolute", inset:0, pointerEvents:"none",
-          backgroundImage:"radial-gradient(circle,rgba(255,255,255,0.05) 1px,transparent 1px)",
-          backgroundSize:"16px 16px",
+          position:"absolute", bottom:0, left:0, right:0, height:"55%",
+          background:"linear-gradient(to top,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.20) 65%,transparent 100%)",
         }} />
 
-        {/* Bottom scrim */}
+        {/* Category pill — top-left, dark background per reference */}
         <div style={{
-          position:"absolute", bottom:0, left:0, right:0, height:"65%",
-          background:"linear-gradient(to top,rgba(0,0,0,0.72) 0%,transparent 100%)",
-        }} />
-
-        {/* Accent pill — top-left */}
-        <div style={{
-          position:"absolute", top:14, left:14,
-          background:"rgba(255,255,255,0.15)",
-          backdropFilter:"blur(8px)",
-          border:"1px solid rgba(255,255,255,0.25)",
-          borderRadius:50, padding:"3px 10px",
+          position:"absolute", top:12, left:12,
+          background:"rgba(0,0,0,0.65)",
+          backdropFilter:"blur(6px)",
+          borderRadius:50, padding:"4px 10px",
           fontSize:9, fontWeight:800, color:"white",
-          letterSpacing:"0.12em", textTransform:"uppercase",
+          letterSpacing:"0.10em", textTransform:"uppercase",
         }}>
           {card.label}
         </div>
 
-        {/* Headline */}
+        {/* Arrow button — bottom-right per reference */}
         <div style={{
-          position:"absolute", bottom:0, left:0, right:0,
-          padding:"0 14px 14px",
+          position:"absolute", bottom:12, right:12,
+          width:28, height:28, borderRadius:"50%",
+          background:"white",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:"0 2px 6px rgba(0,0,0,0.18)",
+          flexShrink:0,
+        }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="#0f0f0f"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+
+        {/* Headline + sub — bottom-left */}
+        <div style={{
+          position:"absolute", bottom:0, left:0, right:44,
+          padding:"0 12px 12px",
         }}>
           <div style={{
-            fontSize:15, fontWeight:900, color:"white",
-            letterSpacing:"-0.3px", lineHeight:1.2, marginBottom:5,
-            textShadow:"0 1px 8px rgba(0,0,0,0.7)",
+            fontSize:14, fontWeight:800, color:"white",
+            letterSpacing:"-0.2px", lineHeight:1.2, marginBottom:4,
+            textShadow:"0 1px 6px rgba(0,0,0,0.5)",
             whiteSpace:"pre-wrap",
           }}>
             {card.headline}
           </div>
           <div style={{
-            fontSize:10, fontWeight:600,
-            color:"rgba(255,255,255,0.60)",
-            letterSpacing:"0.05em",
+            fontSize:10, fontWeight:500,
+            color:"rgba(255,255,255,0.75)",
+            letterSpacing:"0.03em",
           }}>
             {card.sub}
           </div>
         </div>
-
-        {/* Accent colour line — bottom edge */}
-        <div style={{
-          position:"absolute", bottom:0, left:14, right:14, height:2,
-          background: card.accent,
-          opacity:0.7, borderRadius:2,
-        }} />
       </div>
     </div>
   );
