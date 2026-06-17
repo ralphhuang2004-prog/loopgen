@@ -36,7 +36,7 @@ const BENTO_TILES = [
   {
     // Rolex Submariner on stone/concrete surface — bright natural light, collector vibe
     // Matches reference exactly: watch face clearly legible, stone background, premium feel
-    img:     "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=900&q=85",
+    img:     "/images/landing/hero-rare.jpg",
     overlay: "rgba(0,0,0,0.20)",
     word:    "RARE",
     sub:     "One of a kind",
@@ -45,7 +45,7 @@ const BENTO_TILES = [
   {
     // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
     // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
-    img:     "https://images.unsplash.com/photo-1547891654-e66ed7ebb968?w=1200&q=85",
+    img:     "/images/landing/hero-local.jpg",
     overlay: "rgba(0,0,0,0.22)",
     word:    "LOCAL",
     sub:     "Made closer to home",
@@ -54,7 +54,7 @@ const BENTO_TILES = [
   {
     // Camera + watch + vinyl + sunglasses flatlay on dark wood — Kinfolk editorial
     // Matches reference: multiple curated objects on dark surface, magazine quality
-    img:     "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=900&q=85",
+    img:     "/images/landing/hero-curated.jpg",
     overlay: "rgba(0,0,0,0.22)",
     word:    "CURATED",
     sub:     "Chosen with intention",
@@ -68,37 +68,37 @@ const BENTO_TILES = [
 const DISCOVERY_CARDS = [
   {
     label:    "Vintage",
-    headline: "Find stories\nworth owning.",
-    sub:      "Cameras \u00b7 Vinyl \u00b7 Collectibles",
-    // Leica camera with vinyl records and polaroids — warm cream tones, matches reference
-    img:      "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=1200&q=85",
+    headline: "Find stories
+worth owning.",
+    sub:      "Vinyl · Records · Collectibles",
+    img:      "/images/landing/discover-vintage.jpg",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#60a5fa",
   },
   {
     label:    "Tech",
-    headline: "Upgrade without\npaying retail.",
-    sub:      "Consoles \u00b7 Audio \u00b7 Gadgets",
-    // Nintendo Switch OLED + Sony headphones on minimal desk — bright background
-    img:      "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=900&q=85",
-    overlay:  "rgba(0,0,0,0.14)",
+    headline: "Upgrade without
+paying retail.",
+    sub:      "Consoles · Audio · Gadgets",
+    img:      "/images/landing/discover-tech.jpg",
+    overlay:  "rgba(0,0,0,0.12)",
     accent:   "#a78bfa",
   },
   {
     label:    "Home",
-    headline: "Pieces that make\nspaces yours.",
-    sub:      "Furniture \u00b7 Art \u00b7 Lighting",
-    // Green dome lamp + Bauhaus poster + plant in modern apartment — matches reference exactly
-    img:      "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=900&q=85",
+    headline: "Pieces that make
+spaces yours.",
+    sub:      "Furniture · Art · Lighting",
+    img:      "/images/landing/discover-home.jpg",
     overlay:  "rgba(0,0,0,0.10)",
     accent:   "#fbbf24",
   },
   {
     label:    "Fashion",
-    headline: "Stand out.\nDon\u2019t blend in.",
-    sub:      "Sneakers \u00b7 Streetwear \u00b7 Bags",
-    // New Balance sneakers + tote bag + Stussy tee + denim flatlay — young streetwear
-    img:      "https://images.unsplash.com/photo-1523398002811-999ca8dec234?w=900&q=85",
+    headline: "Stand out.
+Don’t blend in.",
+    sub:      "Sneakers · Streetwear · Bags",
+    img:      "/images/landing/discover-fashion.jpg",
     overlay:  "rgba(0,0,0,0.12)",
     accent:   "#f472b6",
   },
@@ -593,11 +593,11 @@ function DiscoveryCard({ card, index, onBrowse }) {
       tabIndex={0}
       aria-label={`Explore ${card.label}`}
       onKeyDown={e => e.key === "Enter" && onBrowse()}
-      style={{ boxShadow:"0 4px 16px rgba(0,0,0,0.12)" }}
+      style={{ boxShadow:"0 4px 16px rgba(0,0,0,0.12)", borderRadius:16 }}
     >
-      {/* Card face — taller per reference (220px), clips photo */}
+      {/* Card face — compact per reference screenshot */}
       <div style={{
-        height:   220,
+        height:   176,
         position: "relative",
         overflow: "hidden",
       }}>
@@ -622,7 +622,7 @@ function DiscoveryCard({ card, index, onBrowse }) {
         {/* Bottom scrim — only bottom 50% for text legibility */}
         <div style={{
           position:"absolute", bottom:0, left:0, right:0, height:"55%",
-          background:"linear-gradient(to top,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.20) 65%,transparent 100%)",
+          background:"linear-gradient(to top,rgba(0,0,0,0.70) 0%,rgba(0,0,0,0.22) 62%,transparent 100%)",
         }} />
 
         {/* Category pill — top-left, dark background per reference */}
@@ -640,7 +640,7 @@ function DiscoveryCard({ card, index, onBrowse }) {
         {/* Arrow button — bottom-right per reference */}
         <div style={{
           position:"absolute", bottom:12, right:12,
-          width:28, height:28, borderRadius:"50%",
+          width:30, height:30, borderRadius:"50%",
           background:"white",
           display:"flex", alignItems:"center", justifyContent:"center",
           boxShadow:"0 2px 6px rgba(0,0,0,0.18)",
@@ -658,17 +658,17 @@ function DiscoveryCard({ card, index, onBrowse }) {
           padding:"0 12px 12px",
         }}>
           <div style={{
-            fontSize:14, fontWeight:800, color:"white",
-            letterSpacing:"-0.2px", lineHeight:1.2, marginBottom:4,
+            fontSize:15, fontWeight:900, color:"white",
+            letterSpacing:"-0.25px", lineHeight:1.12, marginBottom:5,
             textShadow:"0 1px 6px rgba(0,0,0,0.5)",
             whiteSpace:"pre-wrap",
           }}>
             {card.headline}
           </div>
           <div style={{
-            fontSize:10, fontWeight:500,
-            color:"rgba(255,255,255,0.75)",
-            letterSpacing:"0.03em",
+            fontSize:10, fontWeight:700,
+            color:"rgba(255,255,255,0.86)",
+            letterSpacing:"0.01em",
           }}>
             {card.sub}
           </div>
