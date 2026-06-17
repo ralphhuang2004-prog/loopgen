@@ -3489,7 +3489,7 @@ function LoopGenAppInner() {
                 img:"/images/categories/sports.jpg", imgPos:"center" },
               { cat:"__more__", label: showMoreCats ? "Show Less ↑" : "More Categories ↓",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.18,
-                img: showMoreCats ? "/images/categories/show-less.jpg" : "/images/categories/discover-more.jpg", imgPos:"center" },
+                img:"/images/categories/discover-more.jpg", imgPos:"center" },
             ];
             return (
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
