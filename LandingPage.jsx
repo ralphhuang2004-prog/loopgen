@@ -28,7 +28,7 @@ const BENTO_TILES = [
     // Leica M camera with vinyl record and Polaroid photos — warm editorial flatlay
     // Matches reference: camera clearly visible, warm dark tones, "Pinterest aesthetic"
     img:     "/images/landing/hero-vintage.jpg",
-    overlay: "rgba(0,0,0,0.22)",
+    overlay:  "rgba(0,0,0,0.16)",
     word:    "VINTAGE",
     sub:     "Stories worth owning",
     anim:    "lp-float",
@@ -37,7 +37,7 @@ const BENTO_TILES = [
     // Rolex Submariner on stone/concrete surface — bright natural light, collector vibe
     // Matches reference exactly: watch face clearly legible, stone background, premium feel
     img:     "/images/landing/hero-rare.jpg",
-    overlay: "rgba(0,0,0,0.20)",
+    overlay:  "rgba(0,0,0,0.16)",
     word:    "RARE",
     sub:     "One of a kind",
     anim:    "lp-float2",
@@ -46,7 +46,7 @@ const BENTO_TILES = [
     // Indigenous Australian dot painting artwork + ceramic vase + indoor plant
     // Matches reference: colourful artwork leaning on wall, white pot, warm neutral room
     img:     "/images/landing/hero-local.jpg",
-    overlay: "rgba(0,0,0,0.22)",
+    overlay:  "rgba(0,0,0,0.16)",
     word:    "LOCAL",
     sub:     "Made closer to home",
     anim:    "lp-float",
@@ -55,7 +55,7 @@ const BENTO_TILES = [
     // Camera + watch + vinyl + sunglasses flatlay on dark wood — Kinfolk editorial
     // Matches reference: multiple curated objects on dark surface, magazine quality
     img:     "/images/landing/hero-curated.jpg",
-    overlay: "rgba(0,0,0,0.22)",
+    overlay:  "rgba(0,0,0,0.16)",
     word:    "CURATED",
     sub:     "Chosen with intention",
     anim:    "lp-float2",
@@ -71,7 +71,7 @@ const DISCOVERY_CARDS = [
     headline: "Find stories\nworth owning.",
     sub:      "Vinyl · Records · Collectibles",
     img:      "/images/landing/discover-vintage.jpg",
-    overlay:  "rgba(0,0,0,0.12)",
+    overlay:  "rgba(0,0,0,0.16)",
     accent:   "#60a5fa",
   },
   {
@@ -79,7 +79,7 @@ const DISCOVERY_CARDS = [
     headline: "Upgrade without\npaying retail.",
     sub:      "Consoles · Audio · Gadgets",
     img:      "/images/landing/discover-tech.jpg",
-    overlay:  "rgba(0,0,0,0.12)",
+    overlay:  "rgba(0,0,0,0.16)",
     accent:   "#a78bfa",
   },
   {
@@ -87,7 +87,7 @@ const DISCOVERY_CARDS = [
     headline: "Pieces that make\nspaces yours.",
     sub:      "Furniture · Art · Lighting",
     img:      "/images/landing/discover-home.jpg",
-    overlay:  "rgba(0,0,0,0.10)",
+    overlay:  "rgba(0,0,0,0.16)",
     accent:   "#fbbf24",
   },
   {
@@ -95,7 +95,7 @@ const DISCOVERY_CARDS = [
     headline: "Stand out.\nDon’t blend in.",
     sub:      "Sneakers · Streetwear · Bags",
     img:      "/images/landing/discover-fashion.jpg",
-    overlay:  "rgba(0,0,0,0.12)",
+    overlay:  "rgba(0,0,0,0.16)",
     accent:   "#f472b6",
   },
 ];
@@ -484,7 +484,7 @@ function BentoTile({ tile, style, className }) {
       <div style={{
         position:"absolute", bottom:0, left:0, right:0,
         height:"55%",
-        background:"linear-gradient(to top,rgba(0,0,0,0.68) 0%,rgba(0,0,0,0.20) 60%,transparent 100%)",
+        background:"linear-gradient(to top,rgba(0,0,0,0.84) 0%,rgba(0,0,0,0.46) 44%,rgba(0,0,0,0.10) 76%,transparent 100%)",
       }} />
 
       {/* Text block — bottom-left, always shown */}
@@ -589,11 +589,11 @@ function DiscoveryCard({ card, index, onBrowse }) {
       tabIndex={0}
       aria-label={`Explore ${card.label}`}
       onKeyDown={e => e.key === "Enter" && onBrowse()}
-      style={{ boxShadow:"0 4px 16px rgba(0,0,0,0.12)", borderRadius:16 }}
+      style={{ boxShadow:"0 8px 24px rgba(0,0,0,0.13)", borderRadius:16 }}
     >
       {/* Card face — compact per reference screenshot */}
       <div style={{
-        height:   176,
+        height:   "clamp(176px, 18vw, 220px)",
         position: "relative",
         overflow: "hidden",
       }}>
@@ -618,7 +618,7 @@ function DiscoveryCard({ card, index, onBrowse }) {
         {/* Bottom scrim — only bottom 50% for text legibility */}
         <div style={{
           position:"absolute", bottom:0, left:0, right:0, height:"55%",
-          background:"linear-gradient(to top,rgba(0,0,0,0.70) 0%,rgba(0,0,0,0.22) 62%,transparent 100%)",
+          background:"linear-gradient(to top,rgba(0,0,0,0.84) 0%,rgba(0,0,0,0.46) 44%,rgba(0,0,0,0.10) 76%,transparent 100%)",
         }} />
 
         {/* Category pill — top-left, dark background per reference */}
@@ -656,7 +656,7 @@ function DiscoveryCard({ card, index, onBrowse }) {
           <div style={{
             fontSize:15, fontWeight:900, color:"white",
             letterSpacing:"-0.25px", lineHeight:1.12, marginBottom:5,
-            textShadow:"0 1px 6px rgba(0,0,0,0.5)",
+            textShadow:"0 2px 10px rgba(0,0,0,0.58)",
             whiteSpace:"pre-wrap",
           }}>
             {card.headline}
