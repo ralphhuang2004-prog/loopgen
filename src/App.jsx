@@ -3471,25 +3471,25 @@ function LoopGenAppInner() {
           {(() => {
             const PRIMARY_CATS = [
               { cat:"Vintage & Collectibles", label:"Vintage",
-                bg:"linear-gradient(160deg,#1a0040 0%,#4c1d95 100%)", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&q=90" },
+                bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
+                img:"/images/categories/vintage.jpg", imgPos:"center" },
               { cat:"Electronics", label:"Tech",
-                bg:"linear-gradient(160deg,#001433 0%,#1e3a8a 100%)", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500&q=90",
+                bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
+                img:"/images/categories/tech.jpg",
                 imgPos:"center 40%" },
               { cat:"Fashion", label:"Fashion",
-                bg:"linear-gradient(160deg,#3b0019 0%,#be123c 100%)", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=500&q=90",
+                bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
+                img:"/images/categories/fashion.jpg",
                 imgPos:"center top" },
               { cat:"Home", label:"Home",
-                bg:"linear-gradient(160deg,#1a0e00 0%,#b45309 100%)", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=500&q=90" },
+                bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
+                img:"/images/categories/home.jpg", imgPos:"center" },
               { cat:"Sports", label:"Sports",
-                bg:"linear-gradient(160deg,#001a10 0%,#065f46 100%)", tintOpacity:0.50,
-                img:"https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=500&q=90" },
+                bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
+                img:"/images/categories/sports.jpg", imgPos:"center" },
               { cat:"__more__", label: showMoreCats ? "Show Less ↑" : "More Categories ↓",
-                bg:"linear-gradient(160deg,#0f0f0f 0%,#1c7c45 100%)", tintOpacity:0.72,
-                img:"https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=500&q=90" },
+                bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.18,
+                img: showMoreCats ? "/images/categories/show-less.jpg" : "/images/categories/discover-more.jpg", imgPos:"center" },
             ];
             return (
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
@@ -3511,7 +3511,7 @@ function LoopGenAppInner() {
                       onError={e=>{e.target.style.display="none"}}/>
                     <div style={{position:"absolute",inset:0,background:bg,opacity:tintOpacity||0.50}}/>
                     <div style={{position:"absolute",bottom:0,left:0,right:0,height:"55%",
-                      background:"linear-gradient(to top,rgba(0,0,0,0.80) 0%,transparent 100%)"}}/>
+                      background:"linear-gradient(to top,rgba(0,0,0,0.74) 0%,rgba(0,0,0,0.24) 58%,transparent 100%)"}}/>
                     <div style={{position:"absolute",bottom:11,left:0,right:0,textAlign:"center",zIndex:3}}>
                       <span style={{fontSize:13,fontWeight:900,color:"white",letterSpacing:"0.01em",
                         textShadow:"0 2px 6px rgba(0,0,0,0.6)",padding:"0 4px",display:"block",lineHeight:1.25}}>
@@ -3535,28 +3535,28 @@ function LoopGenAppInner() {
                 {[
                   { cat:"Pets",                 label:"Pets",
                     bg:"linear-gradient(160deg,#c4a090 0%,#ddc0b0 100%)",
-                    img:"https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/pets.jpg" },
                   { cat:"Tickets",              label:"Tickets",
                     bg:"linear-gradient(160deg,#a090c8 0%,#c8b8e8 100%)",
-                    img:"https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/tickets.jpg" },
                   { cat:"Music, Books & Games", label:"Music & Books",
                     bg:"linear-gradient(160deg,#7a9fb8 0%,#aacce0 100%)",
-                    img:"https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/music-books.jpg" },
                   { cat:"Cars & Vehicles",      label:"Cars",
                     bg:"linear-gradient(160deg,#8a8580 0%,#b8b3ae 100%)",
-                    img:"https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/cars.jpg" },
                   { cat:"Baby & Kids",          label:"Baby & Kids",
                     bg:"linear-gradient(160deg,#c87890 0%,#e8a8b8 100%)",
-                    img:"https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/baby-kids.jpg" },
                   { cat:"Boats & Jet Skis",     label:"Boats",
                     bg:"linear-gradient(160deg,#7aaab8 0%,#aaccd8 100%)",
-                    img:"https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/boats.jpg" },
                   { cat:"Miscellaneous",        label:"Misc Goods",
                     bg:"linear-gradient(160deg,#8a9aa8 0%,#b8c8d5 100%)",
-                    img:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/misc-goods.jpg" },
                   { cat:"Freebies",             label:"Freebies",
                     bg:"linear-gradient(160deg,#80a888 0%,#aacca8 100%)",
-                    img:"https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=300&h=340&fit=crop&auto=format&q=80" },
+                    img:"/images/categories/freebies.jpg" },
                 ].map(({cat,label,bg,img})=>(
                   <div key={cat}
                     onClick={()=>{ setCatF(cat); setShowMoreCats(false); nav("explore"); }}
@@ -3569,11 +3569,11 @@ function LoopGenAppInner() {
                     <img src={img} alt={label}
                       style={{position:"absolute",inset:0,width:"100%",height:"100%",
                         objectFit:"cover",objectPosition:"center",display:"block",
-                        mixBlendMode:"luminosity",opacity:0.90}}
+                        opacity:1}}
                       onError={e=>{e.target.style.display="none"}}/>
                     {/* Bottom gradient for label legibility */}
                     <div style={{position:"absolute",bottom:0,left:0,right:0,height:"45%",
-                      background:"linear-gradient(to top,rgba(0,0,0,0.45) 0%,transparent 100%)"}}/>
+                      background:"linear-gradient(to top,rgba(0,0,0,0.70) 0%,rgba(0,0,0,0.22) 58%,transparent 100%)"}}/>
                     {/* Label */}
                     <div style={{position:"absolute",bottom:8,left:0,right:0,
                       textAlign:"center",zIndex:3,padding:"0 4px"}}>
