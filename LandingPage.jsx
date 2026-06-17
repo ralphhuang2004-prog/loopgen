@@ -68,8 +68,7 @@ const BENTO_TILES = [
 const DISCOVERY_CARDS = [
   {
     label:    "Vintage",
-    headline: "Find stories
-worth owning.",
+    headline: "Find stories\nworth owning.",
     sub:      "Vinyl · Records · Collectibles",
     img:      "/images/landing/discover-vintage.jpg",
     overlay:  "rgba(0,0,0,0.12)",
@@ -77,8 +76,7 @@ worth owning.",
   },
   {
     label:    "Tech",
-    headline: "Upgrade without
-paying retail.",
+    headline: "Upgrade without\npaying retail.",
     sub:      "Consoles · Audio · Gadgets",
     img:      "/images/landing/discover-tech.jpg",
     overlay:  "rgba(0,0,0,0.12)",
@@ -86,8 +84,7 @@ paying retail.",
   },
   {
     label:    "Home",
-    headline: "Pieces that make
-spaces yours.",
+    headline: "Pieces that make\nspaces yours.",
     sub:      "Furniture · Art · Lighting",
     img:      "/images/landing/discover-home.jpg",
     overlay:  "rgba(0,0,0,0.10)",
@@ -95,8 +92,7 @@ spaces yours.",
   },
   {
     label:    "Fashion",
-    headline: "Stand out.
-Don’t blend in.",
+    headline: "Stand out.\nDon’t blend in.",
     sub:      "Sneakers · Streetwear · Bags",
     img:      "/images/landing/discover-fashion.jpg",
     overlay:  "rgba(0,0,0,0.12)",
