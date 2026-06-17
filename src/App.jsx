@@ -3487,7 +3487,7 @@ function LoopGenAppInner() {
               { cat:"Sports", label:"Sports",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
                 img:"/images/categories/sports.jpg", imgPos:"center" },
-              { cat:"__more__", label: showMoreCats ? "Show Less ↑" : "More Categories ↓",
+              { cat:"__more__", label: showMoreCats ? "Show Less ↑" : "Discover More ↓",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.18,
                 img:"/images/categories/discover-more.jpg", imgPos:"center" },
             ];
