@@ -3649,7 +3649,7 @@ function LoopGenAppInner() {
                   fontWeight:900,
                   fontSize:20,
                   flexShrink:0
-                }}>›</div>
+                }}>✨</div>
               </div>
               <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
                 {listingsLoading
