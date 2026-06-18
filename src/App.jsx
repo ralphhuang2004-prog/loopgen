@@ -3602,13 +3602,54 @@ function LoopGenAppInner() {
                 <span onClick={()=>{setCatF("Vintage & Collectibles");nav("explore");}} style={{fontSize:12,color:GREEN,fontWeight:600,cursor:"pointer"}}>See all ›</span>
               </div>
               {/* Category banner */}
-              <div style={{margin:"0 16px 12px",borderRadius:18,background:"linear-gradient(135deg,#4c1d95 0%,#7c3aed 50%,#a855f7 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,overflow:"hidden",position:"relative"}}>
-                <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(255,255,255,0.07)"}}/>
-                <div style={{fontSize:28}}>{String.fromCodePoint(0x1F3B5)}</div>
-                <div>
-                  <div style={{color:"white",fontWeight:800,fontSize:13,letterSpacing:0.2}}>Vintage & Collectibles</div>
-                  <div style={{color:"rgba(255,255,255,0.75)",fontSize:11,marginTop:1}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
+              <div style={{
+                margin:"0 16px 12px",
+                borderRadius:18,
+                background:"linear-gradient(135deg,#D1ECDD 0%,#BFE8CE 52%,#A7DDBB 100%)",
+                padding:"14px 16px",
+                display:"flex",
+                alignItems:"center",
+                gap:12,
+                overflow:"hidden",
+                position:"relative",
+                boxShadow:"0 8px 22px rgba(30,122,75,0.16)",
+                border:"1px solid rgba(30,122,75,0.12)"
+              }}>
+                <div style={{position:"absolute",top:-24,right:-18,width:104,height:104,borderRadius:"50%",background:"rgba(255,255,255,0.34)"}}/>
+                <div style={{position:"absolute",right:18,bottom:-8,width:86,height:86,opacity:0.10}}>
+                  {String.fromCodePoint(0x1F4BF)}
                 </div>
+                <div style={{
+                  width:42,
+                  height:42,
+                  borderRadius:14,
+                  background:"rgba(255,255,255,0.42)",
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  color:GREEN,
+                  fontSize:24,
+                  flexShrink:0
+                }}>
+                  {String.fromCodePoint(0x1F3B5)}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:GREEN,fontWeight:900,fontSize:13,letterSpacing:0.2}}>Vintage & Collectibles</div>
+                  <div style={{color:"rgba(20,83,45,0.72)",fontSize:11,marginTop:1,fontWeight:600}}>Vinyl · Cameras · Retro games · Y2K fashion</div>
+                </div>
+                <div style={{
+                  width:36,
+                  height:36,
+                  borderRadius:"50%",
+                  background:"rgba(255,255,255,0.66)",
+                  color:GREEN,
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  fontWeight:900,
+                  fontSize:20,
+                  flexShrink:0
+                }}>›</div>
               </div>
               <div className="lg-hscroll" style={{display:"flex",gap:12,overflowX:"auto",paddingLeft:16,paddingRight:16,paddingBottom:6,scrollbarWidth:"none"}}>
                 {listingsLoading
