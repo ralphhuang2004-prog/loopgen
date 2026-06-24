@@ -3225,7 +3225,7 @@ function LoopGenAppInner() {
     return ms && (catFilter==="All" || l.category===catFilter);
   });
 
-  const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Boats & Jet Skis","Miscellaneous","Freebies"];
+  const CATS = ["All","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Watches","Miscellaneous","Freebies"];
   const currentUser = user ? (profile?.username || user.email?.split("@")[0] || "You") : "Guest";
   const isGuest = !user;
 
@@ -3481,9 +3481,9 @@ function LoopGenAppInner() {
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
                 img:"/images/categories/fashion.jpg",
                 imgPos:"center top" },
-              { cat:"Home", label:"Home",
+              { cat:"Watches", label:"Watches",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
-                img:"/images/categories/home.jpg", imgPos:"center" },
+                img:"/images/categories/watches.jpg", imgPos:"center" },
               { cat:"Sports", label:"Sports",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
                 img:"/images/categories/sports.jpg", imgPos:"center" },
@@ -3548,9 +3548,9 @@ function LoopGenAppInner() {
                   { cat:"Baby & Kids",          label:"Baby & Kids",
                     bg:"linear-gradient(160deg,#c87890 0%,#e8a8b8 100%)",
                     img:"/images/categories/baby-kids.jpg" },
-                  { cat:"Boats & Jet Skis",     label:"Boats",
-                    bg:"linear-gradient(160deg,#7aaab8 0%,#aaccd8 100%)",
-                    img:"/images/categories/boats.jpg" },
+                  { cat:"Home",                 label:"Home",
+                    bg:"linear-gradient(160deg,#f59e0b 0%,#fbbf24 100%)",
+                    img:"/images/categories/home.jpg" },
                   { cat:"Miscellaneous",        label:"Misc Goods",
                     bg:"linear-gradient(160deg,#8a9aa8 0%,#b8c8d5 100%)",
                     img:"/images/categories/misc-goods.jpg" },
@@ -4197,7 +4197,7 @@ function LoopGenAppInner() {
             <FInp placeholder="Title *" value={sell.title} onChange={v=>setSell(f=>({...f,title:v.slice(0,100)}))} maxLength={100}/>
             <FInp placeholder="Price (AUD $) *" type="number" value={sell.price} onChange={v=>setSell(f=>({...f,price:v}))}/>
             <FSel value={sell.category} onChange={v=>setSell(f=>({...f,category:v,sub:""}))} ph="Category *"
-              opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Boats & Jet Skis","Miscellaneous","Freebies"]}/>
+              opts={["","Vintage & Collectibles","Fashion","Electronics","Home","Sports","Vehicles","Pets","Tickets","Music, Books & Games","Cars & Vehicles","Baby & Kids","Watches","Miscellaneous","Freebies"]}/>
             {sell.category === "Vintage & Collectibles" && (
               <FSel value={sell.sub} onChange={v=>setSell(f=>({...f,sub:v}))} ph="Subcategory"
                 opts={["","Vinyl Records","DVD / Blu-ray","Retro Games","Film Cameras","Polaroid Cameras","Cassette Tapes","Vintage Clothing","Retro Electronics","Collectible Toys","Posters & Memorabilia"]}/>
