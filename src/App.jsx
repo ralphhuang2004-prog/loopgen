@@ -3483,7 +3483,7 @@ function LoopGenAppInner() {
                 imgPos:"center top" },
               { cat:"Watches", label:"Watches",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
-                img:"/images/categories/watches.jpg", imgPos:"center" },
+                img:"/images/categories/watch2.jpg", imgPos:"center" },
               { cat:"Sports", label:"Sports",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
                 img:"/images/categories/sports.jpg", imgPos:"center" },
