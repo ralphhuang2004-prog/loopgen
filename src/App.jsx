@@ -3483,7 +3483,7 @@ function LoopGenAppInner() {
                 imgPos:"center top" },
               { cat:"Watches", label:"Watches",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
-                img:"/images/categories/watch2.jpg", imgPos:"center" },
+                img:"/images/categories/watches.jpg", imgPos:"center" },
               { cat:"Sports", label:"Sports",
                 bg:"linear-gradient(160deg,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.20) 100%)", tintOpacity:0.14,
                 img:"/images/categories/sports.jpg", imgPos:"center" },
@@ -3715,9 +3715,9 @@ function LoopGenAppInner() {
             LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620).
           </div>
           <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-            <a href="https://www.loopgen.com.au/terms"    style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Terms</a>
-            <a href="https://www.loopgen.com.au/privacy"  style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Privacy</a>
-            <a href="https://www.loopgen.com.au/trust"    style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Safety</a>
+            <span onClick={()=>push("legal-terms")}    style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Terms</span>
+            <span onClick={()=>push("legal-privacy")}  style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Privacy</span>
+            <span onClick={()=>push("legal-safety")}   style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Safety</span>
             <a href="mailto:support@loopgen.com.au" style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
           </div>
         </div>
@@ -4752,11 +4752,11 @@ function LoopGenAppInner() {
           </div>
           <div style={{fontSize:11,color:"#9ca3af",textAlign:"center",lineHeight:1.6}}>
             LoopGen is operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620)<br/>
-            <a href="https://www.loopgen.com.au/terms"   style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Terms</a>
+            <span onClick={()=>push("legal-terms")}   style={{color:GREEN,fontWeight:600,cursor:"pointer"}}>Terms</span>
             {" · "}
-            <a href="https://www.loopgen.com.au/privacy" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Privacy</a>
+            <span onClick={()=>push("legal-privacy")} style={{color:GREEN,fontWeight:600,cursor:"pointer"}}>Privacy</span>
             {" · "}
-            <a href="https://www.loopgen.com.au/trust"   style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Safety</a>
+            <span onClick={()=>push("legal-safety")}   style={{color:GREEN,fontWeight:600,cursor:"pointer"}}>Safety</span>
             {" · "}
             <a href="mailto:support@loopgen.com.au" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
           </div>
@@ -5036,10 +5036,10 @@ function LoopGenAppInner() {
         <div style={{background:"#f8f9fa",borderRadius:18,padding:"16px"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8,marginBottom:10}}>Legal &amp; Safety</div>
           {[
-            ["Terms of Service",    "📄", ()=>{ window.location.href="https://www.loopgen.com.au/terms"; }],
-            ["Privacy Policy",      "🔒", ()=>{ window.location.href="https://www.loopgen.com.au/privacy"; }],
-            ["Community Guidelines","🤝", ()=>{ window.location.href="https://www.loopgen.com.au/trust"; }],
-            ["Safety Tips",         "🛡️", ()=>{ window.location.href="https://www.loopgen.com.au/trust"; }],
+            ["Terms of Service",    "📄", ()=>push("legal-terms")],
+            ["Privacy Policy",      "🔒", ()=>push("legal-privacy")],
+            ["Community Guidelines","🤝", ()=>push("legal-safety")],
+            ["Safety Tips",         "🛡️", ()=>push("legal-safety")],
             ["Contact Support",     "💬", ()=>{ window.location.href="mailto:support@loopgen.com.au"; }],
           ].map(([label,icon,action],i,arr) => (
             <div key={label}>
@@ -5087,6 +5087,88 @@ function LoopGenAppInner() {
       <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
+    </Phone>
+  );
+
+
+  // ── LEGAL SCREENS (state-based, no hard navigation) ─────────────────────
+  const LegalBackBtn = ({title}) => (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"16px 16px 0",position:"sticky",top:0,background:"white",zIndex:5}}>
+      <button onClick={pop} style={{background:"none",border:"none",cursor:"pointer",padding:"4px",display:"flex",alignItems:"center"}}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span style={{fontWeight:700,fontSize:17,color:"#111"}}>{title}</span>
+    </div>
+  );
+
+  if (screen === "legal-terms") return (
+    <Phone>
+      <LegalBackBtn title="Terms of Service" />
+      <div style={{padding:"16px 20px 40px",overflowY:"auto",height:"100%"}}>
+        <p style={{fontSize:13,color:"#374151",lineHeight:1.7,marginBottom:12}}>
+          By using LoopGen, you agree to these Terms of Service. LoopGen is a peer-to-peer marketplace platform operated by NexaraX Pty Ltd (ACN: 696 134 620 / ABN: 43 696 134 620).
+        </p>
+        <p style={{fontSize:13,color:"#374151",lineHeight:1.7,marginBottom:12}}>
+          Full terms are available at{" "}
+          <a href="https://www.loopgen.com.au/terms" target="_blank" rel="noopener noreferrer" style={{color:GREEN}}>loopgen.com.au/terms</a>.
+        </p>
+        <p style={{fontSize:13,color:"#374151",lineHeight:1.7}}>
+          For questions, contact{" "}
+          <a href="mailto:support@loopgen.com.au" style={{color:GREEN}}>support@loopgen.com.au</a>.
+        </p>
+      </div>
+    </Phone>
+  );
+
+  if (screen === "legal-privacy") return (
+    <Phone>
+      <LegalBackBtn title="Privacy Policy" />
+      <div style={{padding:"16px 20px 40px",overflowY:"auto",height:"100%"}}>
+        <p style={{fontSize:13,color:"#374151",lineHeight:1.7,marginBottom:12}}>
+          LoopGen collects information you provide when creating an account, posting listings, and messaging other users. This data is used to operate and improve the marketplace.
+        </p>
+        <p style={{fontSize:13,color:"#374151",lineHeight:1.7,marginBottom:12}}>
+          Full privacy policy is available at{" "}
+          <a href="https://www.loopgen.com.au/privacy" target="_blank" rel="noopener noreferrer" style={{color:GREEN}}>loopgen.com.au/privacy</a>.
+        </p>
+        <p style={{fontSize:13,color:"#374151",lineHeight:1.7}}>
+          For questions, contact{" "}
+          <a href="mailto:support@loopgen.com.au" style={{color:GREEN}}>support@loopgen.com.au</a>.
+        </p>
+      </div>
+    </Phone>
+  );
+
+  if (screen === "legal-safety") return (
+    <Phone>
+      <LegalBackBtn title="Safety Tips" />
+      <div style={{padding:"16px 20px 40px",overflowY:"auto",height:"100%"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          {[
+            ["🤝","Meet in public","Always meet buyers and sellers in a safe, public location such as a shopping centre or coffee shop."],
+            ["👀","Inspect before paying","Never pay for an item before you have inspected it in person."],
+            ["💳","Avoid advance payments","Be cautious of requests to pay via bank transfer before meeting. Prefer cash on pickup."],
+            ["🚨","Trust your instincts","If something feels wrong, it probably is. Walk away from any deal that makes you uncomfortable."],
+            ["🔒","Protect your details","Never share your password, bank details, or personal ID documents with other users."],
+          ].map(([icon,title,body]) => (
+            <div key={title} style={{background:"#f8faff",borderRadius:14,padding:"14px 14px",border:"1px solid #e5e7eb"}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                <span style={{fontSize:20,flexShrink:0}}>{icon}</span>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13,color:"#111",marginBottom:4}}>{title}</div>
+                  <div style={{fontSize:12,color:"#374151",lineHeight:1.6}}>{body}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{fontSize:11,color:"#9ca3af",marginTop:16,lineHeight:1.6}}>
+          More safety tips at{" "}
+          <a href="https://www.loopgen.com.au/trust" target="_blank" rel="noopener noreferrer" style={{color:GREEN}}>loopgen.com.au/trust</a>.
+          Report concerns to{" "}
+          <a href="mailto:support@loopgen.com.au" style={{color:GREEN}}>support@loopgen.com.au</a>.
+        </p>
+      </div>
     </Phone>
   );
 
