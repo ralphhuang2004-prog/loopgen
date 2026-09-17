@@ -47,24 +47,6 @@ export default function LegalLayout({ title, badge, sections, children }) {
     }}>
       {title && <LegalHeader title={title} badge={badge} />}
 
-      {sections && sections.length > 0 && (
-        <div style={{
-          display: "flex", gap: 6, flexWrap: "wrap",
-          padding: "10px 20px",
-          borderBottom: "1px solid #f0f0f0",
-          background: "#f9fafb",
-        }}>
-          {sections.map(s => (
-            <a key={s.id} href={`#${s.id}`} style={{
-              fontSize: 11, fontWeight: 600, color: "#1a6b3a",
-              textDecoration: "none",
-              background: "#f0fdf4", borderRadius: 20,
-              padding: "3px 10px", border: "1px solid #bbf7d0",
-              whiteSpace: "nowrap",
-            }}>{s.label}</a>
-          ))}
-        </div>
-      )}
 
       <div style={{ maxWidth: 760, width: "100%", margin: "0 auto", padding: "20px 20px 60px" }}>
         {children}
