@@ -4,6 +4,7 @@
 // All existing CTA handlers (onBrowse, onSell, onSignIn, onRegister) preserved.
 
 import { useState, useEffect, useRef } from "react";
+import LegalPage from "./legal/LegalPage.jsx";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -291,6 +292,17 @@ function Divider() {
 export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, demoMode = false }) {
   const go = fn => fn && fn();
   const entered = useEnter(50);
+  const [legalPage, setLegalPage] = useState(null); // "terms" | "privacy" | "trust" | null
+
+  // Show legal page overlay from Landing Page — back returns to landing
+  if (legalPage) {
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:100, background:"#fff",
+        display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        <LegalPage page={legalPage} onBack={() => setLegalPage(null)} />
+      </div>
+    );
+  }
 
   return (
     <div data-scroll-root
@@ -379,9 +391,9 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
           </div>
           <p style={{ fontSize:10, color:T.ink3, textAlign:"center", marginTop:8 }}>
             By continuing, you agree to our{" "}
-            <a href="/terms"   style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Terms</a>
+            <a href="#" onClick={e=>{e.preventDefault();setLegalPage("terms")}}   style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Terms</a>
             {" & "}
-            <a href="/privacy" style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Privacy Policy</a>
+            <a href="#" onClick={e=>{e.preventDefault();setLegalPage("privacy")}} style={{ color:T.g, textDecoration:"none", fontWeight:600 }}>Privacy Policy</a>
           </p>
         </div>
 
@@ -798,9 +810,9 @@ function CtaAndFooter({ onBrowse, onRegister }) {
             checked={agreed} onChange={e => setAgreed(e.target.checked)} />
           <span style={{ fontSize:11, color:"rgba(255,255,255,0.58)", lineHeight:1.55 }}>
             I agree to the{" "}
-            <a href="/terms"   style={{ color:"rgba(163,255,196,0.85)",
+            <a href="#" onClick={e=>{e.preventDefault();setLegalPage("terms")}}   style={{ color:"rgba(163,255,196,0.85)",
               textDecoration:"none", fontWeight:700 }}>Terms</a>{" "}and{" "}
-            <a href="/privacy" style={{ color:"rgba(163,255,196,0.85)",
+            <a href="#" onClick={e=>{e.preventDefault();setLegalPage("privacy")}} style={{ color:"rgba(163,255,196,0.85)",
               textDecoration:"none", fontWeight:700 }}>Privacy Policy</a>
           </span>
         </label>
@@ -828,9 +840,9 @@ function CtaAndFooter({ onBrowse, onRegister }) {
       <footer>
         <div style={{ display:"flex", justifyContent:"center",
           gap:18, marginBottom:12, flexWrap:"wrap" }}>
-          {[["Terms","/terms"],["Privacy","/privacy"],["Trust & Safety","/trust"]].map(([l,h]) => (
-            <a key={l} href={h} style={{ fontSize:11, color:T.ink3,
-              textDecoration:"none", fontWeight:600 }}>{l}</a>
+          {[["Terms","terms"],["Privacy","privacy"],["Trust & Safety","trust"]].map(([l,p]) => (
+            <a key={l} href="#" onClick={e=>{e.preventDefault();setLegalPage(p)}}
+              style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>{l}</a>
           ))}
           <a href="mailto:support@loopgen.com.au"
             style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>
