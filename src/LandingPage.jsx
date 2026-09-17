@@ -430,7 +430,7 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
 
       {/* ══ CTA + FOOTER ══════════════════════════════════════════════════ */}
       <Divider />
-      <CtaAndFooter onBrowse={() => go(onBrowse)} onRegister={() => go(onRegister)} />
+      <CtaAndFooter onBrowse={() => go(onBrowse)} onRegister={() => go(onRegister)} onLegal={setLegalPage} />
     </div>
   );
 }
@@ -772,7 +772,7 @@ function StepRow({ step, index, isLast }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  CTA + FOOTER — unchanged
 // ─────────────────────────────────────────────────────────────────────────────
-function CtaAndFooter({ onBrowse, onRegister }) {
+function CtaAndFooter({ onBrowse, onRegister, onLegal }) {
   const ref = useReveal();
   const [agreed, setAgreed] = useState(false);
   return (
@@ -810,9 +810,9 @@ function CtaAndFooter({ onBrowse, onRegister }) {
             checked={agreed} onChange={e => setAgreed(e.target.checked)} />
           <span style={{ fontSize:11, color:"rgba(255,255,255,0.58)", lineHeight:1.55 }}>
             I agree to the{" "}
-            <a href="#" onClick={e=>{e.preventDefault();setLegalPage("terms")}}   style={{ color:"rgba(163,255,196,0.85)",
+            <a href="#" onClick={e=>{e.preventDefault();onLegal("terms")}}   style={{ color:"rgba(163,255,196,0.85)",
               textDecoration:"none", fontWeight:700 }}>Terms</a>{" "}and{" "}
-            <a href="#" onClick={e=>{e.preventDefault();setLegalPage("privacy")}} style={{ color:"rgba(163,255,196,0.85)",
+            <a href="#" onClick={e=>{e.preventDefault();onLegal("privacy")}} style={{ color:"rgba(163,255,196,0.85)",
               textDecoration:"none", fontWeight:700 }}>Privacy Policy</a>
           </span>
         </label>
@@ -841,7 +841,7 @@ function CtaAndFooter({ onBrowse, onRegister }) {
         <div style={{ display:"flex", justifyContent:"center",
           gap:18, marginBottom:12, flexWrap:"wrap" }}>
           {[["Terms","terms"],["Privacy","privacy"],["Trust & Safety","trust"]].map(([l,p]) => (
-            <a key={l} href="#" onClick={e=>{e.preventDefault();setLegalPage(p)}}
+            <a key={l} href="#" onClick={e=>{e.preventDefault();onLegal(p)}}
               style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>{l}</a>
           ))}
           <a href="mailto:support@loopgen.com.au"
