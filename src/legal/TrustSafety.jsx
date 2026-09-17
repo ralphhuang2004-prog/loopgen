@@ -21,7 +21,7 @@ export default function TrustSafetyArchitecture() {
       badge="Internal System Design"
       sections={SECTIONS}
     >
-      <Callout title="About This Document" type="blue">
+      <Callout title="About This Document" type="green">
         <p>This document describes LoopGen's complete Trust & Safety system design — covering seller reputation scoring, verification levels, anti-scam detection, community reporting, and buyer protection processes. It is published for transparency and user education.</p>
       </Callout>
 
