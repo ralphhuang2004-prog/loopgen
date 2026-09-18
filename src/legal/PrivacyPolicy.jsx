@@ -95,7 +95,6 @@ export default function PrivacyPolicy() {
           <Li><strong>Make a privacy complaint</strong> if you believe we have not handled your information appropriately.</Li>
         </Ul>
         <P>To exercise any of these rights, contact us at <a href="mailto:support@loopgen.com.au" style={{ color: "#1a6b3a" }}>support@loopgen.com.au</a>. We will respond within a reasonable time.</P>
-        <P>If you are not satisfied with our response, you may lodge a complaint with the Office of the Australian Information Commissioner (OAIC) at <a href="https://oaic.gov.au" target="_blank" rel="noreferrer" style={{ color: "#1a6b3a" }}>oaic.gov.au</a> or on 1300 363 992.</P>
       </Section>
 
       <Section id="contact">

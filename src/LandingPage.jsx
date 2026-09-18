@@ -845,6 +845,7 @@ function CtaAndFooter({ onBrowse, onRegister, onLegal }) {
               style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>{l}</a>
           ))}
           <a href="mailto:support@loopgen.com.au"
+            onClick={e=>{e.preventDefault();window.location.href="mailto:support@loopgen.com.au";}}
             style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>
             Contact
           </a>

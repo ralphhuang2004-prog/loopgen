@@ -89,7 +89,7 @@ export default function TrustSafety() {
         <H2>6. Contact</H2>
         <P>For safety concerns or to report a serious incident:</P>
         <P><a href="mailto:support@loopgen.com.au" style={{ color: "#1a6b3a" }}>support@loopgen.com.au</a></P>
-        <P>For emergencies, always contact emergency services first: <strong>000</strong> (Australia).</P>
+        <P style={{ fontSize: 12, color: "#6b7280" }}>If there is an immediate risk to personal safety, contact emergency services.</P>
       </Section>
     </LegalLayout>
   );
