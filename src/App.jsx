@@ -2198,6 +2198,7 @@ function LoopGenAppInner() {
     return "splash";
   })();
   const [screen,    setScreen]  = useState(_initScreen);
+  const [contactModal, setContactModal] = useState(false); // desktop Contact popup
   const [history,   setHistory] = useState([]);
   const [user,      setUser]    = useState(null);   // Supabase user object
   const [profile,   setProfile] = useState(null);   // profiles row
@@ -3727,13 +3728,14 @@ function LoopGenAppInner() {
             <span onClick={()=>push("legal-terms")}    style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Terms</span>
             <span onClick={()=>push("legal-privacy")}  style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Privacy</span>
             <span onClick={()=>push("legal-trust")}    style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Safety</span>
-            <a href="mailto:support@loopgen.com.au" style={{fontSize:11,color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
+            <span onClick={()=>setContactModal(true)} style={{fontSize:11,color:GREEN,fontWeight:600,cursor:"pointer"}}>Contact</span>
           </div>
         </div>
 
       </div>
       <BottomNav active="home" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <Toast msg={toast}/>
+      {contactModal && <ContactModal onClose={()=>setContactModal(false)}/>}
     </Phone>
   );
 
@@ -4767,13 +4769,14 @@ function LoopGenAppInner() {
             {" · "}
             <span onClick={()=>push("legal-trust")}   style={{color:GREEN,fontWeight:600,cursor:"pointer"}}>Safety</span>
             {" · "}
-            <a href="mailto:support@loopgen.com.au" style={{color:GREEN,fontWeight:600,textDecoration:"none"}}>Contact</a>
+            <span onClick={()=>setContactModal(true)} style={{color:GREEN,fontWeight:600,cursor:"pointer"}}>Contact</span>
           </div>
         </div>
       </div>
       <BottomNav active="profile" onNav={nav} msgCount={convos.filter(c => isConvoUnread(c)).length} offerCount={pendingOffers.length + acceptedOffers.filter(o => !readAcceptedOffers[o.id]).length}/>
       <ConfirmModal confirm={confirm} onCancel={()=>setConfirm(null)}/>
       <Toast msg={toast}/>
+      {contactModal && <ContactModal onClose={()=>setContactModal(false)}/>}
     </Phone>
   );
 
@@ -5106,6 +5109,97 @@ function LoopGenAppInner() {
   if (screen === "legal-trust")   return <Phone><LegalPage page="trust"   onBack={pop} /></Phone>;
 
   return null;
+}
+
+
+// ── ContactModal — shared desktop Contact popup ───────────────────────────────
+export function ContactModal({ onClose }) {
+  const [copied, setCopied] = React.useState(false);
+  const EMAIL = "support@loopgen.com.au";
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(EMAIL);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers without clipboard API
+      const el = document.createElement("textarea");
+      el.value = EMAIL;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+  return (
+    <div onClick={onClose} style={{
+      position:"fixed", inset:0, zIndex:9000,
+      background:"rgba(0,0,0,0.35)",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:"20px",
+    }}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        background:"#fff", borderRadius:20,
+        boxShadow:"0 8px 40px rgba(0,0,0,0.18)",
+        padding:"28px 28px 24px",
+        width:"100%", maxWidth:360,
+        position:"relative",
+        fontFamily:"inherit",
+      }}>
+        {/* Close button */}
+        <button onClick={onClose} style={{
+          position:"absolute", top:14, right:14,
+          background:"none", border:"none", cursor:"pointer",
+          fontSize:18, color:"#9ca3af", lineHeight:1, padding:4,
+        }}>✕</button>
+
+        {/* Heading */}
+        <div style={{fontWeight:800, fontSize:17, color:"#111", marginBottom:6}}>
+          Contact LoopGen
+        </div>
+        <div style={{fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5}}>
+          Need help or have a question?
+        </div>
+
+        {/* Email display */}
+        <div style={{
+          background:"#f0fdf4", borderRadius:12,
+          padding:"12px 16px", marginBottom:18,
+          fontSize:14, fontWeight:700, color:GREEN,
+          textAlign:"center", letterSpacing:"0.01em",
+        }}>
+          {EMAIL}
+        </div>
+
+        {/* Buttons */}
+        <div style={{display:"flex", gap:10}}>
+          <button onClick={copy} style={{
+            flex:1, padding:"11px 0",
+            background:GREEN, color:"#fff",
+            border:"none", borderRadius:12,
+            fontWeight:700, fontSize:13,
+            cursor:"pointer", fontFamily:"inherit",
+            transition:"opacity 0.15s",
+          }}>
+            {copied ? "Copied ✓" : "Copy email"}
+          </button>
+          <a href={"mailto:" + EMAIL} style={{
+            flex:1, padding:"11px 0",
+            background:"#f3f4f6", color:"#374151",
+            border:"none", borderRadius:12,
+            fontWeight:600, fontSize:13,
+            cursor:"pointer", fontFamily:"inherit",
+            textDecoration:"none",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>
+            Open email app
+          </a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // FIX 16: Exported wrapper — ErrorBoundary catches any render crash in LoopGenAppInner

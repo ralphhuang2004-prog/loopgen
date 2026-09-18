@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import LegalPage from "./legal/LegalPage.jsx";
+import { ContactModal } from "./App.jsx";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -293,6 +294,7 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
   const go = fn => fn && fn();
   const entered = useEnter(50);
   const [legalPage, setLegalPage] = useState(null); // "terms" | "privacy" | "trust" | null
+  const [contactModal, setContactModal] = useState(false);
 
   // Show legal page overlay from Landing Page — back returns to landing
   if (legalPage) {
@@ -303,6 +305,7 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
       </div>
     );
   }
+
 
   return (
     <div data-scroll-root
@@ -430,7 +433,8 @@ export default function LandingPage({ onBrowse, onSell, onSignIn, onRegister, de
 
       {/* ══ CTA + FOOTER ══════════════════════════════════════════════════ */}
       <Divider />
-      <CtaAndFooter onBrowse={() => go(onBrowse)} onRegister={() => go(onRegister)} onLegal={setLegalPage} />
+      <CtaAndFooter onBrowse={() => go(onBrowse)} onRegister={() => go(onRegister)} onLegal={setLegalPage} onContact={() => setContactModal(true)} />
+      {contactModal && <ContactModal onClose={() => setContactModal(false)} />}
     </div>
   );
 }
@@ -772,7 +776,7 @@ function StepRow({ step, index, isLast }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  CTA + FOOTER — unchanged
 // ─────────────────────────────────────────────────────────────────────────────
-function CtaAndFooter({ onBrowse, onRegister, onLegal }) {
+function CtaAndFooter({ onBrowse, onRegister, onLegal, onContact }) {
   const ref = useReveal();
   const [agreed, setAgreed] = useState(false);
   return (
@@ -844,8 +848,7 @@ function CtaAndFooter({ onBrowse, onRegister, onLegal }) {
             <a key={l} href="#" onClick={e=>{e.preventDefault();onLegal(p)}}
               style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>{l}</a>
           ))}
-          <a href="mailto:support@loopgen.com.au"
-            onClick={e=>{e.preventDefault();window.location.href="mailto:support@loopgen.com.au";}}
+          <a href="#" onClick={e=>{e.preventDefault();onContact();}}
             style={{ fontSize:11, color:T.ink3, textDecoration:"none", fontWeight:600 }}>
             Contact
           </a>
