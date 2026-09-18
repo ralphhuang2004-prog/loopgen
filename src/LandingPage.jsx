@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import LegalPage from "./legal/LegalPage.jsx";
-import { ContactModal } from "./App.jsx";
+import ContactModal from "./ContactModal.jsx";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
